@@ -52,12 +52,29 @@ try:
             # RU: Если файл уже в кеше — вернуть сразу
             cache_root = _ensure_category_root(category)
             dst = cache_root / filename
+            lock_path = dst.with_suffix(dst.suffix + ".copying")
             if dst.exists():
-                try:
-                    os.utime(dst, None)  # RU: обновим atime для LRU
-                except Exception:
-                    pass
-                return str(dst)
+                if lock_path.exists():
+                    # RU: Ждём завершения копирования, чтобы не читать недокопированный файл
+                    for _ in range(10):
+                        if not lock_path.exists():
+                            break
+                        time.sleep(0.05)
+                    if lock_path.exists():
+                        # RU: Если лок не исчез, считаем кеш недоступным и пойдём в оригинальные пути
+                        pass
+                    else:
+                        try:
+                            os.utime(dst, None)  # RU: обновим atime для LRU
+                        except Exception:
+                            pass
+                        return str(dst)
+                else:
+                    try:
+                        os.utime(dst, None)  # RU: обновим atime для LRU
+                    except Exception:
+                        pass
+                    return str(dst)
 
             # RU: Иначе найдём исходник по оригинальным путям (без кеша первым)
             for p in _orig_get_paths(category):
@@ -73,7 +90,7 @@ try:
             cache_root.mkdir(parents=True, exist_ok=True)
             dst.parent.mkdir(parents=True, exist_ok=True)
 
-            # RU: .copying lock-файл, чтобы не читать недокопированный
+            # RU: .copying lock-файл предотвращает раннее чтение из кеша во время копирования
             lock_path = dst.with_suffix(dst.suffix + ".copying")
             if dst.exists():
                 _v(f"skip copy (exists): {dst}")
