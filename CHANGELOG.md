@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Note that autocache nodes return disabled stubs when `ARENA_CACHE_ENABLE=0`.
 - Describe the expanded AutoCache stats and trim JSON payloads in `custom_nodes/ComfyUI_Arena/README.md`.
 ### Fixed
+- Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.
 - Retry cache population after clearing stale `.copying` locks so the cache path is reused on the next request.
 - Recreate cache entries when stale files with mismatched sizes are detected during reuse.
