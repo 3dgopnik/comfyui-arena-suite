@@ -56,30 +56,38 @@ try:
             dst = cache_root / filename
             lock_path = dst.with_suffix(dst.suffix + ".copying")
             prefer_source = False
+            force_recopy = False
             if dst.exists():
                 if lock_path.exists():
-                    # RU: Ждём завершения копирования, чтобы не читать недокопированный файл
-                    wait_deadline = time.monotonic() + 5.0
-                    while lock_path.exists() and time.monotonic() < wait_deadline:
-                        time.sleep(0.05)
-                    if lock_path.exists():
-                        # RU: Если лок не исчез, проверим, не устарел ли он
+                    # RU: Проверим, не устарел ли лок, прежде чем ждать
+                    lock_age = None
+                    try:
+                        lock_age = time.time() - lock_path.stat().st_mtime
+                    except Exception:
+                        lock_age = None
+                    if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
+                        _v(f"stale lock detected for {dst}, removing {lock_path}")
                         try:
-                            lock_age = time.time() - lock_path.stat().st_mtime
-                        except Exception:
-                            lock_age = None
-                        if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
-                            _v(f"stale lock detected for {dst}, will prefer source")
-                        else:
+                            lock_path.unlink()
+                            force_recopy = True
+                        except Exception as lock_err:
+                            _v(f"failed to remove stale lock {lock_path}: {lock_err}")
+                            prefer_source = True
+                    if lock_path.exists() and not prefer_source:
+                        # RU: Лок актуален — ждём кратко и при необходимости отдаём исходник
+                        wait_deadline = time.monotonic() + 5.0
+                        while lock_path.exists() and time.monotonic() < wait_deadline:
+                            time.sleep(0.05)
+                        if lock_path.exists():
                             _v(f"lock active for {dst}, will prefer source")
-                        prefer_source = True
-                    else:
-                        try:
-                            os.utime(dst, None)  # RU: обновим atime для LRU
-                        except Exception:
-                            pass
-                        return str(dst)
-                else:
+                            prefer_source = True
+                        else:
+                            try:
+                                os.utime(dst, None)  # RU: обновим atime для LRU
+                            except Exception:
+                                pass
+                            return str(dst)
+                elif not prefer_source:
                     try:
                         os.utime(dst, None)  # RU: обновим atime для LRU
                     except Exception:
@@ -94,6 +102,11 @@ try:
                         _v(f"using original path due to cache lock: {src}")
                         return str(src)
                     with _lock:
+                        if force_recopy and dst.exists():
+                            try:
+                                dst.unlink()
+                            except Exception as cleanup_err:
+                                _v(f"failed to remove stale cache file before recopy {dst}: {cleanup_err}")
                         _copy_into_cache_lru(src, dst, category)
                     return str(dst)
             return None
