@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Docs
+- Document the Impact Pack dependency and credit ltdrdata in the README install instructions.
 ### Fixed
 - Prevent cache readers from using files protected by `.copying` locks to avoid partial reads.
 - Ensure cache copy failures clean up partial files and surface errors for retry.
