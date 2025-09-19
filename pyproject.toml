@@ -1,0 +1,9 @@
+[project]
+name = "comfyui-arena-suite"
+version = "0.0.1"
+description = "ComfyUI custom nodes in a single package: Arena legacy + AutoCache + Updater"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.black]
+line-length = 100

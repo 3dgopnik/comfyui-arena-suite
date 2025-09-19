@@ -1,0 +1,19 @@
+\
+models:
+  - name: WAN2.2_i2v_low_noise_14B_fp16
+    type: diffusion_models
+    source:
+      kind: hf
+      repo: user/wan2.2-low-noise
+      revision: main
+    target_dir: "\\\\nas-3d\\Visual\\Lib\\SDModels\\Diffusion Model\\WAN\\low-noise"
+    keep: 2
+
+  - name: WAN2.2_i2v_high_noise_14B_fp16
+    type: diffusion_models
+    source:
+      kind: civitai
+      model_id: 12345
+      version_id: 67890
+    target_dir: "\\\\nas-3d\\Visual\\Lib\\SDModels\\Diffusion Model\\WAN\\high-noise"
+    keep: 2
