@@ -92,11 +92,27 @@ try:
 
             # RU: .copying lock-файл предотвращает раннее чтение из кеша во время копирования
             lock_path = dst.with_suffix(dst.suffix + ".copying")
-            if dst.exists():
-                _v(f"skip copy (exists): {dst}")
-                return
-
             size = src.stat().st_size
+            if dst.exists():
+                try:
+                    dst_size = dst.stat().st_size
+                except Exception:
+                    dst_size = None
+                if dst_size is not None and dst_size != size:
+                    _v(f"remove stale cache (size mismatch): {dst}")
+                    try:
+                        dst.unlink()
+                    except Exception as cleanup_err:
+                        _v(f"failed to remove stale cache file {dst}: {cleanup_err}")
+                    if lock_path.exists():
+                        try:
+                            lock_path.unlink()
+                        except Exception as lock_err:
+                            _v(f"failed to remove stale lock {lock_path}: {lock_err}")
+                else:
+                    _v(f"skip copy (exists): {dst}")
+                    return
+
             _lru_ensure_room(cache_root, size)
 
             try:
