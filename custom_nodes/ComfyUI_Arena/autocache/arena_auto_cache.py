@@ -171,20 +171,22 @@ try:
             # RU: здесь индекс не пополняем — пополним после копии
 
         def _update_index_touch(root: Path, file_path: Path) -> None:
-            idx = _load_index(root)
-            items = idx.get("items", {})
-            try:
-                rel = str(file_path.relative_to(root))
-            except Exception:
-                # RU: файл вне кеша
-                return
-            try:
-                size = file_path.stat().st_size
-            except Exception:
-                size = 0
-            items[rel] = {"size": size, "atime": time.time()}
-            idx["items"] = items
-            _save_index(root, idx)
+            # RU: Индекс обновляем под глобальной блокировкой, чтобы чтение/запись файла были атомарными.
+            with _lock:
+                idx = _load_index(root)
+                items = idx.get("items", {})
+                try:
+                    rel = str(file_path.relative_to(root))
+                except Exception:
+                    # RU: файл вне кеша
+                    return
+                try:
+                    size = file_path.stat().st_size
+                except Exception:
+                    size = 0
+                items[rel] = {"size": size, "atime": time.time()}
+                idx["items"] = items
+                _save_index(root, idx)
 
         # RU: Переопределяем и подменяем
         folder_paths.get_folder_paths = get_folder_paths_patched  # type: ignore
