@@ -27,6 +27,149 @@ def _v(msg: str) -> None:
     if ARENA_CACHE_VERBOSE:
         print(f"[ArenaAutoCache] {msg}")
 
+
+def _ensure_category_root(category: str) -> Path:
+    root = Path(ARENA_CACHE_ROOT) / category
+    if ARENA_CACHE_ENABLE:
+        root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _index_path(root: Path) -> Path:
+    return root / ".arena_cache_index.json"
+
+
+def _load_index(root: Path) -> dict:
+    p = _index_path(root)
+    if not p.exists():
+        return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
+    try:
+        return json.loads(p.read_text("utf-8"))
+    except Exception:
+        return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
+
+
+def _save_index(root: Path, idx: dict) -> None:
+    if ARENA_CACHE_ENABLE and not root.exists():
+        root.mkdir(parents=True, exist_ok=True)
+    p = _index_path(root)
+    p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), "utf-8")
+
+
+def _bytes_limit() -> int:
+    return ARENA_CACHE_MAX_GB * (1024**3)
+
+
+def _lru_ensure_room(root: Path, incoming_size: int) -> None:
+    idx = _load_index(root)
+    items = idx.get("items", {})
+
+    def total_bytes() -> int:
+        return sum(v.get("size", 0) for v in items.values())
+
+    while total_bytes() + incoming_size > _bytes_limit():
+        if not items:
+            break
+        victim_rel = min(items.keys(), key=lambda k: items[k].get("atime", 0))
+        victim = root / victim_rel
+        try:
+            _v(f"evict {victim}")
+            if victim.exists():
+                victim.unlink()
+        except Exception:
+            pass
+        items.pop(victim_rel, None)
+        _save_index(root, idx)
+
+
+def _update_index_touch(root: Path, file_path: Path) -> None:
+    with _lock:
+        idx = _load_index(root)
+        items = idx.get("items", {})
+        try:
+            rel = str(file_path.relative_to(root))
+        except Exception:
+            return
+        try:
+            size = file_path.stat().st_size
+        except Exception:
+            size = 0
+        items[rel] = {"size": size, "atime": time.time()}
+        idx["items"] = items
+        _save_index(root, idx)
+
+
+def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
+    cache_root = _ensure_category_root(category)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    lock_path = dst.with_suffix(dst.suffix + ".copying")
+    if lock_path.exists():
+        stale_lock = False
+        if not dst.exists():
+            stale_lock = True
+        else:
+            try:
+                lock_age = time.time() - lock_path.stat().st_mtime
+            except Exception:
+                lock_age = None
+            if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
+                stale_lock = True
+        if stale_lock:
+            _v(f"remove stale lock before copy: {lock_path}")
+            try:
+                lock_path.unlink()
+            except Exception as lock_err:
+                _v(f"failed to remove stale lock {lock_path}: {lock_err}")
+    size = src.stat().st_size
+    if dst.exists():
+        try:
+            dst_size = dst.stat().st_size
+        except Exception:
+            dst_size = None
+        if dst_size is not None and dst_size != size:
+            _v(f"remove stale cache (size mismatch): {dst}")
+            try:
+                dst.unlink()
+            except Exception as cleanup_err:
+                _v(f"failed to remove stale cache file {dst}: {cleanup_err}")
+            if lock_path.exists():
+                try:
+                    lock_path.unlink()
+                except Exception as lock_err:
+                    _v(f"failed to remove stale lock {lock_path}: {lock_err}")
+        else:
+            _v(f"skip copy (exists): {dst}")
+            return
+
+    _lru_ensure_room(cache_root, size)
+
+    try:
+        lock_path.touch(exist_ok=True)
+        _v(f"copy {src} -> {dst}")
+        try:
+            shutil.copy2(src, dst)
+        except Exception as copy_err:
+            if dst.exists():
+                try:
+                    dst.unlink()
+                except Exception as cleanup_err:
+                    _v(f"failed to clean partial cache file {dst}: {cleanup_err}")
+            msg = f"copy failed for {src} -> {dst}: {copy_err}"
+            print(f"[ArenaAutoCache] {msg}")
+            raise
+    finally:
+        if lock_path.exists():
+            try:
+                lock_path.unlink()
+            except Exception:
+                pass
+
+    try:
+        os.utime(dst, None)
+    except Exception:
+        pass
+
 # RU: Патч ComfyUI.folder_paths при импорте
 try:
     import folder_paths  # type: ignore
@@ -36,11 +179,6 @@ try:
 
         _orig_get_paths = folder_paths.get_folder_paths
         _orig_get_full = folder_paths.get_full_path
-
-        def _ensure_category_root(category: str) -> Path:
-            root = Path(ARENA_CACHE_ROOT) / category
-            root.mkdir(parents=True, exist_ok=True)
-            return root
 
         def get_folder_paths_patched(category: str):  # type: ignore
             # RU: Кеш-путь добавляем первым
@@ -110,143 +248,6 @@ try:
                         _copy_into_cache_lru(src, dst, category)
                     return str(dst)
             return None
-
-        def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
-            cache_root = Path(ARENA_CACHE_ROOT) / category
-            cache_root.mkdir(parents=True, exist_ok=True)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-
-            # RU: .copying lock-файл предотвращает раннее чтение из кеша во время копирования
-            lock_path = dst.with_suffix(dst.suffix + ".copying")
-            if lock_path.exists():
-                stale_lock = False
-                if not dst.exists():
-                    stale_lock = True
-                else:
-                    try:
-                        lock_age = time.time() - lock_path.stat().st_mtime
-                    except Exception:
-                        lock_age = None
-                    if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
-                        stale_lock = True
-                if stale_lock:
-                    _v(f"remove stale lock before copy: {lock_path}")
-                    try:
-                        lock_path.unlink()
-                    except Exception as lock_err:
-                        _v(f"failed to remove stale lock {lock_path}: {lock_err}")
-            size = src.stat().st_size
-            if dst.exists():
-                try:
-                    dst_size = dst.stat().st_size
-                except Exception:
-                    dst_size = None
-                if dst_size is not None and dst_size != size:
-                    _v(f"remove stale cache (size mismatch): {dst}")
-                    try:
-                        dst.unlink()
-                    except Exception as cleanup_err:
-                        _v(f"failed to remove stale cache file {dst}: {cleanup_err}")
-                    if lock_path.exists():
-                        try:
-                            lock_path.unlink()
-                        except Exception as lock_err:
-                            _v(f"failed to remove stale lock {lock_path}: {lock_err}")
-                else:
-                    _v(f"skip copy (exists): {dst}")
-                    return
-
-            _lru_ensure_room(cache_root, size)
-
-            try:
-                lock_path.touch(exist_ok=True)
-                _v(f"copy {src} -> {dst}")
-                try:
-                    shutil.copy2(src, dst)
-                except Exception as copy_err:
-                    if dst.exists():
-                        try:
-                            # RU: Очищаем недокопированный файл, чтобы следующий запрос повторил попытку
-                            dst.unlink()
-                        except Exception as cleanup_err:
-                            _v(f"failed to clean partial cache file {dst}: {cleanup_err}")
-                    msg = f"copy failed for {src} -> {dst}: {copy_err}"
-                    print(f"[ArenaAutoCache] {msg}")
-                    raise
-            finally:
-                if lock_path.exists():
-                    try:
-                        lock_path.unlink()
-                    except Exception:
-                        pass
-
-            try:
-                os.utime(dst, None)
-            except Exception:
-                pass
-
-        def _index_path(root: Path) -> Path:
-            return root / ".arena_cache_index.json"
-
-        def _load_index(root: Path) -> dict:
-            p = _index_path(root)
-            if not p.exists():
-                return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
-            try:
-                return json.loads(p.read_text("utf-8"))
-            except Exception:
-                return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
-
-        def _save_index(root: Path, idx: dict) -> None:
-            p = _index_path(root)
-            p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), "utf-8")
-
-        def _bytes_limit() -> int:
-            return ARENA_CACHE_MAX_GB * (1024**3)
-
-        def _lru_ensure_room(root: Path, incoming_size: int) -> None:
-            idx = _load_index(root)
-            items = idx.get("items", {})
-
-            def total_bytes() -> int:
-                return sum(v.get("size", 0) for v in items.values())
-
-            # RU: Очистка, если не влезаем
-            while total_bytes() + incoming_size > _bytes_limit():
-                # RU: LRU по atime
-                if not items:
-                    break
-                victim_rel = min(items.keys(), key=lambda k: items[k].get("atime", 0))
-                victim = root / victim_rel
-                try:
-                    _v(f"evict {victim}")
-                    if victim.exists():
-                        victim.unlink()
-                except Exception:
-                    pass
-                items.pop(victim_rel, None)
-                _save_index(root, idx)
-
-            # RU: здесь индекс не пополняем — пополним после копии
-
-        def _update_index_touch(root: Path, file_path: Path) -> None:
-            # RU: Индекс обновляем под глобальной блокировкой, чтобы чтение/запись файла были атомарными.
-            with _lock:
-                idx = _load_index(root)
-                items = idx.get("items", {})
-                try:
-                    rel = str(file_path.relative_to(root))
-                except Exception:
-                    # RU: файл вне кеша
-                    return
-                try:
-                    size = file_path.stat().st_size
-                except Exception:
-                    size = 0
-                items[rel] = {"size": size, "atime": time.time()}
-                idx["items"] = items
-                _save_index(root, idx)
-
         # RU: Переопределяем и подменяем
         folder_paths.get_folder_paths = get_folder_paths_patched  # type: ignore
 
@@ -279,6 +280,16 @@ class ArenaAutoCacheStats:
 
     def run(self, category: str):
         root = Path(ARENA_CACHE_ROOT) / category
+        if not ARENA_CACHE_ENABLE:
+            data = {
+                "cache_root": str(root),
+                "items": 0,
+                "max_size_gb": ARENA_CACHE_MAX_GB,
+                "enabled": False,
+                "note": "cache disabled",
+            }
+            return (json.dumps(data, ensure_ascii=False, indent=2),)
+
         idx = {"items": {}}
         if root.exists():
             try:
@@ -306,6 +317,8 @@ class ArenaAutoCacheTrim:
 
     def run(self, category: str):
         root = Path(ARENA_CACHE_ROOT) / category
+        if not ARENA_CACHE_ENABLE:
+            return (json.dumps({"ok": True, "note": "cache disabled"}),)
         if not root.exists():
             return (json.dumps({"ok": True, "note": "no cache yet"}),)
         try:
