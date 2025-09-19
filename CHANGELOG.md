@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document the Impact Pack dependency and credit ltdrdata in the README install instructions.
 - Note that autocache nodes return disabled stubs when `ARENA_CACHE_ENABLE=0`.
 - Describe the expanded AutoCache stats and trim JSON payloads in `custom_nodes/ComfyUI_Arena/README.md`.
+- Reorganize documentation under `docs/ru` (with navigation and quickstart/config guides) and add English placeholders linked from the README.
 - Restructure `docs/ROADMAP.md` with detailed release milestones, ownership, and planning horizons.
 ### Fixed
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.

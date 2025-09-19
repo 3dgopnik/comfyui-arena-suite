@@ -1,22 +1,27 @@
 # ComfyUI Arena Suite
 
-Custom nodes for ComfyUI with **Arena** prefix. **Single-package layout**:
-- `ComfyUI_Arena/legacy` — migrated legacy nodes.
-- `ComfyUI_Arena/autocache` — SSD auto-cache (WIP).
-- `ComfyUI_Arena/updater` — model updater (HF/CivitAI, WIP).
+Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package**.
 
-## Install (ComfyUI Manager → Install from URL)
-1) Copy this repo URL.
-2) In ComfyUI Manager click **Install from URL**.
-3) **Refresh custom nodes**.
+## Features overview
+- **Legacy nodes** — migrated utilities that preserve the existing interfaces while living under `ComfyUI_Arena/legacy`.
+- **AutoCache** — runtime patch for `folder_paths` that prefers an SSD cache to accelerate heavy model loads and exposes stats/trim helpers.
+- **Updater scaffolding** — Hugging Face and CivitAI helpers (WIP) intended to keep local model folders in sync and manage `current` symlinks.
 
-> Manual: clone repo; the `custom_nodes/ComfyUI_Arena` folder is ready to use.
->
-> **Legacy dependency:** Arena legacy nodes rely on
-> [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack).
-> Install the pack (ComfyUI Manager or manual clone) so the
-> `ComfyUI-Impact-Pack/modules` directory is on `PYTHONPATH`. Big thanks to
-> ltdrdata and the Impact Pack contributors for their amazing work.
+## System requirements
+- **ComfyUI** with custom node support (tested on the current `master` branch).
+- **Python 3.10+** as required by `pyproject.toml`.
+- **Fast SSD storage** when enabling AutoCache to get the best throughput.
+- **[ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)** for legacy Arena nodes — install it via ComfyUI Manager or manually clone the repository so `ComfyUI-Impact-Pack/modules` is available on `PYTHONPATH`.
+
+## Quick usage summary
+1. Install the suite through **ComfyUI Manager → Install from URL** using your repository URL (for example, `https://github.com/<your-org>/comfyui-arena-suite`).
+2. Refresh the custom nodes list or restart ComfyUI so the new Arena nodes load.
+3. Drop nodes with the **Arena** prefix into your graph to verify the installation (e.g., `ArenaAutoCacheStats`).
+4. Configure SSD caching and update manifests as needed — see the documentation below for detailed steps.
+
+## Documentation
+- 🇷🇺 Русская документация: [Обзор](docs/ru/index.md), [Быстрый старт](docs/ru/quickstart.md), [CLI](docs/ru/cli.md), [Конфигурация](docs/ru/config.md), [Диагностика](docs/ru/troubleshooting.md).
+- 🇬🇧 English placeholders: [Overview](docs/en/index.md), [Quickstart](docs/en/quickstart.md), [CLI](docs/en/cli.md), [Configuration](docs/en/config.md), [Troubleshooting](docs/en/troubleshooting.md).
 
 ## Codex workflow
 
