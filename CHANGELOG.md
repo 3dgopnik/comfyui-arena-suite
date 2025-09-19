@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Docs
 - Document the Impact Pack dependency and credit ltdrdata in the README install instructions.
 ### Fixed
+- Recreate cache entries when stale files with mismatched sizes are detected during reuse.
 - Prevent cache readers from using files protected by `.copying` locks to avoid partial reads.
 - Ensure cache copy failures clean up partial files and surface errors for retry.
 - Serialize cache index updates to prevent data races during concurrent access.
