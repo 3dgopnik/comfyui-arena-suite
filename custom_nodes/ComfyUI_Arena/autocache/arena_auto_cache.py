@@ -15,6 +15,8 @@ ARENA_CACHE_ROOT = os.getenv(
 )
 ARENA_CACHE_VERBOSE = os.getenv("ARENA_CACHE_VERBOSE", "0") == "1"
 
+_STALE_LOCK_SECONDS = 60
+
 # RU: Потокобезопасность
 _lock = threading.RLock()
 
@@ -53,16 +55,24 @@ try:
             cache_root = _ensure_category_root(category)
             dst = cache_root / filename
             lock_path = dst.with_suffix(dst.suffix + ".copying")
+            prefer_source = False
             if dst.exists():
                 if lock_path.exists():
                     # RU: Ждём завершения копирования, чтобы не читать недокопированный файл
-                    for _ in range(10):
-                        if not lock_path.exists():
-                            break
+                    wait_deadline = time.monotonic() + 5.0
+                    while lock_path.exists() and time.monotonic() < wait_deadline:
                         time.sleep(0.05)
                     if lock_path.exists():
-                        # RU: Если лок не исчез, считаем кеш недоступным и пойдём в оригинальные пути
-                        pass
+                        # RU: Если лок не исчез, проверим, не устарел ли он
+                        try:
+                            lock_age = time.time() - lock_path.stat().st_mtime
+                        except Exception:
+                            lock_age = None
+                        if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
+                            _v(f"stale lock detected for {dst}, will prefer source")
+                        else:
+                            _v(f"lock active for {dst}, will prefer source")
+                        prefer_source = True
                     else:
                         try:
                             os.utime(dst, None)  # RU: обновим atime для LRU
@@ -80,6 +90,9 @@ try:
             for p in _orig_get_paths(category):
                 src = Path(p) / filename
                 if src.exists():
+                    if prefer_source:
+                        _v(f"using original path due to cache lock: {src}")
+                        return str(src)
                     with _lock:
                         _copy_into_cache_lru(src, dst, category)
                     return str(dst)
@@ -92,6 +105,23 @@ try:
 
             # RU: .copying lock-файл предотвращает раннее чтение из кеша во время копирования
             lock_path = dst.with_suffix(dst.suffix + ".copying")
+            if lock_path.exists():
+                stale_lock = False
+                if not dst.exists():
+                    stale_lock = True
+                else:
+                    try:
+                        lock_age = time.time() - lock_path.stat().st_mtime
+                    except Exception:
+                        lock_age = None
+                    if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
+                        stale_lock = True
+                if stale_lock:
+                    _v(f"remove stale lock before copy: {lock_path}")
+                    try:
+                        lock_path.unlink()
+                    except Exception as lock_err:
+                        _v(f"failed to remove stale lock {lock_path}: {lock_err}")
             size = src.stat().st_size
             if dst.exists():
                 try:
