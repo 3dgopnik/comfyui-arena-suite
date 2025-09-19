@@ -11,7 +11,13 @@ Custom nodes for ComfyUI with **Arena** prefix. **Single-package layout**:
 3) **Refresh custom nodes**.
 
 > Manual: clone repo; the `custom_nodes/ComfyUI_Arena` folder is ready to use.
-> 
+>
+> **Legacy dependency:** Arena legacy nodes rely on
+> [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack).
+> Install the pack (ComfyUI Manager or manual clone) so the
+> `ComfyUI-Impact-Pack/modules` directory is on `PYTHONPATH`. Big thanks to
+> ltdrdata and the Impact Pack contributors for their amazing work.
+
 ## Codex workflow
 
 1. Codex генерирует код (EN identifiers, RU comments).

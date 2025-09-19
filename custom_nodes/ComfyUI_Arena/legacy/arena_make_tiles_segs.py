@@ -1,13 +1,21 @@
-import os
-import sys
+import logging
 import math
+
 import numpy as np
 import torch
 
-# Import necessary modules from your project
-from impact.core import SEG  # Import SEG class
-from impact.utils import *  # Import all utility functions
-from . import core  # Import core module for mask operations
+from . import IMPACT_AVAILABLE, IMPACT_MISSING_MESSAGE
+
+LOGGER = logging.getLogger(__name__)
+
+if IMPACT_AVAILABLE:
+    from impact.core import SEG  # type: ignore  # Import SEG class
+    from impact.utils import *  # type: ignore  # Import all utility functions
+    from . import core  # Import core module for mask operations
+else:
+    SEG = None  # type: ignore
+    core = None  # type: ignore
+    LOGGER.warning(IMPACT_MISSING_MESSAGE)
 
 class Arena_MakeTilesSegs:
     @classmethod
@@ -35,6 +43,9 @@ class Arena_MakeTilesSegs:
 
     @staticmethod
     def doit(images, width, height, crop_factor, min_overlap, filter_segs_dilation, mask_irregularity=0, irregular_mask_mode="Reuse fast", filter_in_segs_opt=None, filter_out_segs_opt=None):
+        if not IMPACT_AVAILABLE:
+            raise RuntimeError(IMPACT_MISSING_MESSAGE)
+
         # Ensure that min_overlap is less than half the width and height
         if width <= 2 * min_overlap:
             min_overlap = width / 2

@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 import warnings
 
@@ -7,7 +8,6 @@ import torch
 from segment_anything import SamPredictor
 
 from comfy_extras.nodes_custom_sampler import Noise_RandomNoise
-from impact.utils import *
 from collections import namedtuple
 import numpy as np
 from skimage.measure import label
@@ -16,15 +16,27 @@ import nodes
 import comfy_extras.nodes_upscale_model as model_upscale
 from server import PromptServer
 import comfy
-import impact.wildcards as wildcards
 import math
 import cv2
 import time
 from comfy import model_management
-from impact import utils
-from impact import impact_sampling
 from concurrent.futures import ThreadPoolExecutor
 import inspect
+
+from . import IMPACT_AVAILABLE, IMPACT_MISSING_MESSAGE, ensure_impact
+
+LOGGER = logging.getLogger(__name__)
+
+if IMPACT_AVAILABLE or ensure_impact():
+    from impact.utils import *  # type: ignore
+    import impact.wildcards as wildcards  # type: ignore
+    from impact import utils  # type: ignore
+    from impact import impact_sampling  # type: ignore
+else:
+    wildcards = None  # type: ignore
+    utils = None  # type: ignore
+    impact_sampling = None  # type: ignore
+    LOGGER.warning(IMPACT_MISSING_MESSAGE)
 
 
 try:
