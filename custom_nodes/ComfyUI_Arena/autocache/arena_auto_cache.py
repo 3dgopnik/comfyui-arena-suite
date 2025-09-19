@@ -102,7 +102,18 @@ try:
             try:
                 lock_path.touch(exist_ok=True)
                 _v(f"copy {src} -> {dst}")
-                shutil.copy2(src, dst)
+                try:
+                    shutil.copy2(src, dst)
+                except Exception as copy_err:
+                    if dst.exists():
+                        try:
+                            # RU: Очищаем недокопированный файл, чтобы следующий запрос повторил попытку
+                            dst.unlink()
+                        except Exception as cleanup_err:
+                            _v(f"failed to clean partial cache file {dst}: {cleanup_err}")
+                    msg = f"copy failed for {src} -> {dst}: {copy_err}"
+                    print(f"[ArenaAutoCache] {msg}")
+                    raise
             finally:
                 if lock_path.exists():
                     try:
