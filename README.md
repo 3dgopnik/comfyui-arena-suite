@@ -11,3 +11,12 @@ Custom nodes for ComfyUI with **Arena** prefix. **Single-package layout**:
 3) **Refresh custom nodes**.
 
 > Manual: clone repo; the `custom_nodes/ComfyUI_Arena` folder is ready to use.
+> 
+## Codex workflow
+
+1. Codex генерирует код (EN identifiers, RU comments).
+2. Создаёт/обновляет Issue: `Codex: <module> — <topic> — <date>` с блоками
+   **SUMMARY / ISSUES & TASKS / TEST PLAN / NOTES**.
+3. Все изменения идут через PR; тело PR — по шаблону (см. `.github/pull_request_template.md`).
+4. В коммитах ссылаться на Issue: `Refs #<номер>`.
+5. CHANGELOG (`[Unreleased]`) и docs обновляются в том же PR.
