@@ -6,6 +6,26 @@ import shutil
 import threading
 from pathlib import Path
 
+
+def _default_index() -> dict:
+    return {
+        "items": {},
+        "max_gb": ARENA_CACHE_MAX_GB,
+        "last_op": None,
+        "last_path": None,
+    }
+
+
+def _ensure_index_defaults(idx: dict | None) -> dict:
+    if not isinstance(idx, dict):
+        idx = {}
+    if "items" not in idx or not isinstance(idx["items"], dict):
+        idx["items"] = {}
+    idx.setdefault("max_gb", ARENA_CACHE_MAX_GB)
+    idx.setdefault("last_op", None)
+    idx.setdefault("last_path", None)
+    return idx
+
 # RU: Конфигурация через переменные окружения
 ARENA_CACHE_ENABLE = os.getenv("ARENA_CACHE_ENABLE", "1") == "1"
 ARENA_CACHE_MAX_GB = int(os.getenv("ARENA_CACHE_MAX_GB", "300"))
@@ -42,60 +62,99 @@ def _index_path(root: Path) -> Path:
 def _load_index(root: Path) -> dict:
     p = _index_path(root)
     if not p.exists():
-        return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
+        return _default_index()
     try:
-        return json.loads(p.read_text("utf-8"))
+        data = json.loads(p.read_text("utf-8"))
     except Exception:
-        return {"items": {}, "max_gb": ARENA_CACHE_MAX_GB}
+        data = None
+    return _ensure_index_defaults(data)
 
 
 def _save_index(root: Path, idx: dict) -> None:
     if ARENA_CACHE_ENABLE and not root.exists():
         root.mkdir(parents=True, exist_ok=True)
     p = _index_path(root)
-    p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), "utf-8")
+    p.write_text(
+        json.dumps(_ensure_index_defaults(dict(idx)), ensure_ascii=False, indent=2),
+        "utf-8",
+    )
 
 
 def _bytes_limit() -> int:
     return ARENA_CACHE_MAX_GB * (1024**3)
 
 
-def _lru_ensure_room(root: Path, incoming_size: int) -> None:
-    idx = _load_index(root)
-    items = idx.get("items", {})
-
-    def total_bytes() -> int:
-        return sum(v.get("size", 0) for v in items.values())
-
-    while total_bytes() + incoming_size > _bytes_limit():
-        if not items:
-            break
-        victim_rel = min(items.keys(), key=lambda k: items[k].get("atime", 0))
-        victim = root / victim_rel
-        try:
-            _v(f"evict {victim}")
-            if victim.exists():
-                victim.unlink()
-        except Exception:
-            pass
-        items.pop(victim_rel, None)
-        _save_index(root, idx)
-
-
-def _update_index_touch(root: Path, file_path: Path) -> None:
+def _lru_ensure_room(root: Path, incoming_size: int) -> dict:
+    trimmed: list[str] = []
     with _lock:
         idx = _load_index(root)
         items = idx.get("items", {})
-        try:
-            rel = str(file_path.relative_to(root))
-        except Exception:
-            return
-        try:
-            size = file_path.stat().st_size
-        except Exception:
-            size = 0
-        items[rel] = {"size": size, "atime": time.time()}
-        idx["items"] = items
+
+        def total_bytes() -> int:
+            return sum(v.get("size", 0) for v in items.values())
+
+        while total_bytes() + incoming_size > _bytes_limit():
+            if not items:
+                break
+            victim_rel = min(items.keys(), key=lambda k: items[k].get("atime", 0))
+            victim = root / victim_rel
+            try:
+                _v(f"evict {victim}")
+                if victim.exists():
+                    victim.unlink()
+            except Exception:
+                pass
+            items.pop(victim_rel, None)
+            trimmed.append(str(victim))
+
+        if trimmed:
+            idx["items"] = items
+            idx["last_op"] = "TRIM"
+            idx["last_path"] = trimmed[-1]
+            _save_index(root, idx)
+
+        result = {
+            "trimmed": trimmed,
+            "total_bytes": sum(v.get("size", 0) for v in items.values()),
+            "items": len(items),
+        }
+    return result
+
+
+def _update_index_meta(root: Path, op: str, path: Path | str | None) -> None:
+    with _lock:
+        idx = _load_index(root)
+        idx["last_op"] = op
+        idx["last_path"] = str(path) if path is not None else None
+        _save_index(root, idx)
+
+
+def _update_index_touch(
+    root: Path,
+    file_path: Path | str,
+    op: str = "HIT",
+    *,
+    update_item: bool = True,
+) -> None:
+    file_path = Path(file_path)
+    with _lock:
+        idx = _load_index(root)
+        items = idx.get("items", {})
+        rel: str | None = None
+        if update_item:
+            try:
+                rel = str(file_path.relative_to(root))
+            except Exception:
+                rel = None
+            if rel is not None:
+                try:
+                    size = file_path.stat().st_size
+                except Exception:
+                    size = 0
+                items[rel] = {"size": size, "atime": time.time()}
+                idx["items"] = items
+        idx["last_op"] = op
+        idx["last_path"] = str(file_path)
         _save_index(root, idx)
 
 
@@ -170,6 +229,8 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
     except Exception:
         pass
 
+    _update_index_touch(cache_root, dst, op="COPY")
+
 # RU: Патч ComfyUI.folder_paths при импорте
 try:
     import folder_paths  # type: ignore
@@ -224,12 +285,14 @@ try:
                                 os.utime(dst, None)  # RU: обновим atime для LRU
                             except Exception:
                                 pass
+                            _update_index_touch(cache_root, dst, op="HIT")
                             return str(dst)
                 elif not prefer_source:
                     try:
                         os.utime(dst, None)  # RU: обновим atime для LRU
                     except Exception:
                         pass
+                    _update_index_touch(cache_root, dst, op="HIT")
                     return str(dst)
 
             # RU: Иначе найдём исходник по оригинальным путям (без кеша первым)
@@ -238,6 +301,7 @@ try:
                 if src.exists():
                     if prefer_source:
                         _v(f"using original path due to cache lock: {src}")
+                        _update_index_meta(cache_root, "MISS", src)
                         return str(src)
                     with _lock:
                         if force_recopy and dst.exists():
@@ -252,12 +316,7 @@ try:
         folder_paths.get_folder_paths = get_folder_paths_patched  # type: ignore
 
         def _get_full_proxy(category: str, filename: str):  # type: ignore
-            path = get_full_path_patched(category, filename)
-            if path is not None:
-                # RU: обновим индекс
-                root = _ensure_category_root(category)
-                _update_index_touch(root, Path(path))
-            return path
+            return get_full_path_patched(category, filename)
 
         folder_paths.get_full_path = _get_full_proxy  # type: ignore
         _v("folder_paths patched")
@@ -280,28 +339,28 @@ class ArenaAutoCacheStats:
 
     def run(self, category: str):
         root = Path(ARENA_CACHE_ROOT) / category
-        if not ARENA_CACHE_ENABLE:
-            data = {
-                "cache_root": str(root),
-                "items": 0,
-                "max_size_gb": ARENA_CACHE_MAX_GB,
-                "enabled": False,
-                "note": "cache disabled",
-            }
-            return (json.dumps(data, ensure_ascii=False, indent=2),)
-
-        idx = {"items": {}}
+        idx = _default_index()
         if root.exists():
             try:
                 idx = _load_index(root)
             except Exception:
-                idx = {"items": {}}
+                idx = _default_index()
+        items = idx.get("items", {})
+        total_bytes = sum(v.get("size", 0) for v in items.values())
+        total_gb = total_bytes / float(1024**3)
         data = {
+            "category": category,
             "cache_root": str(root),
-            "items": len(idx.get("items", {})),
-            "max_size_gb": ARENA_CACHE_MAX_GB,
             "enabled": ARENA_CACHE_ENABLE,
+            "items": len(items),
+            "total_bytes": total_bytes,
+            "total_gb": total_gb,
+            "max_size_gb": idx.get("max_gb", ARENA_CACHE_MAX_GB),
+            "last_op": idx.get("last_op"),
+            "last_path": idx.get("last_path"),
         }
+        if not ARENA_CACHE_ENABLE:
+            data["note"] = "cache disabled"
         return (json.dumps(data, ensure_ascii=False, indent=2),)
 
 class ArenaAutoCacheTrim:
@@ -318,14 +377,55 @@ class ArenaAutoCacheTrim:
     def run(self, category: str):
         root = Path(ARENA_CACHE_ROOT) / category
         if not ARENA_CACHE_ENABLE:
-            return (json.dumps({"ok": True, "note": "cache disabled"}),)
+            data = {
+                "ok": True,
+                "category": category,
+                "note": "cache disabled",
+                "trimmed": [],
+                "items": 0,
+                "total_bytes": 0,
+                "total_gb": 0.0,
+                "max_size_gb": ARENA_CACHE_MAX_GB,
+            }
+            return (json.dumps(data, ensure_ascii=False, indent=2),)
         if not root.exists():
-            return (json.dumps({"ok": True, "note": "no cache yet"}),)
+            data = {
+                "ok": True,
+                "category": category,
+                "note": "no cache yet",
+                "trimmed": [],
+                "items": 0,
+                "total_bytes": 0,
+                "total_gb": 0.0,
+                "max_size_gb": ARENA_CACHE_MAX_GB,
+            }
+            return (json.dumps(data, ensure_ascii=False, indent=2),)
         try:
-            _lru_ensure_room(root, 0)
+            trim_result = _lru_ensure_room(root, 0)
         except Exception as e:
-            return (json.dumps({"ok": False, "error": str(e)}),)
-        return (json.dumps({"ok": True, "note": "trimmed to limit"}),)
+            return (
+                json.dumps({"ok": False, "category": category, "error": str(e)}, ensure_ascii=False, indent=2),
+            )
+
+        if not trim_result.get("trimmed"):
+            _update_index_meta(root, "TRIM", None)
+
+        idx = _load_index(root)
+        total_bytes = trim_result.get(
+            "total_bytes",
+            sum(v.get("size", 0) for v in idx.get("items", {}).values()),
+        )
+        data = {
+            "ok": True,
+            "category": category,
+            "note": "trimmed to limit",
+            "trimmed": trim_result.get("trimmed", []),
+            "items": trim_result.get("items", len(idx.get("items", {}))),
+            "total_bytes": total_bytes,
+            "total_gb": total_bytes / float(1024**3),
+            "max_size_gb": idx.get("max_gb", ARENA_CACHE_MAX_GB),
+        }
+        return (json.dumps(data, ensure_ascii=False, indent=2),)
 
 NODE_CLASS_MAPPINGS.update(
     {
