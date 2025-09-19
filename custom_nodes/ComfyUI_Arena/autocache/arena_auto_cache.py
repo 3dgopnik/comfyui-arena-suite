@@ -281,12 +281,17 @@ try:
                             _v(f"lock active for {dst}, will prefer source")
                             prefer_source = True
                         else:
-                            try:
-                                os.utime(dst, None)  # RU: обновим atime для LRU
-                            except Exception:
-                                pass
-                            _update_index_touch(cache_root, dst, op="HIT")
-                            return str(dst)
+                            if not dst.exists():
+                                _v(f"cache target missing after lock release, prefer source: {dst}")
+                                prefer_source = True
+                                force_recopy = True
+                            else:
+                                try:
+                                    os.utime(dst, None)  # RU: обновим atime для LRU
+                                except Exception:
+                                    pass
+                                _update_index_touch(cache_root, dst, op="HIT")
+                                return str(dst)
                 elif not prefer_source:
                     try:
                         os.utime(dst, None)  # RU: обновим atime для LRU
