@@ -35,12 +35,15 @@ I18N: dict[str, dict[str, str]] = {
         "node.warmup": "🅰️ Arena AutoCache Warmup",
         "node.trim": "🅰️ Arena AutoCache: Trim",
         "node.manager": "🅰️ Arena AutoCache: Manager",
+        "node.dashboard": "🅰️ Arena AutoCache: Dashboard",
+        "node.ops": "🅰️ Arena AutoCache: Ops",
         "input.cache_root": "Cache root directory",
         "input.max_size_gb": "Maximum cache size (GB)",
         "input.enable": "Enable AutoCache",
         "input.verbose": "Verbose logging",
         "input.category": "Model category",
         "input.do_trim": "Trim category after applying config",
+        "input.do_warmup": "Warmup cache for listed items",
         "input.items": "Items list (one per line)",
         "input.workflow_json": "Workflow JSON",
         "input.default_category": "Fallback category",
@@ -59,6 +62,10 @@ I18N: dict[str, dict[str, str]] = {
         "output.errors": "Errors",
         "output.stats_json": "Stats JSON",
         "output.action_json": "Action JSON",
+        "output.summary_json": "Summary JSON",
+        "output.audit_json": "Audit JSON",
+        "output.warmup_json": "Warmup JSON",
+        "output.trim_json": "Trim JSON",
     },
     "ru": {
         "node.config": "🅰️ Arena AutoCache: Настройки",
@@ -68,12 +75,15 @@ I18N: dict[str, dict[str, str]] = {
         "node.warmup": "🅰️ Arena AutoCache Прогрев",
         "node.trim": "🅰️ Arena AutoCache: Очистка",
         "node.manager": "🅰️ Arena AutoCache: Менеджер",
+        "node.dashboard": "🅰️ Arena AutoCache: Дашборд",
+        "node.ops": "🅰️ Arena AutoCache: Операции",
         "input.cache_root": "Корневая папка кэша",
         "input.max_size_gb": "Максимальный размер кэша (ГБ)",
         "input.enable": "Включить AutoCache",
         "input.verbose": "Подробный лог",
         "input.category": "Категория моделей",
         "input.do_trim": "Очистить категорию после применения настроек",
+        "input.do_warmup": "Прогреть кэш для перечисленных элементов",
         "input.items": "Список элементов (по одному в строке)",
         "input.workflow_json": "JSON рабочего процесса",
         "input.default_category": "Категория по умолчанию",
@@ -92,6 +102,10 @@ I18N: dict[str, dict[str, str]] = {
         "output.errors": "Ошибки",
         "output.stats_json": "JSON со статистикой",
         "output.action_json": "JSON действий",
+        "output.summary_json": "JSON сводки",
+        "output.audit_json": "JSON аудита",
+        "output.warmup_json": "JSON прогрева",
+        "output.trim_json": "JSON очистки",
     },
 }
 
@@ -885,7 +899,7 @@ def apply_folder_paths_patch() -> None:
         _apply_folder_paths_patch_locked()
 
 
-def _collect_stats(category: str) -> tuple[dict, str, int, float, dict[str, int]]:
+def _collect_stats_impl(category: str) -> tuple[dict, str, int, float, dict[str, int]]:
     """RU: Общий сбор статистики по категории."""
 
     settings = get_settings()
@@ -916,7 +930,24 @@ def _collect_stats(category: str) -> tuple[dict, str, int, float, dict[str, int]
     return data, str(root), len(items_map), total_gb, counters
 
 
-def _trim_category(category: str) -> dict:
+def collect_stats(category: str) -> dict[str, object]:
+    """RU: Публичная обёртка статистики для переиспользования в узлах."""
+
+    data, root, items, total_gb, counters = _collect_stats_impl(category)
+    payload = {
+        "payload": data,
+        "json": json.dumps(data, ensure_ascii=False, indent=2),
+        "items": items,
+        "total_gb": total_gb,
+        "cache_root": root,
+        "session_hits": counters.get("hits", 0),
+        "session_misses": counters.get("misses", 0),
+        "session_trims": counters.get("trims", 0),
+    }
+    return payload
+
+
+def _trim_category_impl(category: str) -> dict:
     """RU: Общая логика LRU-трима для узлов."""
 
     settings = get_settings()
@@ -965,6 +996,355 @@ def _trim_category(category: str) -> dict:
         "total_gb": total_gb,
         "max_size_gb": idx.get("max_gb", settings.max_gb),
     }
+
+
+def trim_category(category: str) -> dict[str, object]:
+    """RU: Публичная обёртка для LRU-трима категории."""
+
+    data = _trim_category_impl(category)
+    return {"payload": data, "json": json.dumps(data, ensure_ascii=False, indent=2)}
+
+
+def audit_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
+    """RU: Проверяет доступность исходников и наличие файлов в кэше."""
+
+    module = _ensure_folder_paths_module()
+    if module is None:
+        payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": 0,
+            "cached": 0,
+            "missing": 0,
+        }
+
+    parsed = parse_items_spec(items, workflow_json, default_category)
+    if not parsed:
+        payload = {"ok": True, "items": [], "note": "no items"}
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": 0,
+            "cached": 0,
+            "missing": 0,
+        }
+
+    settings = get_settings()
+    with _lock:
+        _apply_folder_paths_patch_locked()
+
+    category_roots: dict[str, Path] = {}
+    results: list[dict[str, object]] = []
+    cached_count = 0
+    missing_count = 0
+
+    for entry in parsed:
+        category = entry["category"]
+        name = entry["name"]
+        cache_root = category_roots.get(category)
+        if cache_root is None:
+            cache_root = _ensure_category_root(category, settings=settings)
+            category_roots[category] = cache_root
+        cache_path = cache_root / name
+
+        try:
+            raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
+        except Exception:
+            raw_paths = []
+        source_path: Path | None = None
+        for base in raw_paths:
+            candidate = Path(base) / name
+            if candidate.exists():
+                source_path = candidate
+                break
+
+        cache_exists = cache_path.exists()
+        entry_info: dict[str, object] = {
+            "category": category,
+            "name": name,
+            "cache_path": str(cache_path),
+            "cache_exists": cache_exists,
+            "source_path": str(source_path) if source_path else None,
+        }
+
+        if cache_exists:
+            cached_count += 1
+            entry_info["status"] = "cached"
+            if settings.enable:
+                try:
+                    _update_index_touch(cache_root, cache_path, op="HIT")
+                except Exception:
+                    pass
+        elif source_path is not None:
+            missing_count += 1
+            entry_info["status"] = "missing_cache"
+            if settings.enable:
+                try:
+                    _update_index_meta(cache_root, "MISS", str(source_path))
+                except Exception:
+                    pass
+        else:
+            missing_count += 1
+            entry_info["status"] = "missing_source"
+            if settings.enable:
+                try:
+                    _update_index_meta(cache_root, "MISS", f"{category}:{name}")
+                except Exception:
+                    pass
+
+        results.append(entry_info)
+
+    counts = {
+        "total": len(parsed),
+        "cached": cached_count,
+        "missing": missing_count,
+    }
+    payload: dict[str, object] = {
+        "ok": True,
+        "enable": settings.enable,
+        "items": results,
+        "counts": counts,
+    }
+    if not settings.enable:
+        payload["note"] = "cache disabled"
+
+    json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+    return {
+        "payload": payload,
+        "json": json_text,
+        "total": counts["total"],
+        "cached": cached_count,
+        "missing": missing_count,
+    }
+
+
+def warmup_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
+    """RU: Готовит указанные элементы в SSD-кэше."""
+
+    module = _ensure_folder_paths_module()
+    if module is None:
+        payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": 0,
+            "warmed": 0,
+            "copied": 0,
+            "missing": 0,
+            "errors": 0,
+        }
+
+    parsed = parse_items_spec(items, workflow_json, default_category)
+    if not parsed:
+        payload = {"ok": True, "items": [], "note": "no items"}
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": 0,
+            "warmed": 0,
+            "copied": 0,
+            "missing": 0,
+            "errors": 0,
+        }
+
+    settings = get_settings()
+    with _lock:
+        _apply_folder_paths_patch_locked()
+
+    results: list[dict[str, object]] = []
+    counts = {
+        "total": len(parsed),
+        "warmed": 0,
+        "copied": 0,
+        "missing": 0,
+        "errors": 0,
+    }
+    category_roots: dict[str, Path] = {}
+
+    for entry in parsed:
+        category = entry["category"]
+        name = entry["name"]
+        cache_root = category_roots.get(category)
+        if cache_root is None:
+            cache_root = _ensure_category_root(category, settings=settings)
+            category_roots[category] = cache_root
+        cache_path = cache_root / name
+        entry_info: dict[str, object] = {
+            "category": category,
+            "name": name,
+            "cache_path": str(cache_path),
+        }
+
+        if not settings.enable:
+            entry_info["status"] = "disabled"
+            results.append(entry_info)
+            continue
+
+        try:
+            raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
+        except Exception:
+            raw_paths = []
+
+        source_path: Path | None = None
+        for base in raw_paths:
+            candidate = Path(base) / name
+            if candidate.exists():
+                source_path = candidate
+                break
+
+        if source_path is None:
+            counts["missing"] += 1
+            entry_info["status"] = "missing_source"
+            results.append(entry_info)
+            continue
+
+        if not cache_path.exists():
+            try:
+                _copy_into_cache_lru(source_path, cache_path, category)
+            except Exception as copy_err:
+                counts["errors"] += 1
+                entry_info["status"] = "copy_failed"
+                entry_info["error"] = str(copy_err)
+                try:
+                    _update_index_meta(cache_root, "MISS", str(source_path))
+                except Exception:
+                    pass
+                results.append(entry_info)
+                continue
+
+            try:
+                os.utime(cache_path, None)
+            except Exception:
+                pass
+
+            try:
+                _update_index_touch(cache_root, cache_path, op="COPY")
+            except Exception:
+                pass
+
+            counts["copied"] += 1
+            status = "copied"
+        else:
+            try:
+                _update_index_touch(cache_root, cache_path, op="HIT")
+            except Exception:
+                pass
+            status = "cached"
+
+        counts["warmed"] += 1
+        entry_info["status"] = status
+
+        try:
+            resolved = module.get_full_path(category, name)  # type: ignore[attr-defined]
+        except Exception:
+            resolved = None
+        if resolved:
+            entry_info["resolved_path"] = str(resolved)
+
+        entry_info["cache_exists"] = cache_path.exists()
+        results.append(entry_info)
+
+    payload = {
+        "ok": counts["errors"] == 0,
+        "enable": settings.enable,
+        "items": results,
+        "counts": counts,
+    }
+    if not settings.enable:
+        payload["note"] = "cache disabled"
+
+    json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+    return {
+        "payload": payload,
+        "json": json_text,
+        "total": counts["total"],
+        "warmed": counts["warmed"],
+        "copied": counts["copied"],
+        "missing": counts["missing"],
+        "errors": counts["errors"],
+    }
+
+
+def make_ui_summary(
+    *,
+    config: dict[str, object] | None = None,
+    stats: dict[str, object] | None = None,
+    audit: dict[str, object] | None = None,
+    warmup: dict[str, object] | None = None,
+    trim: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """RU: Сводка для UI-компонентов, собирающая метрики и результаты операций."""
+
+    summary: dict[str, object] = {"timestamp": time.time()}
+    ok = True
+
+    def _extract(block: dict[str, object] | None) -> dict[str, object] | None:
+        if block is None:
+            return None
+        payload_obj = block.get("payload")
+        if isinstance(payload_obj, dict):
+            return payload_obj
+        return block
+
+    if config is not None:
+        payload = _extract(config) or {}
+        summary["config"] = payload
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            ok = False
+
+    if stats is not None:
+        payload = _extract(stats) or {}
+        summary["stats"] = payload
+        summary["stats_meta"] = {
+            "items": stats.get("items"),
+            "total_gb": stats.get("total_gb"),
+            "cache_root": stats.get("cache_root"),
+            "session": {
+                "hits": stats.get("session_hits"),
+                "misses": stats.get("session_misses"),
+                "trims": stats.get("session_trims"),
+            },
+        }
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            ok = False
+
+    if audit is not None:
+        payload = _extract(audit) or {}
+        summary["audit"] = payload
+        summary["audit_meta"] = {
+            "total": audit.get("total"),
+            "cached": audit.get("cached"),
+            "missing": audit.get("missing"),
+        }
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            ok = False
+
+    if warmup is not None:
+        payload = _extract(warmup) or {}
+        summary["warmup"] = payload
+        summary["warmup_meta"] = {
+            "total": warmup.get("total"),
+            "warmed": warmup.get("warmed"),
+            "copied": warmup.get("copied"),
+            "missing": warmup.get("missing"),
+            "errors": warmup.get("errors"),
+        }
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            ok = False
+
+    if trim is not None:
+        payload = _extract(trim) or {}
+        summary["trim"] = payload
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            ok = False
+
+    summary["ok"] = ok
+    return summary
 
 
 apply_folder_paths_patch()
@@ -1066,8 +1446,8 @@ class ArenaAutoCacheStats:
     DESCRIPTION = t("node.stats")
 
     def run(self, category: str):
-        data, _, _, _, _ = _collect_stats(category)
-        return (json.dumps(data, ensure_ascii=False, indent=2),)
+        result = collect_stats(category)
+        return (result["json"],)
 
 
 class ArenaAutoCacheStatsEx:
@@ -1113,16 +1493,15 @@ class ArenaAutoCacheStatsEx:
     DESCRIPTION = t("node.statsex")
 
     def run(self, category: str):
-        data, root, items, total_gb, counters = _collect_stats(category)
-        stats_json = json.dumps(data, ensure_ascii=False, indent=2)
+        result = collect_stats(category)
         return (
-            stats_json,
-            items,
-            total_gb,
-            root,
-            counters.get("hits", 0),
-            counters.get("misses", 0),
-            counters.get("trims", 0),
+            result["json"],
+            result["items"],
+            result["total_gb"],
+            result["cache_root"],
+            result["session_hits"],
+            result["session_misses"],
+            result["session_trims"],
         )
 
 
@@ -1181,103 +1560,12 @@ class ArenaAutoCacheAudit:
     DESCRIPTION = t("node.audit")
 
     def run(self, items: str, workflow_json: str, default_category: str):
-        module = _ensure_folder_paths_module()
-        if module is None:
-            payload = {
-                "ok": False,
-                "error": "folder_paths unavailable",
-                "items": [],
-            }
-            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0)
-
-        parsed = parse_items_spec(items, workflow_json, default_category)
-        if not parsed:
-            payload = {"ok": True, "items": [], "note": "no items"}
-            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0)
-
-        settings = get_settings()
-        with _lock:
-            _apply_folder_paths_patch_locked()
-
-        category_roots: dict[str, Path] = {}
-        results: list[dict[str, object]] = []
-        cached_count = 0
-        missing_count = 0
-
-        for entry in parsed:
-            category = entry["category"]
-            name = entry["name"]
-            cache_root = category_roots.get(category)
-            if cache_root is None:
-                cache_root = _ensure_category_root(category, settings=settings)
-                category_roots[category] = cache_root
-            cache_path = cache_root / name
-
-            try:
-                raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
-            except Exception:
-                raw_paths = []
-            source_path: Path | None = None
-            for base in raw_paths:
-                candidate = Path(base) / name
-                if candidate.exists():
-                    source_path = candidate
-                    break
-
-            cache_exists = cache_path.exists()
-            entry_info: dict[str, object] = {
-                "category": category,
-                "name": name,
-                "cache_path": str(cache_path),
-                "cache_exists": cache_exists,
-                "source_path": str(source_path) if source_path else None,
-            }
-
-            if cache_exists:
-                cached_count += 1
-                entry_info["status"] = "cached"
-                if settings.enable:
-                    try:
-                        _update_index_touch(cache_root, cache_path, op="HIT")
-                    except Exception:
-                        pass
-            elif source_path is not None:
-                missing_count += 1
-                entry_info["status"] = "missing_cache"
-                if settings.enable:
-                    try:
-                        _update_index_meta(cache_root, "MISS", str(source_path))
-                    except Exception:
-                        pass
-            else:
-                missing_count += 1
-                entry_info["status"] = "missing_source"
-                if settings.enable:
-                    try:
-                        _update_index_meta(cache_root, "MISS", f"{category}:{name}")
-                    except Exception:
-                        pass
-
-            results.append(entry_info)
-
-        payload = {
-            "ok": True,
-            "enable": settings.enable,
-            "items": results,
-            "counts": {
-                "total": len(parsed),
-                "cached": cached_count,
-                "missing": missing_count,
-            },
-        }
-        if not settings.enable:
-            payload["note"] = "cache disabled"
-
+        result = audit_items(items, workflow_json, default_category)
         return (
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            len(parsed),
-            cached_count,
-            missing_count,
+            result["json"],
+            result["total"],
+            result["cached"],
+            result["missing"],
         )
 
 
@@ -1340,201 +1628,15 @@ class ArenaAutoCacheWarmup:
     DESCRIPTION = t("node.warmup")
 
     def run(self, items: str, workflow_json: str, default_category: str):
-        module = _ensure_folder_paths_module()
-        if module is None:
-            payload = {
-                "ok": False,
-                "error": "folder_paths unavailable",
-                "items": [],
-            }
-            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0, 0, 1)
-
-        parsed = parse_items_spec(items, workflow_json, default_category)
-        if not parsed:
-            payload = {"ok": True, "items": [], "note": "no items"}
-            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0, 0, 0)
-
-        settings = get_settings()
-        with _lock:
-            _apply_folder_paths_patch_locked()
-
-        category_roots: dict[str, Path] = {}
-        results: list[dict[str, object]] = []
-        counts = {
-            "total": len(parsed),
-            "warmed": 0,
-            "copied": 0,
-            "missing": 0,
-            "errors": 0,
-            "skipped": 0,
-        }
-
-        for entry in parsed:
-            category = entry["category"]
-            name = entry["name"]
-            cache_root = category_roots.get(category)
-            if cache_root is None:
-                cache_root = _ensure_category_root(category, settings=settings)
-                category_roots[category] = cache_root
-            cache_path = cache_root / name
-
-            try:
-                raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
-            except Exception:
-                raw_paths = []
-            source_path: Path | None = None
-            for base in raw_paths:
-                candidate = Path(base) / name
-                if candidate.exists():
-                    source_path = candidate
-                    break
-
-            entry_info: dict[str, object] = {
-                "category": category,
-                "name": name,
-                "cache_path": str(cache_path),
-                "source_path": str(source_path) if source_path else None,
-            }
-
-            if not settings.enable:
-                counts["skipped"] += 1
-                if source_path is None:
-                    counts["missing"] += 1
-                    entry_info["status"] = "missing_source"
-                else:
-                    entry_info["status"] = "skipped_disabled"
-                entry_info["cache_exists"] = cache_path.exists()
-                results.append(entry_info)
-                continue
-
-            if source_path is None:
-                counts["missing"] += 1
-                entry_info["status"] = "missing_source"
-                try:
-                    _update_index_meta(cache_root, "MISS", f"{category}:{name}")
-                except Exception:
-                    pass
-                entry_info["cache_exists"] = cache_path.exists()
-                results.append(entry_info)
-                continue
-
-            try:
-                size = source_path.stat().st_size
-            except Exception:
-                size = 0
-
-            was_cached = cache_path.exists()
-            if was_cached:
-                try:
-                    cache_size = cache_path.stat().st_size
-                except Exception:
-                    cache_size = None
-                else:
-                    if size and cache_size is not None and cache_size != size:
-                        try:
-                            cache_path.unlink()
-                            was_cached = False
-                        except Exception as exc:
-                            counts["errors"] += 1
-                            entry_info["status"] = "error_remove_stale"
-                            entry_info["error"] = str(exc)
-                            try:
-                                _update_index_meta(cache_root, "MISS", str(source_path))
-                            except Exception:
-                                pass
-                            entry_info["cache_exists"] = cache_path.exists()
-                            results.append(entry_info)
-                            continue
-
-            if not was_cached:
-                try:
-                    _lru_ensure_room(cache_root, size)
-                except Exception as exc:
-                    counts["errors"] += 1
-                    entry_info["status"] = "error_trim"
-                    entry_info["error"] = str(exc)
-                    try:
-                        _update_index_meta(cache_root, "MISS", str(source_path))
-                    except Exception:
-                        pass
-                    entry_info["cache_exists"] = cache_path.exists()
-                    results.append(entry_info)
-                    continue
-
-                try:
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                except Exception:
-                    pass
-
-                try:
-                    shutil.copy2(source_path, cache_path)
-                except Exception as exc:
-                    counts["errors"] += 1
-                    entry_info["status"] = "error_copy"
-                    entry_info["error"] = str(exc)
-                    if cache_path.exists():
-                        try:
-                            cache_path.unlink()
-                        except Exception:
-                            pass
-                    try:
-                        _update_index_meta(cache_root, "MISS", str(source_path))
-                    except Exception:
-                        pass
-                    entry_info["cache_exists"] = cache_path.exists()
-                    results.append(entry_info)
-                    continue
-
-                try:
-                    os.utime(cache_path, None)
-                except Exception:
-                    pass
-
-                try:
-                    _update_index_touch(cache_root, cache_path, op="COPY")
-                except Exception:
-                    pass
-
-                counts["copied"] += 1
-                status = "copied"
-            else:
-                try:
-                    _update_index_touch(cache_root, cache_path, op="HIT")
-                except Exception:
-                    pass
-                status = "cached"
-
-            counts["warmed"] += 1
-            entry_info["status"] = status
-
-            try:
-                resolved = module.get_full_path(category, name)  # type: ignore[attr-defined]
-            except Exception:
-                resolved = None
-            if resolved:
-                entry_info["resolved_path"] = str(resolved)
-
-            entry_info["cache_exists"] = cache_path.exists()
-            results.append(entry_info)
-
-        payload = {
-            "ok": counts["errors"] == 0,
-            "enable": settings.enable,
-            "items": results,
-            "counts": counts,
-        }
-        if not settings.enable:
-            payload["note"] = "cache disabled"
-
+        result = warmup_items(items, workflow_json, default_category)
         return (
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            counts["total"],
-            counts["warmed"],
-            counts["copied"],
-            counts["missing"],
-            counts["errors"],
+            result["json"],
+            result["total"],
+            result["warmed"],
+            result["copied"],
+            result["missing"],
+            result["errors"],
         )
-
 
 class ArenaAutoCacheTrim:
     """RU: Принудительный запуск LRU-трима для категории."""
@@ -1563,8 +1665,8 @@ class ArenaAutoCacheTrim:
     DESCRIPTION = t("node.trim")
 
     def run(self, category: str):
-        data = _trim_category(category)
-        return (json.dumps(data, ensure_ascii=False, indent=2),)
+        result = trim_category(category)
+        return (result["json"],)
 
 
 class ArenaAutoCacheManager:
@@ -1658,23 +1760,238 @@ class ArenaAutoCacheManager:
         else:
             config_result.setdefault("note", "settings unchanged")
 
+        trim_result = trim_category(category) if do_trim else None
+        stats_result = collect_stats(category)
+        summary = make_ui_summary(
+            config={"payload": config_result},
+            stats=stats_result,
+            trim=trim_result,
+        )
+
         action_payload: dict[str, object] = {
             "config": config_result,
             "category": category,
+            "summary": summary,
+        }
+        if trim_result is not None:
+            action_payload["trim"] = trim_result["payload"]
+
+        action_json = json.dumps(action_payload, ensure_ascii=False, indent=2)
+        return (stats_result["json"], action_json)
+
+
+class ArenaAutoCacheDashboard:
+    """RU: Сводный дашборд для отображения статистики и аудита."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
+                "category": (
+                    "STRING",
+                    {
+                        "default": "checkpoints",
+                        "description": t("input.category"),
+                        "tooltip": t("input.category"),
+                    },
+                ),
+                "items": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.items"),
+                        "tooltip": t("input.items"),
+                    },
+                ),
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.workflow_json"),
+                        "tooltip": t("input.workflow_json"),
+                    },
+                ),
+                "default_category": (
+                    "STRING",
+                    {
+                        "default": "checkpoints",
+                        "description": t("input.default_category"),
+                        "tooltip": t("input.default_category"),
+                    },
+                ),
+            }
         }
 
-        if do_trim:
-            action_payload["trim"] = _trim_category(category)
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = (
+        t("output.summary_json"),
+        t("output.stats_json"),
+        t("output.audit_json"),
+    )
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = t("node.dashboard")
 
-        stats_json, *_ = ArenaAutoCacheStatsEx().run(category)
-        action_json = json.dumps(action_payload, ensure_ascii=False, indent=2)
-        return (stats_json, action_json)
+    def run(self, category: str, items: str, workflow_json: str, default_category: str):
+        stats_result = collect_stats(category)
+        audit_result = audit_items(items, workflow_json, default_category)
+        summary = make_ui_summary(stats=stats_result, audit=audit_result)
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+        return (summary_json, stats_result["json"], audit_result["json"])
+
+
+class ArenaAutoCacheOps:
+    """RU: Комбинированные операции прогрева и очистки с отчётом."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
+                "category": (
+                    "STRING",
+                    {
+                        "default": "checkpoints",
+                        "description": t("input.category"),
+                        "tooltip": t("input.category"),
+                    },
+                ),
+                "items": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.items"),
+                        "tooltip": t("input.items"),
+                    },
+                ),
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.workflow_json"),
+                        "tooltip": t("input.workflow_json"),
+                    },
+                ),
+                "default_category": (
+                    "STRING",
+                    {
+                        "default": "checkpoints",
+                        "description": t("input.default_category"),
+                        "tooltip": t("input.default_category"),
+                    },
+                ),
+                "do_warmup": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.do_warmup"),
+                        "tooltip": t("input.do_warmup"),
+                    },
+                ),
+                "do_trim": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.do_trim"),
+                        "tooltip": t("input.do_trim"),
+                    },
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = (
+        t("output.summary_json"),
+        t("output.warmup_json"),
+        t("output.trim_json"),
+    )
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = t("node.ops")
+
+    def run(
+        self,
+        category: str,
+        items: str,
+        workflow_json: str,
+        default_category: str,
+        do_warmup: bool,
+        do_trim: bool,
+    ):
+        trim_result = trim_category(category) if do_trim else None
+        warmup_result = warmup_items(items, workflow_json, default_category) if do_warmup else None
+
+        stats_result = collect_stats(category)
+
+        stats_payload = stats_result.get("payload", {}) if isinstance(stats_result, dict) else {}
+
+        if trim_result is None:
+            trim_payload = {
+                "ok": True,
+                "note": "trim skipped",
+                "category": category,
+                "trimmed": [],
+                "items": stats_payload.get("items"),
+                "total_bytes": stats_payload.get("total_bytes"),
+                "total_gb": stats_payload.get("total_gb"),
+                "max_size_gb": stats_payload.get("max_size_gb"),
+            }
+            trim_result = {
+                "payload": trim_payload,
+                "json": json.dumps(trim_payload, ensure_ascii=False, indent=2),
+            }
+
+        if warmup_result is None:
+            warmup_counts = {
+                "total": 0,
+                "warmed": 0,
+                "copied": 0,
+                "missing": 0,
+                "errors": 0,
+            }
+            warmup_payload = {
+                "ok": True,
+                "note": "warmup skipped",
+                "counts": warmup_counts,
+                "items": [],
+            }
+            warmup_result = {
+                "payload": warmup_payload,
+                "json": json.dumps(warmup_payload, ensure_ascii=False, indent=2),
+                "total": 0,
+                "warmed": 0,
+                "copied": 0,
+                "missing": 0,
+                "errors": 0,
+            }
+
+        summary = make_ui_summary(
+            stats=stats_result,
+            warmup=warmup_result,
+            trim=trim_result,
+        )
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+
+        return (
+            summary_json,
+            warmup_result["json"],
+            trim_result["json"],
+        )
 
 
 NODE_CLASS_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
         "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
+        "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
+        "ArenaAutoCacheOps": ArenaAutoCacheOps,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
         "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
         "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
@@ -1687,6 +2004,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": t("node.audit"),
         "ArenaAutoCacheConfig": t("node.config"),
+        "ArenaAutoCacheDashboard": t("node.dashboard"),
+        "ArenaAutoCacheOps": t("node.ops"),
         "ArenaAutoCacheStats": t("node.stats"),
         "ArenaAutoCacheStatsEx": t("node.statsex"),
         "ArenaAutoCacheTrim": t("node.trim"),
