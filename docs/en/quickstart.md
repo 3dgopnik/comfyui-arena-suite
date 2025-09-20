@@ -9,7 +9,7 @@ description: "Placeholder for the upcoming English quickstart guide."
 
 # Quickstart (translation pending)
 
-The English quickstart will be added soon. For installation steps please consult the Russian version in `../ru/quickstart.md`.
+The English quickstart will be added soon. For installation steps please consult the Russian version in `../ru/quickstart.md` and review [“Important (TL;DR): cache folder”](index.md#important-tldr-cache-folder) for the cache setup summary.
 
 ---
 
