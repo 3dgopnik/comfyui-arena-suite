@@ -39,7 +39,7 @@ class Arena_MakeTilesSegs:
 
     RETURN_TYPES = ("SEGS",)
     FUNCTION = "doit"
-    CATEGORY = "Arena/arenanodes"
+    CATEGORY = "Arena/Tiles"
 
     @staticmethod
     def doit(images, width, height, crop_factor, min_overlap, filter_segs_dilation, mask_irregularity=0, irregular_mask_mode="Reuse fast", filter_in_segs_opt=None, filter_out_segs_opt=None):
