@@ -195,5 +195,5 @@ NODE_CLASS_MAPPINGS = {
     "Arena_MakeTilesSegs": Arena_MakeTilesSegs
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Arena_MakeTilesSegs": "Arena Make Tiles Segments"
+    "Arena_MakeTilesSegs": "🅰️ Arena Make Tiles Segments"
 }
