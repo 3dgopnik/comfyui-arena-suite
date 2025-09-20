@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Add Arena AutoCache audit/warmup helpers with unified item spec parsing and JSON reports.
+- Add regression tests covering Arena AutoCache audit and warmup flows.
 ### Changed
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
 ### Docs
