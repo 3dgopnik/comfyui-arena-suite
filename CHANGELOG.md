@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add regression tests covering Arena AutoCache audit and warmup flows.
 ### Changed
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
+- Prefix Arena AutoCache and legacy tiles node display names with the 🅰️ marker for consistent UI grouping.
 ### Docs
 - Expand the Audit/Warmup node docs with bilingual multiline/JSON examples and `workflow_json` guidance, and mention the nodes in the root README.
 - Publish bilingual node reference covering AutoCache and legacy tiles nodes in `custom_nodes/ComfyUI_Arena/README.md` and `docs/{ru,en}/nodes.md`.
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restructure `docs/ROADMAP.md` with detailed release milestones, ownership, and planning horizons.
 - Normalize `README.md` encoding and restore Russian workflow/docs text without mojibake.
 - Highlight the Arena suite goals in the README introduction for English and Russian readers.
+- Refresh README and bilingual docs to mention the 🅰️-prefixed display names for AutoCache and legacy tiles nodes.
 ### Fixed
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.

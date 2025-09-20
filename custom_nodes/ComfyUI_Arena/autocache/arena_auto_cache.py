@@ -1388,12 +1388,12 @@ NODE_CLASS_MAPPINGS.update(
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
-        "ArenaAutoCacheAudit": "Arena AutoCache 🅰️ Audit",
-        "ArenaAutoCacheConfig": "Arena AutoCache: Config",
-        "ArenaAutoCacheStats": "Arena AutoCache: Stats",
-        "ArenaAutoCacheStatsEx": "Arena AutoCache: StatsEx",
-        "ArenaAutoCacheTrim": "Arena AutoCache: Trim",
-        "ArenaAutoCacheWarmup": "Arena AutoCache 🅰️ Warmup",
-        "ArenaAutoCacheManager": "Arena AutoCache: Manager",
+        "ArenaAutoCacheAudit": "🅰️ Arena AutoCache Audit",
+        "ArenaAutoCacheConfig": "🅰️ Arena AutoCache: Config",
+        "ArenaAutoCacheStats": "🅰️ Arena AutoCache: Stats",
+        "ArenaAutoCacheStatsEx": "🅰️ Arena AutoCache: StatsEx",
+        "ArenaAutoCacheTrim": "🅰️ Arena AutoCache: Trim",
+        "ArenaAutoCacheWarmup": "🅰️ Arena AutoCache Warmup",
+        "ArenaAutoCacheManager": "🅰️ Arena AutoCache: Manager",
     }
 )

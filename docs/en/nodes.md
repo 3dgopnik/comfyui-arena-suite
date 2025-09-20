@@ -13,7 +13,7 @@ This page lists all Arena nodes shipped with the package, their purpose and sock
 
 ## AutoCache
 
-### ArenaAutoCacheConfig
+### 🅰️ Arena AutoCache: Config (`ArenaAutoCacheConfig`)
 
 Runtime helper that updates the SSD cache settings during a workflow run.
 
@@ -25,7 +25,7 @@ Runtime helper that updates the SSD cache settings during a workflow run.
 - **Outputs**
   - `STRING` — JSON with the `ok` flag, the effective settings and optional `error`/`note` fields.
 
-### ArenaAutoCacheStats
+### 🅰️ Arena AutoCache: Stats (`ArenaAutoCacheStats`)
 
 Returns aggregated cache stats for a single category. When the cache is disabled, it responds with a stub containing `ok=false`.
 
@@ -34,14 +34,14 @@ Returns aggregated cache stats for a single category. When the cache is disabled
 - **Outputs**
   - `STRING` — JSON exposing `category`, `cache_root`, `enabled`, `items`, `total_bytes`, `total_gb`, `max_size_gb`, `last_op`, `last_path` and an optional `note`.
 
-### ArenaAutoCacheStatsEx
+### 🅰️ Arena AutoCache: StatsEx (`ArenaAutoCacheStatsEx`)
 
 Extended statistics node with dedicated sockets for numeric values and session counters.
 
 - **Inputs**
   - `category` (`STRING`, default `"checkpoints"`).
 - **Outputs**
-  - `STRING` (`json`) — same payload as `ArenaAutoCacheStats`.
+  - `STRING` (`json`) — same payload as **🅰️ Arena AutoCache: Stats** (`ArenaAutoCacheStats`).
   - `INT` (`items`) — number of cached entries.
   - `FLOAT` (`total_gb`) — total cache size in GiB.
   - `STRING` (`cache_root`) — resolved cache root path.
@@ -49,7 +49,7 @@ Extended statistics node with dedicated sockets for numeric values and session c
   - `INT` (`session_misses`) — session miss counter.
   - `INT` (`session_trims`) — session trim counter.
 
-### ArenaAutoCacheAudit
+### 🅰️ Arena AutoCache Audit (`ArenaAutoCacheAudit`)
 
 Checks whether source models exist and whether the cache already contains the corresponding files. Supports `items` lists (newline separated strings or JSON arrays) and auto-discovery from `workflow_json`. Only filenames with typical model extensions (`.safetensors`, `.ckpt`, `.pt`, `.pth`, `.onnx`, `.vae`, `.bin`, `.gguf`, `.yaml`, `.yml`, `.npz`, `.pb`, `.tflite`) are considered.
 
@@ -63,7 +63,7 @@ Checks whether source models exist and whether the cache already contains the co
   - `INT` (`cached`) — entries already present in the cache.
   - `INT` (`missing`) — entries missing either from the cache or from the source directories.
 
-### ArenaAutoCacheWarmup
+### 🅰️ Arena AutoCache Warmup (`ArenaAutoCacheWarmup`)
 
 Warms up the cache using the same `items`/`workflow_json` specification. The node ensures free space via `_lru_ensure_room`, copies missing files and updates the cache index (`_update_index_touch`, `_update_index_meta`).
 
@@ -79,7 +79,7 @@ Warms up the cache using the same `items`/`workflow_json` specification. The nod
   - `INT` (`missing`) — entries skipped because the source file is missing.
   - `INT` (`errors`) — failures such as trimming/copy errors.
 
-### ArenaAutoCacheTrim
+### 🅰️ Arena AutoCache: Trim (`ArenaAutoCacheTrim`)
 
 Manually runs the LRU maintenance routine for the selected category.
 
@@ -88,7 +88,7 @@ Manually runs the LRU maintenance routine for the selected category.
 - **Outputs**
   - `STRING` — JSON containing `ok`, `category`, `trimmed`, `items`, `total_bytes`, `total_gb`, `max_size_gb` and a descriptive `note`.
 
-### ArenaAutoCacheManager
+### 🅰️ Arena AutoCache: Manager (`ArenaAutoCacheManager`)
 
 Composite node that applies the configuration, optionally executes `Trim` and emits two JSON reports.
 
@@ -100,12 +100,12 @@ Composite node that applies the configuration, optionally executes `Trim` and em
   - `category` (`STRING`, default `"checkpoints"`).
   - `do_trim` (`BOOLEAN`, default `false`) — triggers trimming after configuration updates.
 - **Outputs**
-  - `STRING` (`stats_json`) — statistics JSON identical to `ArenaAutoCacheStatsEx`.
+  - `STRING` (`stats_json`) — statistics JSON identical to **🅰️ Arena AutoCache: StatsEx** (`ArenaAutoCacheStatsEx`).
   - `STRING` (`action_json`) — execution log with a `config` object and, when enabled, `trim` details.
 
 ## Legacy
 
-### Arena_MakeTilesSegs
+### 🅰️ Arena Make Tiles Segments (`Arena_MakeTilesSegs`)
 
 Generates Impact Pack compatible `SEGS` for tiled upscale workflows. The node raises `IMPACT_MISSING_MESSAGE` if the dependency is missing.
 

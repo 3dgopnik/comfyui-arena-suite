@@ -7,7 +7,7 @@ Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package
 
 ## Features overview
 - **Legacy nodes** — migrated utilities that preserve the existing interfaces while living under `ComfyUI_Arena/legacy`.
-- **AutoCache** — runtime patch for `folder_paths` that prefers an SSD cache, plus Config/StatsEx/Trim/Manager nodes for in-graph control (see `custom_nodes/ComfyUI_Arena/README.md`).
+- **AutoCache** — runtime patch for `folder_paths` that prefers an SSD cache, plus 🅰️ Arena AutoCache: Config/StatsEx/Trim/Manager nodes for in-graph control (see `custom_nodes/ComfyUI_Arena/README.md`).
 - **Audit & Warmup nodes** — verify and pre-fill the SSD cache via multiline lists or workflow JSON (see `custom_nodes/ComfyUI_Arena/README.md`). **RU:** Узлы Audit/Warmup проверяют и прогревают SSD-кэш, принимают многострочные списки и JSON из `workflow_json` экспорта.
 - **Updater scaffolding** — Hugging Face and CivitAI helpers (WIP) intended to keep local model folders in sync and manage `current` symlinks.
 
@@ -20,7 +20,7 @@ Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package
 ## Quick usage summary
 1. Install the suite through **ComfyUI Manager → Install from URL** using your repository URL (for example, `https://github.com/<your-org>/comfyui-arena-suite`).
 2. Refresh the custom nodes list or restart ComfyUI so the new Arena nodes load.
-3. Drop nodes with the **Arena** prefix into your graph to verify the installation (e.g., `ArenaAutoCacheStats`).
+3. Drop nodes with the **Arena** prefix into your graph to verify the installation (e.g., **🅰️ Arena AutoCache: Stats** / `ArenaAutoCacheStats`).
 4. Configure SSD caching and update manifests as needed — see the documentation below for detailed steps.
 
 ## Documentation

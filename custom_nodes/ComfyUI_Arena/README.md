@@ -10,7 +10,7 @@ Single-package for all **Arena** nodes.
 
 ## AutoCache nodes
 
-### ArenaAutoCacheConfig
+### 🅰️ Arena AutoCache: Config (`ArenaAutoCacheConfig`)
 
 **RU**
 
@@ -36,7 +36,7 @@ Runtime helper that updates the SSD cache without restarting ComfyUI. Drop it ne
 - **Outputs**
   - `STRING` — JSON object exposing the `ok` flag, effective settings and optional `error`/`note` fields.
 
-### ArenaAutoCacheStats
+### 🅰️ Arena AutoCache: Stats (`ArenaAutoCacheStats`)
 
 **RU**
 
@@ -56,7 +56,7 @@ Legacy-compatible stats node that keeps the original single-JSON output. When th
 - **Outputs**
   - `STRING` — JSON payload exposing `category`, `cache_root`, `enabled`, `items`, `total_bytes`, `total_gb`, `max_size_gb`, `last_op`, `last_path` and an optional `note`.
 
-### ArenaAutoCacheStatsEx
+### 🅰️ Arena AutoCache: StatsEx (`ArenaAutoCacheStatsEx`)
 
 **RU**
 
@@ -65,7 +65,7 @@ Legacy-compatible stats node that keeps the original single-JSON output. When th
 - **Входы**
   - `category` (`STRING`, по умолчанию `"checkpoints"`).
 - **Выходы**
-  - `STRING` (`json`) — тот же JSON, что и у `ArenaAutoCacheStats`.
+  - `STRING` (`json`) — тот же JSON, что и у «🅰️ Arena AutoCache: Stats» (`ArenaAutoCacheStats`).
   - `INT` (`items`) — количество записей в кэше.
   - `FLOAT` (`total_gb`) — общий объём данных в гигабайтах.
   - `STRING` (`cache_root`) — путь к корню кэша.
@@ -80,7 +80,7 @@ Extended statistics with dedicated sockets for numeric values and session counte
 - **Inputs**
   - `category` (`STRING`, default `"checkpoints"`).
 - **Outputs**
-  - `STRING` (`json`) — same JSON payload as `ArenaAutoCacheStats`.
+  - `STRING` (`json`) — same JSON payload as **🅰️ Arena AutoCache: Stats** (`ArenaAutoCacheStats`).
   - `INT` (`items`) — number of cached entries.
   - `FLOAT` (`total_gb`) — total cache size in GiB.
   - `STRING` (`cache_root`) — resolved cache root path.
@@ -88,7 +88,7 @@ Extended statistics with dedicated sockets for numeric values and session counte
   - `INT` (`session_misses`) — cache misses recorded during the session.
   - `INT` (`session_trims`) — manual or automatic trims executed during the session.
 
-### ArenaAutoCacheAudit
+### 🅰️ Arena AutoCache Audit (`ArenaAutoCacheAudit`)
 
 **RU**
 
@@ -166,7 +166,7 @@ Traverses the provided item list, verifies that source files exist and the cache
 
   - `workflow_json` hookup: export the graph via **Queue → Save (API Format)**, load the file with the built-in `Load Text` node and feed its output into `workflow_json` so the audit adds every model referenced in the workflow automatically.
 
-### ArenaAutoCacheWarmup
+### 🅰️ Arena AutoCache Warmup (`ArenaAutoCacheWarmup`)
 
 **RU**
 
@@ -206,7 +206,7 @@ Warms up the cache using the same `items`/`workflow_json` specification. For eve
   - The `items` format mirrors the audit node, so you can reuse the multiline list or JSON payload shown above.
   - To warm up every model referenced in the current workflow, feed the exported JSON (via `Load Text` or any text loader) into `workflow_json` and optionally append manual entries for assets that live outside the workflow.
 
-### ArenaAutoCacheTrim
+### 🅰️ Arena AutoCache: Trim (`ArenaAutoCacheTrim`)
 
 **RU**
 
@@ -226,7 +226,7 @@ Triggers manual LRU maintenance for the selected category so you can reclaim spa
 - **Outputs**
   - `STRING` — JSON containing `ok`, `category`, `trimmed`, `items`, `total_bytes`, `total_gb`, `max_size_gb` and a descriptive `note`.
 
-### ArenaAutoCacheManager
+### 🅰️ Arena AutoCache: Manager (`ArenaAutoCacheManager`)
 
 **RU**
 
@@ -240,7 +240,7 @@ Triggers manual LRU maintenance for the selected category so you can reclaim spa
   - `category` (`STRING`, по умолчанию `"checkpoints"`).
   - `do_trim` (`BOOLEAN`, по умолчанию `false`) — выполняет очистку сразу после изменения настроек.
 - **Выходы**
-  - `STRING` (`stats_json`) — тот же JSON, что и у `ArenaAutoCacheStatsEx`.
+  - `STRING` (`stats_json`) — тот же JSON, что и у «🅰️ Arena AutoCache: StatsEx» (`ArenaAutoCacheStatsEx`).
   - `STRING` (`action_json`) — журнал операции с вложенными объектами `config` и, при `do_trim=true`, `trim`.
 
 **EN**
@@ -255,12 +255,12 @@ Convenience combo node that applies configuration changes, optionally runs a tri
   - `category` (`STRING`, default `"checkpoints"`).
   - `do_trim` (`BOOLEAN`, default `false`) — triggers trimming right after updating the settings.
 - **Outputs**
-  - `STRING` (`stats_json`) — same JSON payload as `ArenaAutoCacheStatsEx`.
+  - `STRING` (`stats_json`) — same JSON payload as **🅰️ Arena AutoCache: StatsEx** (`ArenaAutoCacheStatsEx`).
   - `STRING` (`action_json`) — execution log containing the `config` result and optional `trim` details when enabled.
 
 ## Legacy node
 
-### Arena_MakeTilesSegs
+### 🅰️ Arena Make Tiles Segments (`Arena_MakeTilesSegs`)
 
 **RU**
 

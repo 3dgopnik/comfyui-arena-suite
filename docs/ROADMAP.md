@@ -22,7 +22,7 @@
 
 ### ⏳ v0.2.0 — ArenaAutoCache MVP
 **Deliverables**
-- Ship `ArenaAutoCacheStats` and `ArenaAutoCacheTrim` nodes with full metric coverage and trimming automation described in [How it works](./HOW_IT_WORKS.md).
+- Ship «🅰️ Arena AutoCache: Stats» (`ArenaAutoCacheStats`) and «🅰️ Arena AutoCache: Trim» (`ArenaAutoCacheTrim`) nodes with full metric coverage and trimming automation described in [How it works](./HOW_IT_WORKS.md).
 - Expose configuration toggles (e.g., `ARENA_CACHE_ENABLE`) and document them alongside installation updates in the [install guide](./INSTALL.md).
 - Provide example cache workflows and troubleshooting notes in `custom_nodes/ComfyUI_Arena/README.md`.
 
