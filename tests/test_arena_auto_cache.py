@@ -1,4 +1,4 @@
-"""Regression tests for Arena AutoCache utilities."""
+﻿"""Regression tests for Arena AutoCache utilities."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ class ArenaAutoCacheStaleLockTest(unittest.TestCase):
 
             # First request after crash: stale lock should be removed and cache recopied.
             resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
-            self.assertEqual(resolved, str(dst_path))
+            self.assertEqual(Path(resolved).resolve(strict=False), dst_path.resolve(strict=False))
             self.assertFalse(lock_path.exists())
             self.assertEqual(dst_path.read_text(encoding="utf-8"), "fresh-data")
 
@@ -83,7 +83,7 @@ class ArenaAutoCacheStaleLockTest(unittest.TestCase):
 
             # Subsequent requests should keep returning the cache path without recreating locks.
             second_resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
-            self.assertEqual(second_resolved, str(dst_path))
+            self.assertEqual(Path(second_resolved).resolve(strict=False), dst_path.resolve(strict=False))
             self.assertFalse(dst_path.with_suffix(dst_path.suffix + ".copying").exists())
 
 
@@ -160,3 +160,5 @@ class ArenaAutoCacheMissingFileTest(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover - unittest main hook
     unittest.main()
+
+

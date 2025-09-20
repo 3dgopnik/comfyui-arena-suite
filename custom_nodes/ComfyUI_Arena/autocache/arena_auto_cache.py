@@ -1,102 +1,315 @@
-# EN identifiers; RU comments for clarity.
+﻿# EN identifiers; RU comments for clarity.
 import os
 import json
 import time
 import shutil
 import threading
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import ModuleType
+from typing import Callable, Optional
+
+_STALE_LOCK_SECONDS = 60
+
+_lock = threading.RLock()
 
 
-def _default_index() -> dict:
+@dataclass
+class ArenaCacheSettings:
+    """RU: Отражает текущие настройки кеша во время сессии."""
+
+    root: Path
+    max_gb: int
+    enable: bool
+    verbose: bool
+
+
+def _normalize_root(value: str | Path) -> Path:
+    """RU: Приводит путь к нормализованному виду и поддерживает UNC."""
+
+    try:
+        base = Path(value).expanduser()
+    except TypeError as exc:  # pragma: no cover - defensive
+        raise ValueError(f"invalid cache root: {value!r}") from exc
+    normalized = Path(os.path.normpath(str(base)))
+    try:
+        normalized = normalized.resolve(strict=False)
+    except Exception:
+        pass
+    return normalized
+
+
+def _initial_root() -> Path:
+    env_root = os.getenv("ARENA_CACHE_ROOT")
+    if not env_root:
+        default_base = Path(os.getenv("LOCALAPPDATA", os.getcwd()))
+        env_root = str(default_base / "ArenaAutoCache")
+    return _normalize_root(env_root)
+
+
+def _initial_bool(name: str, default: bool) -> bool:
+    return os.getenv(name, "1" if default else "0") == "1"
+
+
+def _initial_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+_settings = ArenaCacheSettings(
+    root=_initial_root(),
+    max_gb=max(0, _initial_int("ARENA_CACHE_MAX_GB", 300)),
+    enable=_initial_bool("ARENA_CACHE_ENABLE", True),
+    verbose=_initial_bool("ARENA_CACHE_VERBOSE", False),
+)
+
+if _settings.enable:
+    try:
+        _settings.root.mkdir(parents=True, exist_ok=True)
+    except Exception as root_err:  # pragma: no cover - logging only
+        print(f"[ArenaAutoCache] failed to prepare cache root {_settings.root}: {root_err}")
+
+_folder_paths_module: Optional[ModuleType] = None
+_orig_get_folder_paths: Optional[Callable[[str], list[str] | tuple[str, ...]]] = None
+_orig_get_full_path: Optional[Callable[[str, str], Optional[str]]] = None
+_folder_paths_patched = False
+
+_session_hits = 0
+_session_misses = 0
+_session_trims = 0
+
+NODE_CLASS_MAPPINGS: dict[str, type] = {}
+NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
+
+
+def get_settings() -> ArenaCacheSettings:
+    """RU: Возвращает копию настроек кеша."""
+
+    with _lock:
+        return replace(_settings)
+
+
+def get_session_counters() -> dict[str, int]:
+    """RU: Текущие счётчики операций за сессию."""
+
+    with _lock:
+        return {
+            "hits": _session_hits,
+            "misses": _session_misses,
+            "trims": _session_trims,
+        }
+
+
+def _record_session_event(op: str, count: int = 1) -> None:
+    """RU: Увеличивает счётчики событий (HIT/MISS/TRIM)."""
+
+    if count <= 0:
+        return
+    global _session_hits, _session_misses, _session_trims
+    with _lock:
+        if op == "HIT":
+            _session_hits += count
+        elif op == "MISS":
+            _session_misses += count
+        elif op == "TRIM":
+            _session_trims += count
+
+
+def _category_root(category: str, *, settings: Optional[ArenaCacheSettings] = None) -> Path:
+    """RU: Путь к каталогу категории без авто-создания."""
+
+    if settings is None:
+        settings = get_settings()
+    return settings.root / category
+
+
+def _ensure_category_root(category: str, *, settings: Optional[ArenaCacheSettings] = None) -> Path:
+    """RU: Возвращает каталог категории, создавая его при включённом кеше."""
+
+    if settings is None:
+        settings = get_settings()
+    root = _category_root(category, settings=settings)
+    if settings.enable:
+        root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _v(msg: str) -> None:
+    """RU: Отладочная печать при verbose."""
+
+    with _lock:
+        verbose = _settings.verbose
+    if verbose:
+        print(f"[ArenaAutoCache] {msg}")
+
+
+def set_cache_settings(
+    *,
+    root: str | Path | None = None,
+    max_gb: int | None = None,
+    enable: bool | None = None,
+    verbose: bool | None = None,
+) -> dict:
+    """RU: Обновляет настройки кеша и перепатчивает folder_paths в рантайме."""
+
+    global _settings
+    with _lock:
+        current = _settings
+        if isinstance(root, str) and not root.strip():
+            root = None
+        new_root = current.root
+        if root is not None:
+            try:
+                new_root = _normalize_root(root)
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "error": f"invalid cache_root: {exc}",
+                    "effective_root": str(current.root),
+                    "max_size_gb": current.max_gb,
+                    "enable": current.enable,
+                    "verbose": current.verbose,
+                }
+
+        if max_gb is None:
+            new_max = current.max_gb
+        else:
+            try:
+                new_max = max(0, int(max_gb))
+            except (TypeError, ValueError) as exc:
+                return {
+                    "ok": False,
+                    "error": f"invalid max_size_gb: {exc}",
+                    "effective_root": str(current.root),
+                    "max_size_gb": current.max_gb,
+                    "enable": current.enable,
+                    "verbose": current.verbose,
+                }
+
+        new_enable = current.enable if enable is None else bool(enable)
+        new_verbose = current.verbose if verbose is None else bool(verbose)
+
+        tentative = ArenaCacheSettings(
+            root=new_root,
+            max_gb=new_max,
+            enable=new_enable,
+            verbose=new_verbose,
+        )
+
+        if tentative.enable:
+            try:
+                tentative.root.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "error": f"failed to prepare cache root '{tentative.root}': {exc}",
+                    "effective_root": str(current.root),
+                    "max_size_gb": current.max_gb,
+                    "enable": current.enable,
+                    "verbose": current.verbose,
+                }
+
+        _settings = tentative
+        _apply_folder_paths_patch_locked()
+        snapshot = replace(_settings)
+
+    return {
+        "ok": True,
+        "effective_root": str(snapshot.root),
+        "max_size_gb": snapshot.max_gb,
+        "enable": snapshot.enable,
+        "verbose": snapshot.verbose,
+    }
+
+
+def _default_index(*, settings: Optional[ArenaCacheSettings] = None) -> dict:
+    """RU: Пустой индекс с актуальными настройками."""
+
+    if settings is None:
+        settings = get_settings()
     return {
         "items": {},
-        "max_gb": ARENA_CACHE_MAX_GB,
+        "max_gb": settings.max_gb,
         "last_op": None,
         "last_path": None,
     }
 
 
-def _ensure_index_defaults(idx: dict | None) -> dict:
+def _ensure_index_defaults(idx: dict | None, *, settings: Optional[ArenaCacheSettings] = None) -> dict:
+    """RU: Дополняет индекс обязательными полями."""
+
+    if settings is None:
+        settings = get_settings()
     if not isinstance(idx, dict):
         idx = {}
-    if "items" not in idx or not isinstance(idx["items"], dict):
+    if not isinstance(idx.get("items"), dict):
         idx["items"] = {}
-    idx.setdefault("max_gb", ARENA_CACHE_MAX_GB)
+    idx.setdefault("max_gb", settings.max_gb)
     idx.setdefault("last_op", None)
     idx.setdefault("last_path", None)
     return idx
-
-# RU: Конфигурация через переменные окружения
-ARENA_CACHE_ENABLE = os.getenv("ARENA_CACHE_ENABLE", "1") == "1"
-ARENA_CACHE_MAX_GB = int(os.getenv("ARENA_CACHE_MAX_GB", "300"))
-ARENA_CACHE_ROOT = os.getenv(
-    "ARENA_CACHE_ROOT",
-    os.path.join(os.getenv("LOCALAPPDATA", os.getcwd()), "ArenaAutoCache"),
-)
-ARENA_CACHE_VERBOSE = os.getenv("ARENA_CACHE_VERBOSE", "0") == "1"
-
-_STALE_LOCK_SECONDS = 60
-
-# RU: Потокобезопасность
-_lock = threading.RLock()
-
-NODE_CLASS_MAPPINGS = {}
-NODE_DISPLAY_NAME_MAPPINGS = {}
-
-def _v(msg: str) -> None:
-    if ARENA_CACHE_VERBOSE:
-        print(f"[ArenaAutoCache] {msg}")
-
-
-def _ensure_category_root(category: str) -> Path:
-    root = Path(ARENA_CACHE_ROOT) / category
-    if ARENA_CACHE_ENABLE:
-        root.mkdir(parents=True, exist_ok=True)
-    return root
 
 
 def _index_path(root: Path) -> Path:
     return root / ".arena_cache_index.json"
 
 
-def _load_index(root: Path) -> dict:
+def _load_index(root: Path, *, settings: Optional[ArenaCacheSettings] = None) -> dict:
+    if settings is None:
+        settings = get_settings()
     p = _index_path(root)
     if not p.exists():
-        return _default_index()
+        return _default_index(settings=settings)
     try:
         data = json.loads(p.read_text("utf-8"))
     except Exception:
         data = None
-    return _ensure_index_defaults(data)
+    return _ensure_index_defaults(data, settings=settings)
 
 
-def _save_index(root: Path, idx: dict) -> None:
-    if ARENA_CACHE_ENABLE and not root.exists():
+def _save_index(root: Path, idx: dict, *, settings: Optional[ArenaCacheSettings] = None) -> None:
+    if settings is None:
+        settings = get_settings()
+    if settings.enable and not root.exists():
         root.mkdir(parents=True, exist_ok=True)
     p = _index_path(root)
-    p.write_text(
-        json.dumps(_ensure_index_defaults(dict(idx)), ensure_ascii=False, indent=2),
-        "utf-8",
+    payload = json.dumps(
+        _ensure_index_defaults(dict(idx), settings=settings),
+        ensure_ascii=False,
+        indent=2,
     )
+    p.write_text(payload, "utf-8")
 
 
-def _bytes_limit() -> int:
-    return ARENA_CACHE_MAX_GB * (1024**3)
+def _bytes_limit(*, settings: Optional[ArenaCacheSettings] = None) -> int:
+    if settings is None:
+        settings = get_settings()
+    return max(0, settings.max_gb) * (1024**3)
 
 
 def _lru_ensure_room(root: Path, incoming_size: int) -> dict:
+    """RU: Гарантирует наличие свободного места для нового файла."""
+
     trimmed: list[str] = []
     with _lock:
-        idx = _load_index(root)
+        settings = _settings
+        idx = _load_index(root, settings=settings)
         items = idx.get("items", {})
 
         def total_bytes() -> int:
             return sum(v.get("size", 0) for v in items.values())
 
-        while total_bytes() + incoming_size > _bytes_limit():
+        limit = _bytes_limit(settings=settings)
+
+        while total_bytes() + incoming_size > limit:
             if not items:
                 break
-            victim_rel = min(items.keys(), key=lambda k: items[k].get("atime", 0))
+            victim_rel = min(items.keys(), key=lambda key: items[key].get("atime", 0))
             victim = root / victim_rel
             try:
                 _v(f"evict {victim}")
@@ -111,7 +324,8 @@ def _lru_ensure_room(root: Path, incoming_size: int) -> dict:
             idx["items"] = items
             idx["last_op"] = "TRIM"
             idx["last_path"] = trimmed[-1]
-            _save_index(root, idx)
+            _save_index(root, idx, settings=settings)
+            _record_session_event("TRIM", len(trimmed))
 
         result = {
             "trimmed": trimmed,
@@ -123,10 +337,12 @@ def _lru_ensure_room(root: Path, incoming_size: int) -> dict:
 
 def _update_index_meta(root: Path, op: str, path: Path | str | None) -> None:
     with _lock:
-        idx = _load_index(root)
+        settings = _settings
+        idx = _load_index(root, settings=settings)
         idx["last_op"] = op
         idx["last_path"] = str(path) if path is not None else None
-        _save_index(root, idx)
+        _save_index(root, idx, settings=settings)
+    _record_session_event(op)
 
 
 def _update_index_touch(
@@ -138,9 +354,10 @@ def _update_index_touch(
 ) -> None:
     file_path = Path(file_path)
     with _lock:
-        idx = _load_index(root)
+        settings = _settings
+        idx = _load_index(root, settings=settings)
         items = idx.get("items", {})
-        rel: str | None = None
+        rel: Optional[str] = None
         if update_item:
             try:
                 rel = str(file_path.relative_to(root))
@@ -155,11 +372,15 @@ def _update_index_touch(
                 idx["items"] = items
         idx["last_op"] = op
         idx["last_path"] = str(file_path)
-        _save_index(root, idx)
+        _save_index(root, idx, settings=settings)
+    _record_session_event(op)
 
 
 def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
-    cache_root = _ensure_category_root(category)
+    """RU: Копирует файл в кеш с учётом LRU."""
+
+    settings = get_settings()
+    cache_root = _ensure_category_root(category, settings=settings)
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     lock_path = dst.with_suffix(dst.suffix + ".copying")
@@ -231,217 +452,414 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
 
     _update_index_touch(cache_root, dst, op="COPY")
 
-# RU: Патч ComfyUI.folder_paths при импорте
-try:
-    import folder_paths  # type: ignore
 
-    if ARENA_CACHE_ENABLE:
-        _v("patching folder_paths ...")
+def _ensure_folder_paths_module() -> Optional[ModuleType]:
+    """RU: Подгружает ComfyUI.folder_paths с мемоизацией."""
 
-        _orig_get_paths = folder_paths.get_folder_paths
-        _orig_get_full = folder_paths.get_full_path
+    global _folder_paths_module
+    if _folder_paths_module is not None:
+        return _folder_paths_module
+    try:
+        import folder_paths  # type: ignore
+    except Exception as exc:
+        print(f"[ArenaAutoCache] folder_paths unavailable: {exc}")
+        return None
+    _folder_paths_module = folder_paths
+    return folder_paths
 
-        def get_folder_paths_patched(category: str):  # type: ignore
-            # RU: Кеш-путь добавляем первым
-            cache_root = str(_ensure_category_root(category))
-            paths = _orig_get_paths(category)
-            if cache_root not in paths:
-                paths = [cache_root] + list(paths)
-            return paths
 
-        def get_full_path_patched(category: str, filename: str):  # type: ignore
-            # RU: Если файл уже в кеше — вернуть сразу
-            cache_root = _ensure_category_root(category)
-            dst = cache_root / filename
-            lock_path = dst.with_suffix(dst.suffix + ".copying")
-            prefer_source = False
-            force_recopy = False
-            if dst.exists():
-                if lock_path.exists():
-                    # RU: Проверим, не устарел ли лок, прежде чем ждать
-                    lock_age = None
-                    try:
-                        lock_age = time.time() - lock_path.stat().st_mtime
-                    except Exception:
-                        lock_age = None
-                    if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
-                        _v(f"stale lock detected for {dst}, removing {lock_path}")
-                        try:
-                            lock_path.unlink()
-                            force_recopy = True
-                        except Exception as lock_err:
-                            _v(f"failed to remove stale lock {lock_path}: {lock_err}")
-                            prefer_source = True
-                    if lock_path.exists() and not prefer_source:
-                        # RU: Лок актуален — ждём кратко и при необходимости отдаём исходник
-                        wait_deadline = time.monotonic() + 5.0
-                        while lock_path.exists() and time.monotonic() < wait_deadline:
-                            time.sleep(0.05)
-                        if lock_path.exists():
-                            _v(f"lock active for {dst}, will prefer source")
-                            prefer_source = True
-                        else:
-                            if not dst.exists():
-                                _v(f"cache target missing after lock release, prefer source: {dst}")
-                                prefer_source = True
-                                force_recopy = True
-                            else:
-                                try:
-                                    os.utime(dst, None)  # RU: обновим atime для LRU
-                                except Exception:
-                                    pass
-                                _update_index_touch(cache_root, dst, op="HIT")
-                                return str(dst)
-                elif not prefer_source:
-                    try:
-                        os.utime(dst, None)  # RU: обновим atime для LRU
-                    except Exception:
-                        pass
-                    _update_index_touch(cache_root, dst, op="HIT")
-                    return str(dst)
+def _apply_folder_paths_patch_locked() -> None:
+    """RU: Включает/отключает патч ComfyUI.folder_paths согласно настройкам."""
 
-            # RU: Иначе найдём исходник по оригинальным путям (без кеша первым)
-            for p in _orig_get_paths(category):
-                src = Path(p) / filename
-                if src.exists():
-                    if prefer_source:
-                        _v(f"using original path due to cache lock: {src}")
-                        _update_index_meta(cache_root, "MISS", src)
-                        return str(src)
-                    with _lock:
-                        if force_recopy and dst.exists():
-                            try:
-                                dst.unlink()
-                            except Exception as cleanup_err:
-                                _v(f"failed to remove stale cache file before recopy {dst}: {cleanup_err}")
-                        _copy_into_cache_lru(src, dst, category)
-                    return str(dst)
-            return None
-        # RU: Переопределяем и подменяем
-        folder_paths.get_folder_paths = get_folder_paths_patched  # type: ignore
+    global _folder_paths_patched, _orig_get_folder_paths, _orig_get_full_path
+    module = _ensure_folder_paths_module()
+    if module is None:
+        return
 
-        def _get_full_proxy(category: str, filename: str):  # type: ignore
-            return get_full_path_patched(category, filename)
+    if _orig_get_folder_paths is None or _orig_get_full_path is None:
+        _orig_get_folder_paths = module.get_folder_paths  # type: ignore[attr-defined]
+        _orig_get_full_path = module.get_full_path  # type: ignore[attr-defined]
 
-        folder_paths.get_full_path = _get_full_proxy  # type: ignore
-        _v("folder_paths patched")
-    else:
-        _v("disabled by ARENA_CACHE_ENABLE=0")
-except Exception as e:  # noqa: BLE001
-    print(f"[ArenaAutoCache] disabled: {e}")
+    settings = _settings
 
-# RU: Узловые классы для UI (минимум)
-class ArenaAutoCacheStats:
-    """RU: Возвращает JSON со статистикой кеша по категории."""
+    if not settings.enable:
+        if _folder_paths_patched and _orig_get_folder_paths and _orig_get_full_path:
+            module.get_folder_paths = _orig_get_folder_paths  # type: ignore[attr-defined]
+            module.get_full_path = _orig_get_full_path  # type: ignore[attr-defined]
+            _folder_paths_patched = False
+            _v("folder_paths patch disabled")
+        else:
+            _v("disabled by settings")
+        return
 
-    @classmethod
-    def INPUT_TYPES(cls):  # noqa: N802
-        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+    orig_get_paths = _orig_get_folder_paths
+    if orig_get_paths is None:
+        return
 
-    RETURN_TYPES = ("STRING",)
-    FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    def get_folder_paths_patched(category: str):
+        """RU: Добавляет кешевую директорию в список путей."""
 
-    def run(self, category: str):
-        root = Path(ARENA_CACHE_ROOT) / category
-        idx = _default_index()
-        if root.exists():
-            try:
-                idx = _load_index(root)
-            except Exception:
-                idx = _default_index()
-        items = idx.get("items", {})
-        total_bytes = sum(v.get("size", 0) for v in items.values())
-        total_gb = total_bytes / float(1024**3)
-        data = {
-            "category": category,
-            "cache_root": str(root),
-            "enabled": ARENA_CACHE_ENABLE,
-            "items": len(items),
-            "total_bytes": total_bytes,
-            "total_gb": total_gb,
-            "max_size_gb": idx.get("max_gb", ARENA_CACHE_MAX_GB),
-            "last_op": idx.get("last_op"),
-            "last_path": idx.get("last_path"),
-        }
-        if not ARENA_CACHE_ENABLE:
-            data["note"] = "cache disabled"
-        return (json.dumps(data, ensure_ascii=False, indent=2),)
-
-class ArenaAutoCacheTrim:
-    """RU: Принудительная очистка до лимита."""
-
-    @classmethod
-    def INPUT_TYPES(cls):  # noqa: N802
-        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
-
-    RETURN_TYPES = ("STRING",)
-    FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
-
-    def run(self, category: str):
-        root = Path(ARENA_CACHE_ROOT) / category
-        if not ARENA_CACHE_ENABLE:
-            data = {
-                "ok": True,
-                "category": category,
-                "note": "cache disabled",
-                "trimmed": [],
-                "items": 0,
-                "total_bytes": 0,
-                "total_gb": 0.0,
-                "max_size_gb": ARENA_CACHE_MAX_GB,
-            }
-            return (json.dumps(data, ensure_ascii=False, indent=2),)
-        if not root.exists():
-            data = {
-                "ok": True,
-                "category": category,
-                "note": "no cache yet",
-                "trimmed": [],
-                "items": 0,
-                "total_bytes": 0,
-                "total_gb": 0.0,
-                "max_size_gb": ARENA_CACHE_MAX_GB,
-            }
-            return (json.dumps(data, ensure_ascii=False, indent=2),)
+        settings_snapshot = get_settings()
+        cache_root = str(_ensure_category_root(category, settings=settings_snapshot))
         try:
-            trim_result = _lru_ensure_room(root, 0)
-        except Exception as e:
-            return (
-                json.dumps({"ok": False, "category": category, "error": str(e)}, ensure_ascii=False, indent=2),
-            )
+            raw_paths = orig_get_paths(category)
+        except Exception:
+            raw_paths = []
+        paths = list(raw_paths)
+        if cache_root not in paths:
+            paths.insert(0, cache_root)
+        return paths
 
-        if not trim_result.get("trimmed"):
-            _update_index_meta(root, "TRIM", None)
+    def get_full_path_patched(category: str, filename: str):
+        """RU: Подменяет выдачу на кеш с автоматической синхронизацией."""
 
-        idx = _load_index(root)
-        total_bytes = trim_result.get(
-            "total_bytes",
-            sum(v.get("size", 0) for v in idx.get("items", {}).values()),
-        )
-        data = {
+        settings_snapshot = get_settings()
+        cache_root = _ensure_category_root(category, settings=settings_snapshot)
+        dst = cache_root / filename
+        lock_path = dst.with_suffix(dst.suffix + ".copying")
+        prefer_source = False
+        force_recopy = False
+
+        if dst.exists():
+            if lock_path.exists():
+                lock_age = None
+                try:
+                    lock_age = time.time() - lock_path.stat().st_mtime
+                except Exception:
+                    lock_age = None
+                if lock_age is not None and lock_age > _STALE_LOCK_SECONDS:
+                    _v(f"stale lock detected for {dst}, removing {lock_path}")
+                    try:
+                        lock_path.unlink()
+                        force_recopy = True
+                    except Exception as lock_err:
+                        _v(f"failed to remove stale lock {lock_path}: {lock_err}")
+                        prefer_source = True
+                if lock_path.exists() and not prefer_source:
+                    wait_deadline = time.monotonic() + 5.0
+                    while lock_path.exists() and time.monotonic() < wait_deadline:
+                        time.sleep(0.05)
+                    if lock_path.exists():
+                        _v(f"lock active for {dst}, will prefer source")
+                        prefer_source = True
+                    else:
+                        if not dst.exists():
+                            _v(f"cache target missing after lock release, prefer source: {dst}")
+                            prefer_source = True
+                            force_recopy = True
+                        else:
+                            try:
+                                os.utime(dst, None)
+                            except Exception:
+                                pass
+                            _update_index_touch(cache_root, dst, op="HIT")
+                            return str(dst)
+            elif not prefer_source:
+                try:
+                    os.utime(dst, None)
+                except Exception:
+                    pass
+                _update_index_touch(cache_root, dst, op="HIT")
+                return str(dst)
+
+        try:
+            source_paths = list(orig_get_paths(category))
+        except Exception:
+            source_paths = []
+
+        for base in source_paths:
+            src = Path(base) / filename
+            if src.exists():
+                if prefer_source:
+                    _v(f"using original path due to cache lock: {src}")
+                    _update_index_meta(cache_root, "MISS", src)
+                    return str(src)
+                with _lock:
+                    if force_recopy and dst.exists():
+                        try:
+                            dst.unlink()
+                        except Exception as cleanup_err:
+                            _v(f"failed to remove stale cache file before recopy {dst}: {cleanup_err}")
+                    _copy_into_cache_lru(src, dst, category)
+                return str(dst)
+        return None
+
+    module.get_folder_paths = get_folder_paths_patched  # type: ignore[attr-defined]
+    module.get_full_path = get_full_path_patched  # type: ignore[attr-defined]
+    _folder_paths_patched = True
+    _v("folder_paths patched")
+
+
+def apply_folder_paths_patch() -> None:
+    """RU: Публичная точка входа для патча (вызывается при импорте)."""
+
+    with _lock:
+        _apply_folder_paths_patch_locked()
+
+
+def _collect_stats(category: str) -> tuple[dict, str, int, float, dict[str, int]]:
+    """RU: Общий сбор статистики по категории."""
+
+    settings = get_settings()
+    root = _category_root(category, settings=settings)
+    idx = _default_index(settings=settings)
+    if root.exists():
+        try:
+            idx = _load_index(root, settings=settings)
+        except Exception:
+            idx = _default_index(settings=settings)
+    items_map = idx.get("items", {})
+    total_bytes = sum(v.get("size", 0) for v in items_map.values())
+    total_gb = total_bytes / float(1024**3) if total_bytes else 0.0
+    data = {
+        "category": category,
+        "cache_root": str(root),
+        "enabled": settings.enable,
+        "items": len(items_map),
+        "total_bytes": total_bytes,
+        "total_gb": total_gb,
+        "max_size_gb": idx.get("max_gb", settings.max_gb),
+        "last_op": idx.get("last_op"),
+        "last_path": idx.get("last_path"),
+    }
+    if not settings.enable:
+        data["note"] = "cache disabled"
+    counters = get_session_counters()
+    return data, str(root), len(items_map), total_gb, counters
+
+
+def _trim_category(category: str) -> dict:
+    """RU: Общая логика LRU-трима для узлов."""
+
+    settings = get_settings()
+    root = _category_root(category, settings=settings)
+    if not settings.enable:
+        return {
             "ok": True,
             "category": category,
-            "note": "trimmed to limit",
-            "trimmed": trim_result.get("trimmed", []),
-            "items": trim_result.get("items", len(idx.get("items", {}))),
-            "total_bytes": total_bytes,
-            "total_gb": total_bytes / float(1024**3),
-            "max_size_gb": idx.get("max_gb", ARENA_CACHE_MAX_GB),
+            "note": "cache disabled",
+            "trimmed": [],
+            "items": 0,
+            "total_bytes": 0,
+            "total_gb": 0.0,
+            "max_size_gb": settings.max_gb,
         }
+    if not root.exists():
+        return {
+            "ok": True,
+            "category": category,
+            "note": "no cache yet",
+            "trimmed": [],
+            "items": 0,
+            "total_bytes": 0,
+            "total_gb": 0.0,
+            "max_size_gb": settings.max_gb,
+        }
+    try:
+        trim_result = _lru_ensure_room(root, 0)
+    except Exception as exc:
+        return {"ok": False, "category": category, "error": str(exc)}
+    if not trim_result.get("trimmed"):
+        _update_index_meta(root, "TRIM", None)
+    idx = _load_index(root, settings=settings)
+    total_bytes = trim_result.get(
+        "total_bytes",
+        sum(v.get("size", 0) for v in idx.get("items", {}).values()),
+    )
+    total_gb = total_bytes / float(1024**3) if total_bytes else 0.0
+    return {
+        "ok": True,
+        "category": category,
+        "note": "trimmed to limit",
+        "trimmed": trim_result.get("trimmed", []),
+        "items": trim_result.get("items", len(idx.get("items", {}))),
+        "total_bytes": total_bytes,
+        "total_gb": total_gb,
+        "max_size_gb": idx.get("max_gb", settings.max_gb),
+    }
+
+
+apply_folder_paths_patch()
+
+
+class ArenaAutoCacheConfig:
+    """RU: Узел для настройки кеша в рантайме."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        settings = get_settings()
+        return {
+            "required": {
+                "cache_root": ("STRING", {"default": str(settings.root)}),
+                "max_size_gb": (
+                    "INT",
+                    {"default": settings.max_gb, "min": 0, "max": 4096, "step": 1},
+                ),
+                "enable": ("BOOLEAN", {"default": settings.enable}),
+                "verbose": ("BOOLEAN", {"default": settings.verbose}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "apply"
+    CATEGORY = "Arena/AutoCache"
+
+    def apply(self, cache_root: str, max_size_gb: int, enable: bool, verbose: bool):
+        root_value = cache_root.strip()
+        result = set_cache_settings(
+            root=root_value or None,
+            max_gb=max_size_gb,
+            enable=enable,
+            verbose=verbose,
+        )
+        if result.get("ok"):
+            result.setdefault("note", "settings applied")
+        else:
+            result.setdefault("note", "settings unchanged")
+        return (json.dumps(result, ensure_ascii=False, indent=2),)
+
+
+class ArenaAutoCacheStats:
+    """RU: Возвращает JSON со сводкой кеша."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+
+    def run(self, category: str):
+        data, _, _, _, _ = _collect_stats(category)
         return (json.dumps(data, ensure_ascii=False, indent=2),)
+
+
+class ArenaAutoCacheStatsEx:
+    """RU: Расширенная статистика кеша с отдельными выходами."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+
+    RETURN_TYPES = ("STRING", "INT", "FLOAT", "STRING", "INT", "INT", "INT")
+    RETURN_NAMES = (
+        "json",
+        "items",
+        "total_gb",
+        "cache_root",
+        "session_hits",
+        "session_misses",
+        "session_trims",
+    )
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+
+    def run(self, category: str):
+        data, root, items, total_gb, counters = _collect_stats(category)
+        stats_json = json.dumps(data, ensure_ascii=False, indent=2)
+        return (
+            stats_json,
+            items,
+            total_gb,
+            root,
+            counters.get("hits", 0),
+            counters.get("misses", 0),
+            counters.get("trims", 0),
+        )
+
+
+class ArenaAutoCacheTrim:
+    """RU: Принудительный запуск LRU-трима для категории."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+
+    def run(self, category: str):
+        data = _trim_category(category)
+        return (json.dumps(data, ensure_ascii=False, indent=2),)
+
+
+class ArenaAutoCacheManager:
+    """RU: Компоновщик конфигурации, статистики и опционального трима."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        settings = get_settings()
+        return {
+            "required": {
+                "cache_root": ("STRING", {"default": str(settings.root)}),
+                "max_size_gb": (
+                    "INT",
+                    {"default": settings.max_gb, "min": 0, "max": 4096, "step": 1},
+                ),
+                "enable": ("BOOLEAN", {"default": settings.enable}),
+                "verbose": ("BOOLEAN", {"default": settings.verbose}),
+                "category": ("STRING", {"default": "checkpoints"}),
+                "do_trim": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("stats_json", "action_json")
+    FUNCTION = "manage"
+    CATEGORY = "Arena/AutoCache"
+
+    def manage(
+        self,
+        cache_root: str,
+        max_size_gb: int,
+        enable: bool,
+        verbose: bool,
+        category: str,
+        do_trim: bool,
+    ):
+        root_value = cache_root.strip()
+        config_result = set_cache_settings(
+            root=root_value or None,
+            max_gb=max_size_gb,
+            enable=enable,
+            verbose=verbose,
+        )
+        if config_result.get("ok"):
+            config_result.setdefault("note", "settings applied")
+        else:
+            config_result.setdefault("note", "settings unchanged")
+
+        action_payload: dict[str, object] = {
+            "config": config_result,
+            "category": category,
+        }
+
+        if do_trim:
+            action_payload["trim"] = _trim_category(category)
+
+        stats_json, *_ = ArenaAutoCacheStatsEx().run(category)
+        action_json = json.dumps(action_payload, ensure_ascii=False, indent=2)
+        return (stats_json, action_json)
+
 
 NODE_CLASS_MAPPINGS.update(
     {
+        "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
+        "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
         "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
+        "ArenaAutoCacheManager": ArenaAutoCacheManager,
     }
 )
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
+        "ArenaAutoCacheConfig": "Arena AutoCache: Config",
         "ArenaAutoCacheStats": "Arena AutoCache: Stats",
+        "ArenaAutoCacheStatsEx": "Arena AutoCache: StatsEx",
         "ArenaAutoCacheTrim": "Arena AutoCache: Trim",
+        "ArenaAutoCacheManager": "Arena AutoCache: Manager",
     }
 )
