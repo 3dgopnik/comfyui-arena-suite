@@ -58,7 +58,7 @@ Checks whether source models exist and whether the cache already contains the co
   - `workflow_json` (`STRING`, multiline) — optional workflow JSON dump for automatic discovery.
   - `default_category` (`STRING`, default `"checkpoints"`) — fallback category when not specified.
 - **Outputs**
-  - `STRING` (`json`) — report listing each item with `cached`, `missing_cache`, `missing_source` statuses and aggregated `counts`.
+  - `STRING` (`json`) — report listing each item with `cached`, `missing_cache`, `missing_source` statuses and aggregated `counts`. The payload also includes `ui` and `timings.duration_seconds` fields for dashboard rendering.
   - `INT` (`total`) — number of unique entries in the report.
   - `INT` (`cached`) — entries already present in the cache.
   - `INT` (`missing`) — entries missing either from the cache or from the source directories.
@@ -72,7 +72,7 @@ Warms up the cache using the same `items`/`workflow_json` specification. The nod
   - `workflow_json` (`STRING`, multiline) — optional workflow JSON dump.
   - `default_category` (`STRING`, default `"checkpoints"`).
 - **Outputs**
-  - `STRING` (`json`) — execution report with per-item statuses (`copied`, `cached`, `missing_source`, `error_*`) and aggregated counters `warmed`, `copied`, `missing`, `errors`, `skipped`.
+  - `STRING` (`json`) — execution report with per-item statuses (`copied`, `cached`, `missing_source`, `error_*`) and aggregated counters `warmed`, `copied`, `missing`, `errors`, `skipped`, plus `ui` and `timings.duration_seconds` metadata.
   - `INT` (`total`) — number of processed entries.
   - `INT` (`warmed`) — entries now cached.
   - `INT` (`copied`) — files copied during warmup.
@@ -102,6 +102,41 @@ Composite node that applies the configuration, optionally executes `Trim` and em
 - **Outputs**
   - `STRING` (`stats_json`) — statistics JSON identical to **🅰️ Arena AutoCache: StatsEx** (`ArenaAutoCacheStatsEx`).
   - `STRING` (`action_json`) — execution log with a `config` object and, when enabled, `trim` details.
+
+### 🅰️ Arena AutoCache: Dashboard (`ArenaAutoCacheDashboard`)
+
+Composite node that surfaces stats, audit, optional trim and settings changes in a single summary. It is designed for dashboards: the emitted JSON always contains enriched `ui` and `timings` blocks.
+
+- **Inputs**
+  - `category` (`STRING`, default `"checkpoints"`).
+  - `items` (`STRING`, multiline) — audit targets.
+  - `workflow_json` (`STRING`, multiline) — optional workflow dump used for auto-discovery.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+  - `extended_stats` (`BOOLEAN`, default `false`) — include a `ui` block in `stats_json` with human-readable hints.
+  - `apply_settings` (`BOOLEAN`, default `false`) — apply overrides from `settings_json` before collecting stats.
+  - `do_trim_now` (`BOOLEAN`, default `false`) — run trim immediately and include the result in the summary.
+  - `settings_json` (`STRING`, multiline) — JSON overrides for `cache_root`, `max_size_gb`, `enable`, `verbose`.
+- **Outputs**
+  - `STRING` (`summary_json`) — combined view with `config`, `stats`, `audit`, `trim` sections and a `timings` map.
+  - `STRING` (`stats_json`) — stats payload (with optional `ui`/`timings` when `extended_stats=true`).
+  - `STRING` (`audit_json`) — audit payload enriched with `ui`/`timings`.
+
+### 🅰️ Arena AutoCache: Ops (`ArenaAutoCacheOps`)
+
+Swiss-army node for automation workflows. It can run audits, warmups, trims, or an audit-then-warmup combo and optionally benchmark the resulting cache throughput.
+
+- **Inputs**
+  - `category` (`STRING`, default `"checkpoints"`).
+  - `items` (`STRING`, multiline) — shared specification used by audit/warmup.
+  - `workflow_json` (`STRING`, multiline) — optional workflow dump used for auto-discovery.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+  - `mode` (`STRING`, default `"audit_then_warmup"`) — one of `audit`, `warmup`, `audit_then_warmup`, `trim`.
+  - `benchmark_samples` (`INT`, default `0`) — number of cache files to read for throughput metrics (0 disables benchmarking).
+  - `benchmark_read_mb` (`FLOAT`, default `0.0`) — read cap per sample in MiB.
+- **Outputs**
+  - `STRING` (`summary_json`) — UI-friendly JSON combining stats, warmup, trim and optional audit, including a `timings` map (with `benchmark` info when enabled).
+  - `STRING` (`warmup_json`) — warmup report or a stub when the mode skips warmup.
+  - `STRING` (`trim_json`) — trim report or a stub when the mode skips trimming.
 
 ## Legacy
 
