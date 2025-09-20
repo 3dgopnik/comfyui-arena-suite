@@ -1,5 +1,8 @@
 # ComfyUI Arena Suite
 
+**EN:** Arena nodes bundle legacy helpers, SSD-aware caching, and updater utilities to streamline ComfyUI installations in one maintained package.
+**RU:** Узлы Arena объединяют унаследованные инструменты, SSD-кэш и вспомогательные обновления, чтобы упростить поддержку ComfyUI в рамках единого пакета.
+
 Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package**.
 
 ## Features overview
