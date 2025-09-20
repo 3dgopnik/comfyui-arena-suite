@@ -1778,7 +1778,17 @@ class ArenaAutoCacheAudit:
     CATEGORY = "Arena/AutoCache"
     DESCRIPTION = t("node.audit")
 
-    def run(self, items: str, workflow_json: str, default_category: str):
+    def run(
+        self,
+        items: str,
+        workflow_json: str,
+        default_category: str,
+        extended_stats: bool = False,
+        apply_settings: bool = False,
+        do_trim_now: bool = False,
+        settings_json: str = "",
+    ):
+        _ = (extended_stats, apply_settings, do_trim_now, settings_json)
         result = audit_items(items, workflow_json, default_category)
         return (
             result["json"],
