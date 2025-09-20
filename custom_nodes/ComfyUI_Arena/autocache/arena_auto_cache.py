@@ -9,6 +9,87 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable, Optional
 
+ARENA_LANG = (os.getenv("ARENA_LANG", "en") or "en").strip().lower()
+if "_" in ARENA_LANG:
+    ARENA_LANG = ARENA_LANG.split("_", 1)[0]
+if "-" in ARENA_LANG:
+    ARENA_LANG = ARENA_LANG.split("-", 1)[0]
+
+I18N: dict[str, dict[str, str]] = {
+    "en": {
+        "node.config": "🅰️ Arena AutoCache: Config",
+        "node.stats": "🅰️ Arena AutoCache: Stats",
+        "node.statsex": "🅰️ Arena AutoCache: StatsEx",
+        "node.audit": "🅰️ Arena AutoCache Audit",
+        "node.warmup": "🅰️ Arena AutoCache Warmup",
+        "node.trim": "🅰️ Arena AutoCache: Trim",
+        "node.manager": "🅰️ Arena AutoCache: Manager",
+        "input.cache_root": "Cache root directory",
+        "input.max_size_gb": "Maximum cache size (GB)",
+        "input.enable": "Enable AutoCache",
+        "input.verbose": "Verbose logging",
+        "input.category": "Model category",
+        "input.do_trim": "Trim category after applying config",
+        "input.items": "Items list (one per line)",
+        "input.workflow_json": "Workflow JSON",
+        "input.default_category": "Fallback category",
+        "output.json": "JSON",
+        "output.items": "Items",
+        "output.total_gb": "Total size (GB)",
+        "output.cache_root": "Cache root",
+        "output.session_hits": "Session hits",
+        "output.session_misses": "Session misses",
+        "output.session_trims": "Session trims",
+        "output.total": "Total",
+        "output.cached": "Cached",
+        "output.missing": "Missing",
+        "output.warmed": "Warmed",
+        "output.copied": "Copied",
+        "output.errors": "Errors",
+        "output.stats_json": "Stats JSON",
+        "output.action_json": "Action JSON",
+    },
+    "ru": {
+        "node.config": "🅰️ Arena AutoCache: Настройки",
+        "node.stats": "🅰️ Arena AutoCache: Статистика",
+        "node.statsex": "🅰️ Arena AutoCache: Расширенная статистика",
+        "node.audit": "🅰️ Arena AutoCache Аудит",
+        "node.warmup": "🅰️ Arena AutoCache Прогрев",
+        "node.trim": "🅰️ Arena AutoCache: Очистка",
+        "node.manager": "🅰️ Arena AutoCache: Менеджер",
+        "input.cache_root": "Корневая папка кэша",
+        "input.max_size_gb": "Максимальный размер кэша (ГБ)",
+        "input.enable": "Включить AutoCache",
+        "input.verbose": "Подробный лог",
+        "input.category": "Категория моделей",
+        "input.do_trim": "Очистить категорию после применения настроек",
+        "input.items": "Список элементов (по одному в строке)",
+        "input.workflow_json": "JSON рабочего процесса",
+        "input.default_category": "Категория по умолчанию",
+        "output.json": "JSON",
+        "output.items": "Элементы",
+        "output.total_gb": "Общий размер (ГБ)",
+        "output.cache_root": "Корень кэша",
+        "output.session_hits": "Попадания за сессию",
+        "output.session_misses": "Промахи за сессию",
+        "output.session_trims": "Очистки за сессию",
+        "output.total": "Всего",
+        "output.cached": "В кэше",
+        "output.missing": "Отсутствует",
+        "output.warmed": "Прогрето",
+        "output.copied": "Скопировано",
+        "output.errors": "Ошибки",
+        "output.stats_json": "JSON со статистикой",
+        "output.action_json": "JSON действий",
+    },
+}
+
+
+def t(key: str) -> str:
+    base = I18N.get("en", {})
+    lang_map = I18N.get(ARENA_LANG, base)
+    return lang_map.get(key, base.get(key, key))
+
 _STALE_LOCK_SECONDS = 60
 
 _lock = threading.RLock()
@@ -886,17 +967,33 @@ class ArenaAutoCacheConfig:
         settings = get_settings()
         return {
             "required": {
-                "cache_root": ("STRING", {"default": str(settings.root)}),
+                "cache_root": (
+                    "STRING",
+                    {"default": str(settings.root), "tooltip": t("input.cache_root")},
+                ),
                 "max_size_gb": (
                     "INT",
-                    {"default": settings.max_gb, "min": 0, "max": 4096, "step": 1},
+                    {
+                        "default": settings.max_gb,
+                        "min": 0,
+                        "max": 4096,
+                        "step": 1,
+                        "tooltip": t("input.max_size_gb"),
+                    },
                 ),
-                "enable": ("BOOLEAN", {"default": settings.enable}),
-                "verbose": ("BOOLEAN", {"default": settings.verbose}),
+                "enable": (
+                    "BOOLEAN",
+                    {"default": settings.enable, "tooltip": t("input.enable")},
+                ),
+                "verbose": (
+                    "BOOLEAN",
+                    {"default": settings.verbose, "tooltip": t("input.verbose")},
+                ),
             }
         }
 
     RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = (t("output.json"),)
     FUNCTION = "apply"
     CATEGORY = "Arena/AutoCache"
 
@@ -920,9 +1017,17 @@ class ArenaAutoCacheStats:
 
     @classmethod
     def INPUT_TYPES(cls):  # noqa: N802
-        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+        return {
+            "required": {
+                "category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.category")},
+                )
+            }
+        }
 
     RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = (t("output.json"),)
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
 
@@ -936,17 +1041,24 @@ class ArenaAutoCacheStatsEx:
 
     @classmethod
     def INPUT_TYPES(cls):  # noqa: N802
-        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+        return {
+            "required": {
+                "category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.category")},
+                )
+            }
+        }
 
     RETURN_TYPES = ("STRING", "INT", "FLOAT", "STRING", "INT", "INT", "INT")
     RETURN_NAMES = (
-        "json",
-        "items",
-        "total_gb",
-        "cache_root",
-        "session_hits",
-        "session_misses",
-        "session_trims",
+        t("output.json"),
+        t("output.items"),
+        t("output.total_gb"),
+        t("output.cache_root"),
+        t("output.session_hits"),
+        t("output.session_misses"),
+        t("output.session_trims"),
     )
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
@@ -972,14 +1084,36 @@ class ArenaAutoCacheAudit:
     def INPUT_TYPES(cls):  # noqa: N802
         return {
             "required": {
-                "items": ("STRING", {"default": "", "multiline": True}),
-                "workflow_json": ("STRING", {"default": "", "multiline": True}),
-                "default_category": ("STRING", {"default": "checkpoints"}),
+                "items": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": t("input.items"),
+                    },
+                ),
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": t("input.workflow_json"),
+                    },
+                ),
+                "default_category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.default_category")},
+                ),
             }
         }
 
     RETURN_TYPES = ("STRING", "INT", "INT", "INT")
-    RETURN_NAMES = ("json", "total", "cached", "missing")
+    RETURN_NAMES = (
+        t("output.json"),
+        t("output.total"),
+        t("output.cached"),
+        t("output.missing"),
+    )
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
 
@@ -1091,14 +1225,38 @@ class ArenaAutoCacheWarmup:
     def INPUT_TYPES(cls):  # noqa: N802
         return {
             "required": {
-                "items": ("STRING", {"default": "", "multiline": True}),
-                "workflow_json": ("STRING", {"default": "", "multiline": True}),
-                "default_category": ("STRING", {"default": "checkpoints"}),
+                "items": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": t("input.items"),
+                    },
+                ),
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": t("input.workflow_json"),
+                    },
+                ),
+                "default_category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.default_category")},
+                ),
             }
         }
 
     RETURN_TYPES = ("STRING", "INT", "INT", "INT", "INT", "INT")
-    RETURN_NAMES = ("json", "total", "warmed", "copied", "missing", "errors")
+    RETURN_NAMES = (
+        t("output.json"),
+        t("output.total"),
+        t("output.warmed"),
+        t("output.copied"),
+        t("output.missing"),
+        t("output.errors"),
+    )
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
 
@@ -1304,9 +1462,17 @@ class ArenaAutoCacheTrim:
 
     @classmethod
     def INPUT_TYPES(cls):  # noqa: N802
-        return {"required": {"category": ("STRING", {"default": "checkpoints"})}}
+        return {
+            "required": {
+                "category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.category")},
+                )
+            }
+        }
 
     RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = (t("output.json"),)
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
 
@@ -1323,20 +1489,41 @@ class ArenaAutoCacheManager:
         settings = get_settings()
         return {
             "required": {
-                "cache_root": ("STRING", {"default": str(settings.root)}),
+                "cache_root": (
+                    "STRING",
+                    {"default": str(settings.root), "tooltip": t("input.cache_root")},
+                ),
                 "max_size_gb": (
                     "INT",
-                    {"default": settings.max_gb, "min": 0, "max": 4096, "step": 1},
+                    {
+                        "default": settings.max_gb,
+                        "min": 0,
+                        "max": 4096,
+                        "step": 1,
+                        "tooltip": t("input.max_size_gb"),
+                    },
                 ),
-                "enable": ("BOOLEAN", {"default": settings.enable}),
-                "verbose": ("BOOLEAN", {"default": settings.verbose}),
-                "category": ("STRING", {"default": "checkpoints"}),
-                "do_trim": ("BOOLEAN", {"default": False}),
+                "enable": (
+                    "BOOLEAN",
+                    {"default": settings.enable, "tooltip": t("input.enable")},
+                ),
+                "verbose": (
+                    "BOOLEAN",
+                    {"default": settings.verbose, "tooltip": t("input.verbose")},
+                ),
+                "category": (
+                    "STRING",
+                    {"default": "checkpoints", "tooltip": t("input.category")},
+                ),
+                "do_trim": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": t("input.do_trim")},
+                ),
             }
         }
 
     RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("stats_json", "action_json")
+    RETURN_NAMES = (t("output.stats_json"), t("output.action_json"))
     FUNCTION = "manage"
     CATEGORY = "Arena/AutoCache"
 
@@ -1388,12 +1575,12 @@ NODE_CLASS_MAPPINGS.update(
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
-        "ArenaAutoCacheAudit": "🅰️ Arena AutoCache Audit",
-        "ArenaAutoCacheConfig": "🅰️ Arena AutoCache: Config",
-        "ArenaAutoCacheStats": "🅰️ Arena AutoCache: Stats",
-        "ArenaAutoCacheStatsEx": "🅰️ Arena AutoCache: StatsEx",
-        "ArenaAutoCacheTrim": "🅰️ Arena AutoCache: Trim",
-        "ArenaAutoCacheWarmup": "🅰️ Arena AutoCache Warmup",
-        "ArenaAutoCacheManager": "🅰️ Arena AutoCache: Manager",
+        "ArenaAutoCacheAudit": t("node.audit"),
+        "ArenaAutoCacheConfig": t("node.config"),
+        "ArenaAutoCacheStats": t("node.stats"),
+        "ArenaAutoCacheStatsEx": t("node.statsex"),
+        "ArenaAutoCacheTrim": t("node.trim"),
+        "ArenaAutoCacheWarmup": t("node.warmup"),
+        "ArenaAutoCacheManager": t("node.manager"),
     }
 )
