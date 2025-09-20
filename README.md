@@ -8,6 +8,7 @@ Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package
 ## Features overview
 - **Legacy nodes** — migrated utilities that preserve the existing interfaces while living under `ComfyUI_Arena/legacy`.
 - **AutoCache** — runtime patch for `folder_paths` that prefers an SSD cache, plus Config/StatsEx/Trim/Manager nodes for in-graph control (see `custom_nodes/ComfyUI_Arena/README.md`).
+- **Audit & Warmup nodes** — verify and pre-fill the SSD cache via multiline lists or workflow JSON (see `custom_nodes/ComfyUI_Arena/README.md`). **RU:** Узлы Audit/Warmup проверяют и прогревают SSD-кэш, принимают многострочные списки и JSON из `workflow_json` экспорта.
 - **Updater scaffolding** — Hugging Face and CivitAI helpers (WIP) intended to keep local model folders in sync and manage `current` symlinks.
 
 ## System requirements

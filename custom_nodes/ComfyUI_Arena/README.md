@@ -103,6 +103,30 @@ Extended statistics with dedicated sockets for numeric values and session counte
   - `INT` (`total`) — количество уникальных записей в отчёте.
   - `INT` (`cached`) — число элементов, присутствующих в кэше.
   - `INT` (`missing`) — число элементов без кэша или без исходника.
+- **Примеры**
+  - Многострочный список c комментариями:
+
+    ```text
+    # checkpoints по умолчанию
+    anything-v4.5-pruned.ckpt
+    loras:korean-style.safetensors
+    checkpoints:refiner.safetensors
+    ```
+
+  - JSON-массив (поддерживает строки и объекты):
+
+    ```json
+    [
+      "loras:paper-cut.safetensors",
+      {
+        "category": "checkpoints",
+        "name": "base-model.safetensors",
+        "source": "/mnt/models/base-model.safetensors"
+      }
+    ]
+    ```
+
+  - Использование `workflow_json`: экспортируйте граф через **Queue → Save (API Format)**, загрузите файл с помощью стандартного `Load Text` и подключите его выход к `workflow_json`, чтобы узел автоматически добавил модели из workflow.
 
 **EN**
 
@@ -117,6 +141,30 @@ Traverses the provided item list, verifies that source files exist and the cache
   - `INT` (`total`) — number of unique entries covered by the audit.
   - `INT` (`cached`) — entries already cached.
   - `INT` (`missing`) — entries missing from cache or sources.
+- **Examples**
+  - Multiline list with inline comments:
+
+    ```text
+    # default checkpoints category
+    anything-v4.5-pruned.ckpt
+    loras:korean-style.safetensors
+    checkpoints:refiner.safetensors
+    ```
+
+  - JSON payload (mixing strings and objects):
+
+    ```json
+    [
+      "loras:paper-cut.safetensors",
+      {
+        "category": "checkpoints",
+        "name": "base-model.safetensors",
+        "source": "/mnt/models/base-model.safetensors"
+      }
+    ]
+    ```
+
+  - `workflow_json` hookup: export the graph via **Queue → Save (API Format)**, load the file with the built-in `Load Text` node and feed its output into `workflow_json` so the audit adds every model referenced in the workflow automatically.
 
 ### ArenaAutoCacheWarmup
 
@@ -135,6 +183,9 @@ Traverses the provided item list, verifies that source files exist and the cache
   - `INT` (`copied`) — сколько файлов пришлось копировать заново.
   - `INT` (`missing`) — сколько записей не удалось подготовить из-за отсутствующих исходников.
   - `INT` (`errors`) — количество ошибок (например, нехватка места или сбой копирования).
+- **Примеры**
+  - Формат `items` полностью совпадает с `Audit`, поэтому можно переиспользовать список или JSON из предыдущего примера.
+  - Чтобы прогреть модели из текущего графа, подключите тот же `Load Text` с экспортированным workflow к `workflow_json` и, при необходимости, добавьте вручную элементы, которых нет в workflow.
 
 **EN**
 
@@ -151,6 +202,9 @@ Warms up the cache using the same `items`/`workflow_json` specification. For eve
   - `INT` (`copied`) — files copied during the warmup.
   - `INT` (`missing`) — entries skipped because the source file is missing.
   - `INT` (`errors`) — number of failures (lack of space, copy errors, etc.).
+- **Examples**
+  - The `items` format mirrors the audit node, so you can reuse the multiline list or JSON payload shown above.
+  - To warm up every model referenced in the current workflow, feed the exported JSON (via `Load Text` or any text loader) into `workflow_json` and optionally append manual entries for assets that live outside the workflow.
 
 ### ArenaAutoCacheTrim
 
