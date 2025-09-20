@@ -1,5 +1,17 @@
 # ComfyUI_Arena
 
+> **TL;DR — AutoCache setup**
+> - Default cache root if `ARENA_CACHE_ROOT` is not set:
+>   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (for example, `C:\Users\you\AppData\Local\ArenaAutoCache`)
+>   - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
+> - Set `ARENA_CACHE_ROOT=<path>` before launching ComfyUI so the SSD patch writes to your desired location. 🅰️ Arena AutoCache nodes (Config/Stats/Trim/Manager) will show the active directory.
+> - Restart ComfyUI after changing environment variables.
+> - Examples:
+>   - PowerShell: `$env:ARENA_CACHE_ROOT='D:\ComfyCache'; python main.py`
+>   - CMD: `set ARENA_CACHE_ROOT=D:\ComfyCache && python main.py`
+>   - bash: `ARENA_CACHE_ROOT=/mnt/ssd/cache python main.py`
+> - Optional overrides: `ARENA_CACHE_ENABLE=0` temporarily disables the patch; `ARENA_CACHE_MAX_GB=512` caps the cache size (GiB).
+
 Single-package for all **Arena** nodes.
 
 - `legacy/` - migrated from local install.
