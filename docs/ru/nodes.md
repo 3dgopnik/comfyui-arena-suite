@@ -49,6 +49,36 @@ description: "Описание входов и выходов узлов ComfyUI
   - `INT` (`session_misses`) — промахи за текущую сессию.
   - `INT` (`session_trims`) — ручные или автоматические очистки за текущую сессию.
 
+### ArenaAutoCacheAudit
+
+Проверяет, существуют ли исходные модели и есть ли соответствующие файлы в кэше. Поддерживает списки `items` (по строкам или JSON) и извлечение имён из `workflow_json`; учитываются расширения `.safetensors`, `.ckpt`, `.pt`, `.pth`, `.onnx`, `.vae`, `.bin`, `.gguf`, `.yaml`, `.yml`, `.npz`, `.pb`, `.tflite`.
+
+- **Входы**
+  - `items` (`STRING`, многострочный) — строки `category:file` либо JSON-массив строк/объектов с ключами `category`, `name`/`filename`.
+  - `workflow_json` (`STRING`, многострочный) — опционально: полный JSON сохранённого workflow для авто-добавления моделей.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`) — категория по умолчанию.
+- **Выходы**
+  - `STRING` (`json`) — отчёт со статусами `cached`, `missing_cache`, `missing_source` и агрегатом `counts`.
+  - `INT` (`total`) — уникальные элементы в отчёте.
+  - `INT` (`cached`) — элементы, найденные в кэше.
+  - `INT` (`missing`) — отсутствующие элементы (в кэше или на источнике).
+
+### ArenaAutoCacheWarmup
+
+Использует ту же спецификацию `items`/`workflow_json`, но прогревает кэш: освобождает место, копирует отсутствующие файлы и обновляет индекс (`_update_index_touch`, `_update_index_meta`).
+
+- **Входы**
+  - `items` (`STRING`, многострочный) — перечень моделей (строки или JSON, как в `Audit`).
+  - `workflow_json` (`STRING`, многострочный) — опционально: JSON workflow.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`).
+- **Выходы**
+  - `STRING` (`json`) — отчёт с поэлементными статусами (`copied`, `cached`, `missing_source`, `error_*`) и суммарными счётчиками `warmed`, `copied`, `missing`, `errors`, `skipped`.
+  - `INT` (`total`) — количество обработанных записей.
+  - `INT` (`warmed`) — элементы, оказавшиеся в кэше.
+  - `INT` (`copied`) — количество копий.
+  - `INT` (`missing`) — отсутствующие исходники.
+  - `INT` (`errors`) — возникшие ошибки.
+
 ### ArenaAutoCacheTrim
 
 Запускает ручное обслуживание LRU-кэша для указанной категории.

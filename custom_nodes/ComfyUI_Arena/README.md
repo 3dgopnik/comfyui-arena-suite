@@ -88,6 +88,70 @@ Extended statistics with dedicated sockets for numeric values and session counte
   - `INT` (`session_misses`) — cache misses recorded during the session.
   - `INT` (`session_trims`) — manual or automatic trims executed during the session.
 
+### ArenaAutoCacheAudit
+
+**RU**
+
+Пробегает по списку моделей, проверяет наличие исходных файлов и актуальность копий в кэше. Узел принимает перечень `items` (текст построчно или JSON-массив строк/объектов вида `{"category": "loras", "name": "model.safetensors"}`) и, при необходимости, выгрузку графа `workflow_json`. Из workflow извлекаются строки с расширениями моделей (`.safetensors`, `.ckpt`, `.pt`, `.pth`, `.onnx`, `.vae`, `.bin`, `.gguf`, `.yaml`, `.yml`, `.npz`, `.pb`, `.tflite`).
+
+- **Входы**
+  - `items` (`STRING`, многострочный) — перечень путей вида `category:file.safetensors` или JSON-список. Комментарии начинающиеся с `#` игнорируются.
+  - `workflow_json` (`STRING`, многострочный) — опционально: сырой JSON сохранённого workflow для автоматического извлечения моделей.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`) — категория для элементов без префикса.
+- **Выходы**
+  - `STRING` (`json`) — подробный отчёт с полями `items[]`, статусами (`cached`, `missing_cache`, `missing_source`) и сводкой `counts`.
+  - `INT` (`total`) — количество уникальных записей в отчёте.
+  - `INT` (`cached`) — число элементов, присутствующих в кэше.
+  - `INT` (`missing`) — число элементов без кэша или без исходника.
+
+**EN**
+
+Traverses the provided item list, verifies that source files exist and the cache copy is up to date. The `items` field accepts newline-delimited strings (e.g. `loras:model.safetensors`) or a JSON array of strings/objects such as `{"category": "loras", "name": "model.safetensors"}`. When `workflow_json` is supplied, the node parses the ComfyUI workflow dump and extracts filenames with model extensions (`.safetensors`, `.ckpt`, `.pt`, `.pth`, `.onnx`, `.vae`, `.bin`, `.gguf`, `.yaml`, `.yml`, `.npz`, `.pb`, `.tflite`).
+
+- **Inputs**
+  - `items` (`STRING`, multiline) — list of `category:file` entries or a JSON array. Lines beginning with `#` are ignored.
+  - `workflow_json` (`STRING`, multiline, optional) — raw workflow JSON for automatic model discovery.
+  - `default_category` (`STRING`, default `"checkpoints"`) — fallback cache category when the spec omits a prefix.
+- **Outputs**
+  - `STRING` (`json`) — detailed report with `items[]`, status fields (`cached`, `missing_cache`, `missing_source`) and a `counts` summary.
+  - `INT` (`total`) — number of unique entries covered by the audit.
+  - `INT` (`cached`) — entries already cached.
+  - `INT` (`missing`) — entries missing from cache or sources.
+
+### ArenaAutoCacheWarmup
+
+**RU**
+
+Использует ту же спецификацию `items`/`workflow_json`, но создаёт или обновляет файлы в SSD-кэше. Перед копированием узел гарантирует наличие свободного места (`_lru_ensure_room`) и отмечает результаты в индексе (`_update_index_touch`/`_update_index_meta`).
+
+- **Входы**
+  - `items` (`STRING`, многострочный) — перечень моделей для прогрева (строки или JSON-список, как в `Audit`).
+  - `workflow_json` (`STRING`, многострочный) — опциональный дамп workflow для автодобавления моделей.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`).
+- **Выходы**
+  - `STRING` (`json`) — отчёт с итоговым статусом каждого файла (`copied`, `cached`, `missing_source`, `error_*`) и агрегированными счётчиками `warmed`, `copied`, `missing`, `errors`, `skipped`.
+  - `INT` (`total`) — количество обработанных элементов.
+  - `INT` (`warmed`) — число элементов, оказавшихся в кэше после выполнения.
+  - `INT` (`copied`) — сколько файлов пришлось копировать заново.
+  - `INT` (`missing`) — сколько записей не удалось подготовить из-за отсутствующих исходников.
+  - `INT` (`errors`) — количество ошибок (например, нехватка места или сбой копирования).
+
+**EN**
+
+Warms up the cache using the same `items`/`workflow_json` specification. For every discovered model the node ensures there is enough room via `_lru_ensure_room`, copies missing files and updates the index via `_update_index_touch`/`_update_index_meta`.
+
+- **Inputs**
+  - `items` (`STRING`, multiline) — warmup target list (strings or JSON array, identical to `Audit`).
+  - `workflow_json` (`STRING`, multiline, optional) — workflow dump for automatic model discovery.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+- **Outputs**
+  - `STRING` (`json`) — execution report with per-item status (`copied`, `cached`, `missing_source`, `error_*`) and aggregate counters `warmed`, `copied`, `missing`, `errors`, `skipped`.
+  - `INT` (`total`) — number of processed entries.
+  - `INT` (`warmed`) — entries ending up in the cache.
+  - `INT` (`copied`) — files copied during the warmup.
+  - `INT` (`missing`) — entries skipped because the source file is missing.
+  - `INT` (`errors`) — number of failures (lack of space, copy errors, etc.).
+
 ### ArenaAutoCacheTrim
 
 **RU**

@@ -87,6 +87,202 @@ NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
 
+_ALLOWED_ITEM_SUFFIXES = {
+    ".bin",
+    ".ckpt",
+    ".ckpt.index",
+    ".gguf",
+    ".model",
+    ".npz",
+    ".onnx",
+    ".pb",
+    ".pt",
+    ".pth",
+    ".safetensors",
+    ".tflite",
+    ".vae",
+    ".yaml",
+    ".yml",
+}
+
+
+def _normalize_category_name(raw: str | None, default: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return default
+    return value
+
+
+def _normalize_item_name(raw: str) -> str:
+    candidate = (raw or "").strip()
+    if not candidate:
+        return ""
+    candidate = candidate.replace("\\", "/")
+    while "//" in candidate:
+        candidate = candidate.replace("//", "/")
+    candidate = candidate.lstrip("/")
+    parts: list[str] = []
+    for part in candidate.split("/"):
+        part = part.strip()
+        if not part or part == "." or part == "..":
+            continue
+        parts.append(part)
+    if not parts:
+        return ""
+    normalized = "/".join(parts)
+    try:
+        path_obj = Path(normalized)
+    except Exception:
+        return normalized
+    if path_obj.is_absolute():
+        return path_obj.name
+    return path_obj.as_posix()
+
+
+def _item_suffix_allowed(name: str) -> bool:
+    try:
+        suffixes = Path(name.lower()).suffixes
+    except Exception:
+        return False
+    if not suffixes:
+        return False
+    for idx in range(len(suffixes)):
+        compound = "".join(suffixes[idx:])
+        if compound in _ALLOWED_ITEM_SUFFIXES:
+            return True
+    return suffixes[-1] in _ALLOWED_ITEM_SUFFIXES
+
+
+def _guess_category_from_hints(
+    key_hint: str | None, class_hint: str | None, default: str
+) -> str:
+    hints = []
+    if class_hint:
+        hints.append(class_hint)
+    if key_hint:
+        hints.append(key_hint)
+    for hint in hints:
+        lowered = hint.lower()
+        if "lora" in lowered or "lyco" in lowered or "lycoris" in lowered:
+            return "loras"
+        if "hyper" in lowered:
+            return "hypernetworks"
+        if "textual" in lowered or "embedding" in lowered or lowered.startswith("ti_"):
+            return "embeddings"
+        if "vae" in lowered:
+            return "vae"
+        if "clip" in lowered:
+            return "clip"
+        if "control" in lowered and "controller" not in lowered:
+            return "controlnet"
+        if "unet" in lowered:
+            return "unet"
+        if "upscale" in lowered or "esrgan" in lowered or "gfpgan" in lowered:
+            return "upscale_models"
+        if "checkpoint" in lowered or "ckpt" in lowered or lowered.endswith("_model"):
+            return "checkpoints"
+    return default
+
+
+def parse_items_spec(
+    items: object, workflow_json: object, default_category: str
+) -> list[dict[str, str]]:
+    """RU: Преобразует спецификацию элементов в уникальный список категорий и файлов."""
+
+    normalized_default = _normalize_category_name(default_category, "checkpoints")
+    seen: set[tuple[str, str]] = set()
+    result: list[dict[str, str]] = []
+
+    def register(category: str | None, name: object) -> None:
+        if not isinstance(name, str):
+            return
+        normalized_name = _normalize_item_name(name)
+        if not normalized_name or not _item_suffix_allowed(normalized_name):
+            return
+        normalized_category = _normalize_category_name(category, normalized_default)
+        key = (normalized_category, normalized_name)
+        if key in seen:
+            return
+        seen.add(key)
+        result.append({"category": normalized_category, "name": normalized_name})
+
+    def consume_entry(entry: object, category_hint: str | None = None) -> None:
+        if entry is None:
+            return
+        if isinstance(entry, str):
+            text = entry.strip()
+            if not text or text.startswith("#"):
+                return
+            cat = category_hint or normalized_default
+            name = text
+            if ":" in text:
+                prefix, suffix = text.split(":", 1)
+                if prefix.strip() and "/" not in prefix and "\\" not in prefix:
+                    cat = prefix.strip()
+                    name = suffix
+            register(cat, name)
+            return
+        if isinstance(entry, dict):
+            local_category = category_hint
+            for key in ("category", "cat", "folder"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    local_category = value
+                    break
+            for key in ("name", "filename", "file", "path"):
+                if key in entry:
+                    consume_entry(entry[key], local_category)
+            if "items" in entry:
+                consume_entry(entry["items"], local_category)
+            return
+        if isinstance(entry, (list, tuple, set)):
+            for item in entry:
+                consume_entry(item, category_hint)
+
+    def load_json(value: object) -> object | None:
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return None
+        return value
+
+    loaded_items = load_json(items)
+    if loaded_items is None and isinstance(items, str):
+        prepared = items.replace(",", "\n").replace(";", "\n")
+        for line in prepared.splitlines():
+            consume_entry(line, None)
+    else:
+        consume_entry(loaded_items, None)
+
+    workflow_obj = load_json(workflow_json)
+
+    def walk_workflow(obj: object, key_hint: str | None = None, class_hint: str | None = None) -> None:
+        if isinstance(obj, dict):
+            next_class = obj.get("class_type") if isinstance(obj.get("class_type"), str) else class_hint
+            for key, value in obj.items():
+                if key == "class_type":
+                    continue
+                walk_workflow(value, key, next_class if isinstance(next_class, str) else class_hint)
+            return
+        if isinstance(obj, list):
+            for item in obj:
+                walk_workflow(item, key_hint, class_hint)
+            return
+        if isinstance(obj, str):
+            stripped = obj.strip()
+            if stripped and _item_suffix_allowed(stripped):
+                category = _guess_category_from_hints(key_hint, class_hint, normalized_default)
+                register(category, stripped)
+
+    walk_workflow(workflow_obj)
+
+    return result
+
+
 def get_settings() -> ArenaCacheSettings:
     """RU: Возвращает копию настроек кеша."""
 
@@ -769,6 +965,340 @@ class ArenaAutoCacheStatsEx:
         )
 
 
+class ArenaAutoCacheAudit:
+    """RU: Проверяет доступность исходников и наличие файлов в кэше."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
+                "items": ("STRING", {"default": "", "multiline": True}),
+                "workflow_json": ("STRING", {"default": "", "multiline": True}),
+                "default_category": ("STRING", {"default": "checkpoints"}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "INT", "INT")
+    RETURN_NAMES = ("json", "total", "cached", "missing")
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+
+    def run(self, items: str, workflow_json: str, default_category: str):
+        module = _ensure_folder_paths_module()
+        if module is None:
+            payload = {
+                "ok": False,
+                "error": "folder_paths unavailable",
+                "items": [],
+            }
+            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0)
+
+        parsed = parse_items_spec(items, workflow_json, default_category)
+        if not parsed:
+            payload = {"ok": True, "items": [], "note": "no items"}
+            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0)
+
+        settings = get_settings()
+        with _lock:
+            _apply_folder_paths_patch_locked()
+
+        category_roots: dict[str, Path] = {}
+        results: list[dict[str, object]] = []
+        cached_count = 0
+        missing_count = 0
+
+        for entry in parsed:
+            category = entry["category"]
+            name = entry["name"]
+            cache_root = category_roots.get(category)
+            if cache_root is None:
+                cache_root = _ensure_category_root(category, settings=settings)
+                category_roots[category] = cache_root
+            cache_path = cache_root / name
+
+            try:
+                raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
+            except Exception:
+                raw_paths = []
+            source_path: Path | None = None
+            for base in raw_paths:
+                candidate = Path(base) / name
+                if candidate.exists():
+                    source_path = candidate
+                    break
+
+            cache_exists = cache_path.exists()
+            entry_info: dict[str, object] = {
+                "category": category,
+                "name": name,
+                "cache_path": str(cache_path),
+                "cache_exists": cache_exists,
+                "source_path": str(source_path) if source_path else None,
+            }
+
+            if cache_exists:
+                cached_count += 1
+                entry_info["status"] = "cached"
+                if settings.enable:
+                    try:
+                        _update_index_touch(cache_root, cache_path, op="HIT")
+                    except Exception:
+                        pass
+            elif source_path is not None:
+                missing_count += 1
+                entry_info["status"] = "missing_cache"
+                if settings.enable:
+                    try:
+                        _update_index_meta(cache_root, "MISS", str(source_path))
+                    except Exception:
+                        pass
+            else:
+                missing_count += 1
+                entry_info["status"] = "missing_source"
+                if settings.enable:
+                    try:
+                        _update_index_meta(cache_root, "MISS", f"{category}:{name}")
+                    except Exception:
+                        pass
+
+            results.append(entry_info)
+
+        payload = {
+            "ok": True,
+            "enable": settings.enable,
+            "items": results,
+            "counts": {
+                "total": len(parsed),
+                "cached": cached_count,
+                "missing": missing_count,
+            },
+        }
+        if not settings.enable:
+            payload["note"] = "cache disabled"
+
+        return (
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            len(parsed),
+            cached_count,
+            missing_count,
+        )
+
+
+class ArenaAutoCacheWarmup:
+    """RU: Готовит указанные элементы в SSD-кэше."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
+                "items": ("STRING", {"default": "", "multiline": True}),
+                "workflow_json": ("STRING", {"default": "", "multiline": True}),
+                "default_category": ("STRING", {"default": "checkpoints"}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("json", "total", "warmed", "copied", "missing", "errors")
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+
+    def run(self, items: str, workflow_json: str, default_category: str):
+        module = _ensure_folder_paths_module()
+        if module is None:
+            payload = {
+                "ok": False,
+                "error": "folder_paths unavailable",
+                "items": [],
+            }
+            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0, 0, 1)
+
+        parsed = parse_items_spec(items, workflow_json, default_category)
+        if not parsed:
+            payload = {"ok": True, "items": [], "note": "no items"}
+            return (json.dumps(payload, ensure_ascii=False, indent=2), 0, 0, 0, 0, 0)
+
+        settings = get_settings()
+        with _lock:
+            _apply_folder_paths_patch_locked()
+
+        category_roots: dict[str, Path] = {}
+        results: list[dict[str, object]] = []
+        counts = {
+            "total": len(parsed),
+            "warmed": 0,
+            "copied": 0,
+            "missing": 0,
+            "errors": 0,
+            "skipped": 0,
+        }
+
+        for entry in parsed:
+            category = entry["category"]
+            name = entry["name"]
+            cache_root = category_roots.get(category)
+            if cache_root is None:
+                cache_root = _ensure_category_root(category, settings=settings)
+                category_roots[category] = cache_root
+            cache_path = cache_root / name
+
+            try:
+                raw_paths = module.get_folder_paths(category)  # type: ignore[attr-defined]
+            except Exception:
+                raw_paths = []
+            source_path: Path | None = None
+            for base in raw_paths:
+                candidate = Path(base) / name
+                if candidate.exists():
+                    source_path = candidate
+                    break
+
+            entry_info: dict[str, object] = {
+                "category": category,
+                "name": name,
+                "cache_path": str(cache_path),
+                "source_path": str(source_path) if source_path else None,
+            }
+
+            if not settings.enable:
+                counts["skipped"] += 1
+                if source_path is None:
+                    counts["missing"] += 1
+                    entry_info["status"] = "missing_source"
+                else:
+                    entry_info["status"] = "skipped_disabled"
+                entry_info["cache_exists"] = cache_path.exists()
+                results.append(entry_info)
+                continue
+
+            if source_path is None:
+                counts["missing"] += 1
+                entry_info["status"] = "missing_source"
+                try:
+                    _update_index_meta(cache_root, "MISS", f"{category}:{name}")
+                except Exception:
+                    pass
+                entry_info["cache_exists"] = cache_path.exists()
+                results.append(entry_info)
+                continue
+
+            try:
+                size = source_path.stat().st_size
+            except Exception:
+                size = 0
+
+            was_cached = cache_path.exists()
+            if was_cached:
+                try:
+                    cache_size = cache_path.stat().st_size
+                except Exception:
+                    cache_size = None
+                else:
+                    if size and cache_size is not None and cache_size != size:
+                        try:
+                            cache_path.unlink()
+                            was_cached = False
+                        except Exception as exc:
+                            counts["errors"] += 1
+                            entry_info["status"] = "error_remove_stale"
+                            entry_info["error"] = str(exc)
+                            try:
+                                _update_index_meta(cache_root, "MISS", str(source_path))
+                            except Exception:
+                                pass
+                            entry_info["cache_exists"] = cache_path.exists()
+                            results.append(entry_info)
+                            continue
+
+            if not was_cached:
+                try:
+                    _lru_ensure_room(cache_root, size)
+                except Exception as exc:
+                    counts["errors"] += 1
+                    entry_info["status"] = "error_trim"
+                    entry_info["error"] = str(exc)
+                    try:
+                        _update_index_meta(cache_root, "MISS", str(source_path))
+                    except Exception:
+                        pass
+                    entry_info["cache_exists"] = cache_path.exists()
+                    results.append(entry_info)
+                    continue
+
+                try:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+
+                try:
+                    shutil.copy2(source_path, cache_path)
+                except Exception as exc:
+                    counts["errors"] += 1
+                    entry_info["status"] = "error_copy"
+                    entry_info["error"] = str(exc)
+                    if cache_path.exists():
+                        try:
+                            cache_path.unlink()
+                        except Exception:
+                            pass
+                    try:
+                        _update_index_meta(cache_root, "MISS", str(source_path))
+                    except Exception:
+                        pass
+                    entry_info["cache_exists"] = cache_path.exists()
+                    results.append(entry_info)
+                    continue
+
+                try:
+                    os.utime(cache_path, None)
+                except Exception:
+                    pass
+
+                try:
+                    _update_index_touch(cache_root, cache_path, op="COPY")
+                except Exception:
+                    pass
+
+                counts["copied"] += 1
+                status = "copied"
+            else:
+                try:
+                    _update_index_touch(cache_root, cache_path, op="HIT")
+                except Exception:
+                    pass
+                status = "cached"
+
+            counts["warmed"] += 1
+            entry_info["status"] = status
+
+            try:
+                resolved = module.get_full_path(category, name)  # type: ignore[attr-defined]
+            except Exception:
+                resolved = None
+            if resolved:
+                entry_info["resolved_path"] = str(resolved)
+
+            entry_info["cache_exists"] = cache_path.exists()
+            results.append(entry_info)
+
+        payload = {
+            "ok": counts["errors"] == 0,
+            "enable": settings.enable,
+            "items": results,
+            "counts": counts,
+        }
+        if not settings.enable:
+            payload["note"] = "cache disabled"
+
+        return (
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            counts["total"],
+            counts["warmed"],
+            counts["copied"],
+            counts["missing"],
+            counts["errors"],
+        )
+
+
 class ArenaAutoCacheTrim:
     """RU: Принудительный запуск LRU-трима для категории."""
 
@@ -846,20 +1376,24 @@ class ArenaAutoCacheManager:
 
 NODE_CLASS_MAPPINGS.update(
     {
+        "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
         "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
         "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
         "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
+        "ArenaAutoCacheWarmup": ArenaAutoCacheWarmup,
         "ArenaAutoCacheManager": ArenaAutoCacheManager,
     }
 )
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
+        "ArenaAutoCacheAudit": "Arena AutoCache 🅰️ Audit",
         "ArenaAutoCacheConfig": "Arena AutoCache: Config",
         "ArenaAutoCacheStats": "Arena AutoCache: Stats",
         "ArenaAutoCacheStatsEx": "Arena AutoCache: StatsEx",
         "ArenaAutoCacheTrim": "Arena AutoCache: Trim",
+        "ArenaAutoCacheWarmup": "Arena AutoCache 🅰️ Warmup",
         "ArenaAutoCacheManager": "Arena AutoCache: Manager",
     }
 )
