@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add regression tests covering Arena AutoCache audit and warmup flows.
 - Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
 ### Changed
+- Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
 - Prefix Arena AutoCache and legacy tiles node display names with the 🅰️ marker for consistent UI grouping.
 - Localize AutoCache node labels and I/O names based on the `ARENA_LANG` environment variable.
