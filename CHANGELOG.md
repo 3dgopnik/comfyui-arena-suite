@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Normalize `README.md` encoding and restore Russian workflow/docs text without mojibake.
 - Highlight the Arena suite goals in the README introduction for English and Russian readers.
 - Refresh README and bilingual docs to mention the 🅰️-prefixed display names for AutoCache and legacy tiles nodes.
+- Add Dashboard/Ops coverage with compatibility table, status-line examples, and benchmarking guidance in the AutoCache README.
 ### Fixed
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.

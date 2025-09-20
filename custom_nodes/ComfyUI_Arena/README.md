@@ -1,16 +1,20 @@
 # ComfyUI_Arena
 
-> **TL;DR — AutoCache setup**
+> **TL;DR — AutoCache setup / Быстрый старт по переменным окружения**
 > - Default cache root if `ARENA_CACHE_ROOT` is not set:
 >   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (for example, `C:\Users\you\AppData\Local\ArenaAutoCache`)
 >   - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
-> - Set `ARENA_CACHE_ROOT=<path>` before launching ComfyUI so the SSD patch writes to your desired location. 🅰️ Arena AutoCache nodes (Config/Stats/Trim/Manager) will show the active directory.
-> - Restart ComfyUI after changing environment variables.
+> - Set `ARENA_CACHE_ROOT=<path>` before launching ComfyUI so the SSD patch writes to your desired location. 🅰️ Arena AutoCache nodes (Config/Stats/Trim/Manager/Dashboard/Ops) will show the active directory. / Установите `ARENA_CACHE_ROOT=<путь>` до запуска ComfyUI, чтобы SSD-кэш писал туда, куда нужно.
+> - Restart ComfyUI after changing environment variables. / После изменения переменных окружения перезапустите ComfyUI.
 > - Examples:
 >   - PowerShell: `$env:ARENA_CACHE_ROOT='D:\ComfyCache'; python main.py`
 >   - CMD: `set ARENA_CACHE_ROOT=D:\ComfyCache && python main.py`
 >   - bash: `ARENA_CACHE_ROOT=/mnt/ssd/cache python main.py`
-> - Optional overrides: `ARENA_CACHE_ENABLE=0` temporarily disables the patch; `ARENA_CACHE_MAX_GB=512` caps the cache size (GiB).
+> - Optional overrides: `ARENA_CACHE_ENABLE=0` temporarily disables the patch; `ARENA_CACHE_MAX_GB=512` caps the cache size (GiB); `ARENA_CACHE_VERBOSE=1` prints copy/hit logs for benchmarking. / Дополнительно: `ARENA_CACHE_ENABLE=0` отключает патч, `ARENA_CACHE_MAX_GB=512` ограничивает размер (ГиБ), `ARENA_CACHE_VERBOSE=1` включает подробные логи для бенчмарков.
+
+> **📝 Inline note input / Встроенные заметки**
+> - RU: В текстовом поле `items` можно оставлять комментарии и пометки (`# комментарий`), которые пропускаются при аудите/прогреве, но помогают объяснить, зачем элемент в списке.
+> - EN: Use the multiline `items` field for inline notes (`# comment`). The parsers skip these lines during audit/warmup while keeping the list readable for operators.
 
 Single-package for all **Arena** nodes.
 
@@ -19,6 +23,115 @@ Single-package for all **Arena** nodes.
 - `updater/` - model updater (WIP).
 
 > Python bytecode and `__pycache__` are excluded by `.gitignore`.
+
+## Совместимость AutoCache / AutoCache Compatibility
+
+| Старый узел / Legacy node | Новый режим / New mode | Примечание / Notes |
+| --- | --- | --- |
+| 🅰️ Arena AutoCache: Config (`ArenaAutoCacheConfig`) | Без изменений; связывайте вывод с Dashboard/Ops как блок `config` | Используйте для настройки кэша во время сессии. / Tweak runtime cache settings. |
+| 🅰️ Arena AutoCache: Stats (`ArenaAutoCacheStats`) | 🅰️ Dashboard → `stats_json` | Dashboard добавляет статусную строку и метаданные. / Dashboard augments raw stats with status/meta fields. |
+| 🅰️ Arena AutoCache: StatsEx (`ArenaAutoCacheStatsEx`) | 🅰️ Dashboard → `summary_json` | Числовые сокеты остаются в StatsEx; `summary_json` дублирует показатели для UI. / StatsEx sockets stay while `summary_json` mirrors totals for UI overlays. |
+| 🅰️ Arena AutoCache Audit (`ArenaAutoCacheAudit`) | 🅰️ Dashboard → `audit_json` | Совмещает аудит с дашбордом и статусом `ok/missing`. / Combines audit results with the status line. |
+| 🅰️ Arena AutoCache Warmup (`ArenaAutoCacheWarmup`) | 🅰️ Ops → `do_warmup=true` | Включите warmup в Ops для сценария `audit_then_warmup`. / Toggle warmup in Ops for an `audit_then_warmup` flow. |
+| 🅰️ Arena AutoCache: Trim (`ArenaAutoCacheTrim`) | 🅰️ Ops → `do_trim=true` | Позволяет запускать очистку вместе с прогревом. / Run trims alongside warmups. |
+| 🅰️ Arena AutoCache: Manager (`ArenaAutoCacheManager`) | 🅰️ Ops / 🅰️ Dashboard | Manager остаётся для совместимости; новые узлы дают сводки и управление. / Manager stays compatible, Dashboard/Ops surface summaries. |
+
+> **RU:** Старые графы продолжают работать как есть; новые дашборды добавляют `summary_json` без изменения сокетов. / **EN:** Existing workflows keep working; the dashboards add `summary_json` without breaking sockets.
+
+## Dashboard и Ops / Dashboard and Ops
+
+### 🅰️ Arena AutoCache: Dashboard (`ArenaAutoCacheDashboard`)
+
+**RU**
+
+Наблюдатель объединяет статистику и аудит в одной панели. Выход `summary_json` содержит статусную строку (`ok`, `timestamp`) и блоки `stats_meta`/`audit_meta`, которые удобно подавать в текстовые виджеты, графики или API. Узел принимает те же поля `items` и `workflow_json`, что и Audit, поддерживает комментарии `#` и извлекает модели из сохранённых workflow.
+
+- **Входы**
+  - `category` (`STRING`, по умолчанию `"checkpoints"`).
+  - `items` (`STRING`, многострочный) — списки/JSON с комментариями.
+  - `workflow_json` (`STRING`, многострочный) — экспорт **Queue → Save (API Format)**.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`).
+- **Выходы**
+  - `STRING` (`summary_json`) — сводка для UI.
+  - `STRING` (`stats_json`) — расширенная статистика (как у Stats/StatsEx).
+  - `STRING` (`audit_json`) — подробный отчёт аудита.
+
+**EN**
+
+The dashboard node fuses stats and audit into one observability surface. Its `summary_json` output exposes the status line (`ok`, `timestamp`) and the `stats_meta`/`audit_meta` blocks ready for text widgets, charts, or external APIs. Inputs mirror the Audit node: multiline `items` (with `#` comments) and optional `workflow_json` dumps.
+
+- **Inputs**
+  - `category` (`STRING`, default `"checkpoints"`).
+  - `items` (`STRING`, multiline) — list/JSON spec with inline comments.
+  - `workflow_json` (`STRING`, multiline) — export from **Queue → Save (API Format)**.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+- **Outputs**
+  - `STRING` (`summary_json`) — UI-friendly summary payload.
+  - `STRING` (`stats_json`) — extended stats JSON (same as Stats/StatsEx).
+  - `STRING` (`audit_json`) — detailed audit report.
+
+**Пример статусной строки / Example status line**
+
+```json
+{
+  "ok": true,
+  "timestamp": 1712345678.123,
+  "stats_meta": {
+    "items": 42,
+    "total_gb": 118.7,
+    "cache_root": "D:/ComfyCache",
+    "session": {"hits": 128, "misses": 3, "trims": 1}
+  },
+  "audit_meta": {"total": 10, "cached": 8, "missing": 2},
+  "stats": {"note": "cache disabled"}
+}
+```
+
+### 🅰️ Arena AutoCache: Ops (`ArenaAutoCacheOps`)
+
+**RU**
+
+Операционный узел объединяет прогрев (`Warmup`) и очистку (`Trim`). Установите `do_warmup=true`, чтобы копировать после аудита — это рекомендуемый сценарий `audit_then_warmup`. Добавьте `do_trim=true`, когда нужно освободить место в той же связке. `summary_json` отражает блоки `warmup_meta` и `trim` для UI.
+
+- **Входы**
+  - `category` (`STRING`, по умолчанию `"checkpoints"`).
+  - `items` (`STRING`, многострочный) — общая спецификация Audit/Warmup.
+  - `workflow_json` (`STRING`, многострочный) — автодобавление моделей из workflow.
+  - `default_category` (`STRING`, по умолчанию `"checkpoints"`).
+  - `do_warmup` (`BOOLEAN`, по умолчанию `false`).
+  - `do_trim` (`BOOLEAN`, по умолчанию `false`).
+- **Выходы**
+  - `STRING` (`summary_json`) — объединённая сводка статуса и операций.
+  - `STRING` (`warmup_json`) — отчёт прогрева.
+  - `STRING` (`trim_json`) — отчёт очистки.
+
+**EN**
+
+The Ops node coordinates warmups and trims. Toggle `do_warmup` to run copy jobs right after auditing — this is the recommended `audit_then_warmup` workflow. Enable `do_trim` when you want to reclaim space in the same pass. The resulting `summary_json` adds `warmup_meta` and `trim` blocks for dashboards.
+
+- **Inputs**
+  - `category` (`STRING`, default `"checkpoints"`).
+  - `items` (`STRING`, multiline) — same spec as Audit/Warmup.
+  - `workflow_json` (`STRING`, multiline) — adds workflow-discovered models.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+  - `do_warmup` (`BOOLEAN`, default `false`).
+  - `do_trim` (`BOOLEAN`, default `false`).
+- **Outputs**
+  - `STRING` (`summary_json`) — consolidated status + operations report.
+  - `STRING` (`warmup_json`) — warmup report payload.
+  - `STRING` (`trim_json`) — trim report payload.
+
+**Вариант `audit_then_warmup` / `audit_then_warmup` recipe**
+
+1. Подайте один и тот же список `items` в Dashboard и Ops. / Feed the same `items` list into both Dashboard and Ops.
+2. Оцените `audit_meta.missing` в `summary_json` Dashboard. / Inspect `audit_meta.missing` in the Dashboard summary.
+3. Включите `do_warmup=true` (и при необходимости `do_trim=true`). / Flip `do_warmup=true` (and `do_trim=true` if needed).
+4. Передайте `warmup_json` и `trim_json` в текстовые виджеты или логгеры. / Pipe `warmup_json` and `trim_json` to text widgets or loggers.
+
+**Бенчмаркинг / Benchmarking tips**
+
+- RU: Включите `ARENA_CACHE_VERBOSE=1`, чтобы видеть HIT/COPY в консоли и замерять длительность. Используйте `stats_meta.session.hits/misses` для расчёта hit-rate и `warmup_meta.copied` для оценки пропускной способности.
+- EN: Enable `ARENA_CACHE_VERBOSE=1` to log HIT/COPY events for timing. Consume `stats_meta.session.hits/misses` to compute hit rate and `warmup_meta.copied` to gauge throughput.
 
 ## AutoCache nodes
 

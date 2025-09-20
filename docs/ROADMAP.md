@@ -88,3 +88,10 @@
 - Explore the v0.4.0 benchmarks and UI enhancements once cache and updater foundations stabilize.
 - Evaluate additional backlog items (future `➕` milestones) such as multi-instance cache coordination or packaged observability exporters.
 
+## Ideas Backlog
+
+| id | title | area | score | status |
+| --- | --- | --- | --- | --- |
+| AC-DASH-01 | AutoCache summary widget with color-coded status line | AutoCache UI | 0.6 | 🆕 |
+| AC-OBS-02 | Stream `summary_json` metrics to external dashboards (Prometheus/WebSocket bridge) | Observability | 0.5 | 🆕 |
+
