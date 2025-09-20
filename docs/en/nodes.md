@@ -49,6 +49,36 @@ Extended statistics node with dedicated sockets for numeric values and session c
   - `INT` (`session_misses`) — session miss counter.
   - `INT` (`session_trims`) — session trim counter.
 
+### ArenaAutoCacheAudit
+
+Checks whether source models exist and whether the cache already contains the corresponding files. Supports `items` lists (newline separated strings or JSON arrays) and auto-discovery from `workflow_json`. Only filenames with typical model extensions (`.safetensors`, `.ckpt`, `.pt`, `.pth`, `.onnx`, `.vae`, `.bin`, `.gguf`, `.yaml`, `.yml`, `.npz`, `.pb`, `.tflite`) are considered.
+
+- **Inputs**
+  - `items` (`STRING`, multiline) — `category:file` strings or a JSON array of strings/objects with `category` + `name`/`filename`.
+  - `workflow_json` (`STRING`, multiline) — optional workflow JSON dump for automatic discovery.
+  - `default_category` (`STRING`, default `"checkpoints"`) — fallback category when not specified.
+- **Outputs**
+  - `STRING` (`json`) — report listing each item with `cached`, `missing_cache`, `missing_source` statuses and aggregated `counts`.
+  - `INT` (`total`) — number of unique entries in the report.
+  - `INT` (`cached`) — entries already present in the cache.
+  - `INT` (`missing`) — entries missing either from the cache or from the source directories.
+
+### ArenaAutoCacheWarmup
+
+Warms up the cache using the same `items`/`workflow_json` specification. The node ensures free space via `_lru_ensure_room`, copies missing files and updates the cache index (`_update_index_touch`, `_update_index_meta`).
+
+- **Inputs**
+  - `items` (`STRING`, multiline) — warmup targets (strings or JSON, identical to `Audit`).
+  - `workflow_json` (`STRING`, multiline) — optional workflow JSON dump.
+  - `default_category` (`STRING`, default `"checkpoints"`).
+- **Outputs**
+  - `STRING` (`json`) — execution report with per-item statuses (`copied`, `cached`, `missing_source`, `error_*`) and aggregated counters `warmed`, `copied`, `missing`, `errors`, `skipped`.
+  - `INT` (`total`) — number of processed entries.
+  - `INT` (`warmed`) — entries now cached.
+  - `INT` (`copied`) — files copied during warmup.
+  - `INT` (`missing`) — entries skipped because the source file is missing.
+  - `INT` (`errors`) — failures such as trimming/copy errors.
+
 ### ArenaAutoCacheTrim
 
 Manually runs the LRU maintenance routine for the selected category.
