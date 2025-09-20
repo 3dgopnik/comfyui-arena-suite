@@ -129,5 +129,105 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
             self.assertEqual(statuses["model.safetensors"], "cached")
             self.assertEqual(statuses["style.safetensors"], "missing_source")
 
+    def test_warmup_wrapper_emits_ui_and_timings(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
+            source_dir = Path(src_dir)
+            cache_root_path = Path(cache_root)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root_path, source_dir)
+
+            warmup_node = module.ArenaAutoCacheWarmup()
+            report_json, total, warmed, copied, missing, errors = warmup_node.run(
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+            )
+            payload = json.loads(report_json)
+
+            self.assertEqual(total, 1)
+            self.assertEqual(warmed, 1)
+            self.assertEqual(copied, 1)
+            self.assertEqual(missing, 0)
+            self.assertEqual(errors, 0)
+            self.assertIn("ui", payload)
+            self.assertIn("timings", payload)
+            self.assertGreaterEqual(payload["timings"]["duration_seconds"], 0.0)
+
+    def test_ops_warmup_mode_with_benchmark_respects_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
+            source_dir = Path(src_dir)
+            cache_root_path = Path(cache_root)
+            data = b"x" * 4096
+            (source_dir / "model.safetensors").write_bytes(data)
+
+            module = self._prepare_module(cache_root_path, source_dir)
+            ops_node = module.ArenaAutoCacheOps()
+
+            benchmark_limit_mb = 0.001
+            summary_json, warmup_json, trim_json = ops_node.run(
+                "checkpoints",
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+                "warmup",
+                benchmark_samples=1,
+                benchmark_read_mb=benchmark_limit_mb,
+            )
+
+            summary = json.loads(summary_json)
+            warmup_payload = json.loads(warmup_json)
+            trim_payload = json.loads(trim_json)
+
+            self.assertEqual(warmup_payload["counts"]["warmed"], 1)
+            self.assertEqual(trim_payload["note"], "trim skipped")
+            self.assertEqual(summary["ui"]["headline"], "Arena Ops report")
+            self.assertIn("Mode: warmup", summary["ui"]["details"])
+
+            benchmark = summary["timings"].get("benchmark")
+            self.assertIsInstance(benchmark, dict)
+            expected_bytes = int(benchmark_limit_mb * 1024 * 1024)
+            self.assertEqual(benchmark["read_samples"], 1)
+            self.assertEqual(benchmark["bytes"], expected_bytes)
+            self.assertGreaterEqual(benchmark["throughput_bytes_per_s"], 0.0)
+
+    def test_ops_audit_then_warmup_combines_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
+            source_dir = Path(src_dir)
+            cache_root_path = Path(cache_root)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root_path, source_dir)
+            ops_node = module.ArenaAutoCacheOps()
+
+            items_spec = "\n".join(
+                [
+                    "checkpoints:model.safetensors",
+                    "checkpoints:missing.safetensors",
+                ]
+            )
+
+            summary_json, warmup_json, trim_json = ops_node.run(
+                "checkpoints",
+                items_spec,
+                "",
+                "checkpoints",
+                "audit_then_warmup",
+            )
+
+            summary = json.loads(summary_json)
+            warmup_payload = json.loads(warmup_json)
+            trim_payload = json.loads(trim_json)
+
+            self.assertEqual(trim_payload["note"], "trim skipped")
+            self.assertEqual(warmup_payload["counts"]["warmed"], 1)
+            timings = summary.get("timings", {})
+            self.assertIn("audit", timings)
+            self.assertIn("warmup", timings)
+            self.assertIn("stats", timings)
+            self.assertEqual(summary["ui"]["headline"], "Arena Ops report")
+            detail_line = "Warmup warmed: 1/2"
+            self.assertIn(detail_line, summary["ui"]["details"])
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

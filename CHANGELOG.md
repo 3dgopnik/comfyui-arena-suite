@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce dedicated Audit and Warmup nodes together with a companion CLI utility so users can inspect and prefill Arena caches directly from ComfyUI or automation scripts.
 - Add Arena AutoCache audit/warmup helpers with unified item spec parsing and JSON reports.
 - Add regression tests covering Arena AutoCache audit and warmup flows.
+- Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
 ### Changed
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
 - Prefix Arena AutoCache and legacy tiles node display names with the 🅰️ marker for consistent UI grouping.
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrich Arena AutoCache nodes with localized descriptions, tooltips, and output metadata for ComfyUI.
 - Allow `COMFYUI_LANG` to override the AutoCache localization fallback before `ARENA_LANG`.
 - Set the legacy tiles segmentation node category to `Arena/Tiles` for improved UI grouping.
+- Enrich audit and warmup payloads with `ui`/`timings` metadata and extend ops execution to cover audit, warmup, and trim modes.
 ### Docs
 - Surface an AutoCache TL;DR environment setup block in the README, node README, and RU/EN overview docs.
 - Expand the Audit/Warmup node docs with bilingual multiline/JSON examples and `workflow_json` guidance, and mention the nodes in the root README.
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Highlight the Arena suite goals in the README introduction for English and Russian readers.
 - Refresh README and bilingual docs to mention the 🅰️-prefixed display names for AutoCache and legacy tiles nodes.
 - Add Dashboard/Ops coverage with compatibility table, status-line examples, and benchmarking guidance in the AutoCache README.
+- Document the new dashboard/ops nodes and timing fields in the bilingual node references.
 ### Fixed
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.

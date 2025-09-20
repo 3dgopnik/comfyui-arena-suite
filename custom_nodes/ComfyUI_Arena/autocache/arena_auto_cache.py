@@ -44,6 +44,13 @@ I18N: dict[str, dict[str, str]] = {
         "input.category": "Model category",
         "input.do_trim": "Trim category after applying config",
         "input.do_warmup": "Warmup cache for listed items",
+        "input.mode": "Operation mode",
+        "input.benchmark_samples": "Benchmark sample count",
+        "input.benchmark_read_mb": "Benchmark read limit (MiB)",
+        "input.do_trim_now": "Trim category immediately",
+        "input.apply_settings": "Apply cache settings overrides",
+        "input.extended_stats": "Include extended statistics block",
+        "input.settings_json": "Settings overrides JSON",
         "input.items": "Items list (one per line)",
         "input.workflow_json": "Workflow JSON",
         "input.default_category": "Fallback category",
@@ -84,6 +91,13 @@ I18N: dict[str, dict[str, str]] = {
         "input.category": "Категория моделей",
         "input.do_trim": "Очистить категорию после применения настроек",
         "input.do_warmup": "Прогреть кэш для перечисленных элементов",
+        "input.mode": "Режим операции",
+        "input.benchmark_samples": "Количество файлов для замера скорости",
+        "input.benchmark_read_mb": "Лимит чтения для бенчмарка (МиБ)",
+        "input.do_trim_now": "Очистить категорию немедленно",
+        "input.apply_settings": "Применить переопределения настроек",
+        "input.extended_stats": "Добавить расширенную статистику",
+        "input.settings_json": "JSON с переопределениями настроек",
         "input.items": "Список элементов (по одному в строке)",
         "input.workflow_json": "JSON рабочего процесса",
         "input.default_category": "Категория по умолчанию",
@@ -118,6 +132,18 @@ def t(key: str) -> str:
 _STALE_LOCK_SECONDS = 60
 
 _lock = threading.RLock()
+
+
+def _now() -> float:
+    """Return a monotonic timestamp for timing measurements."""
+
+    return time.perf_counter()
+
+
+def _duration_since(start: float) -> float:
+    """Return elapsed seconds since ``start`` using monotonic clocks."""
+
+    return max(0.0, _now() - start)
 
 
 @dataclass
@@ -1006,31 +1032,62 @@ def trim_category(category: str) -> dict[str, object]:
 
 
 def audit_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
-    """RU: Проверяет доступность исходников и наличие файлов в кэше."""
+    """Check source/cache availability for the provided items."""
+
+    started_at = _now()
+
+    def _finalize(
+        payload: dict[str, object],
+        *,
+        total: int,
+        cached: int,
+        missing: int,
+    ) -> dict[str, object]:
+        counts = {"total": total, "cached": cached, "missing": missing}
+        payload = dict(payload)
+        payload.setdefault("counts", counts)
+
+        duration = _duration_since(started_at)
+        timings = payload.get("timings") if isinstance(payload.get("timings"), dict) else {}
+        timings = dict(timings)
+        timings.setdefault("duration_seconds", duration)
+        payload["timings"] = timings
+
+        ui_block = payload.get("ui") if isinstance(payload.get("ui"), dict) else {}
+        ui_block = dict(ui_block)
+        ui_block.setdefault(
+            "headline",
+            f"Audit: {cached} cached / {total} total",
+        )
+        ui_block.setdefault(
+            "details",
+            [
+                f"Missing: {missing}",
+                f"Duration: {duration:.4f}s",
+            ],
+        )
+        payload["ui"] = ui_block
+
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": total,
+            "cached": cached,
+            "missing": missing,
+            "timings": timings,
+            "ui": ui_block,
+        }
 
     module = _ensure_folder_paths_module()
     if module is None:
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
-        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
-        return {
-            "payload": payload,
-            "json": json_text,
-            "total": 0,
-            "cached": 0,
-            "missing": 0,
-        }
+        return _finalize(payload, total=0, cached=0, missing=0)
 
     parsed = parse_items_spec(items, workflow_json, default_category)
     if not parsed:
         payload = {"ok": True, "items": [], "note": "no items"}
-        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
-        return {
-            "payload": payload,
-            "json": json_text,
-            "total": 0,
-            "cached": 0,
-            "missing": 0,
-        }
+        return _finalize(payload, total=0, cached=0, missing=0)
 
     settings = get_settings()
     with _lock:
@@ -1111,46 +1168,83 @@ def audit_items(items: str, workflow_json: str, default_category: str) -> dict[s
     if not settings.enable:
         payload["note"] = "cache disabled"
 
-    json_text = json.dumps(payload, ensure_ascii=False, indent=2)
-    return {
-        "payload": payload,
-        "json": json_text,
-        "total": counts["total"],
-        "cached": cached_count,
-        "missing": missing_count,
-    }
+    return _finalize(
+        payload,
+        total=counts["total"],
+        cached=cached_count,
+        missing=missing_count,
+    )
 
 
 def warmup_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
-    """RU: Готовит указанные элементы в SSD-кэше."""
+    """Prepare the selected cache entries by copying missing files."""
+
+    started_at = _now()
+
+    def _finalize(
+        payload: dict[str, object],
+        *,
+        total: int,
+        warmed: int,
+        copied: int,
+        missing: int,
+        errors: int,
+    ) -> dict[str, object]:
+        counts = {
+            "total": total,
+            "warmed": warmed,
+            "copied": copied,
+            "missing": missing,
+            "errors": errors,
+        }
+        payload = dict(payload)
+        payload.setdefault("counts", counts)
+
+        duration = _duration_since(started_at)
+        timings = payload.get("timings") if isinstance(payload.get("timings"), dict) else {}
+        timings = dict(timings)
+        timings.setdefault("duration_seconds", duration)
+        payload["timings"] = timings
+
+        ui_block = payload.get("ui") if isinstance(payload.get("ui"), dict) else {}
+        ui_block = dict(ui_block)
+        ui_block.setdefault(
+            "headline",
+            f"Warmup: {warmed}/{total} prepared",
+        )
+        ui_block.setdefault(
+            "details",
+            [
+                f"Copied: {copied}",
+                f"Missing: {missing}",
+                f"Errors: {errors}",
+                f"Duration: {duration:.4f}s",
+            ],
+        )
+        payload["ui"] = ui_block
+
+        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        return {
+            "payload": payload,
+            "json": json_text,
+            "total": total,
+            "warmed": warmed,
+            "copied": copied,
+            "missing": missing,
+            "errors": errors,
+            "timings": timings,
+            "ui": ui_block,
+        }
 
     module = _ensure_folder_paths_module()
     if module is None:
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
-        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
-        return {
-            "payload": payload,
-            "json": json_text,
-            "total": 0,
-            "warmed": 0,
-            "copied": 0,
-            "missing": 0,
-            "errors": 0,
-        }
+        return _finalize(payload, total=0, warmed=0, copied=0, missing=0, errors=0)
 
     parsed = parse_items_spec(items, workflow_json, default_category)
     if not parsed:
         payload = {"ok": True, "items": [], "note": "no items"}
-        json_text = json.dumps(payload, ensure_ascii=False, indent=2)
-        return {
-            "payload": payload,
-            "json": json_text,
-            "total": 0,
-            "warmed": 0,
-            "copied": 0,
-            "missing": 0,
-            "errors": 0,
-        }
+        return _finalize(payload, total=0, warmed=0, copied=0, missing=0, errors=0)
 
     settings = get_settings()
     with _lock:
@@ -1258,15 +1352,104 @@ def warmup_items(items: str, workflow_json: str, default_category: str) -> dict[
     if not settings.enable:
         payload["note"] = "cache disabled"
 
-    json_text = json.dumps(payload, ensure_ascii=False, indent=2)
+    return _finalize(
+        payload,
+        total=counts["total"],
+        warmed=counts["warmed"],
+        copied=counts["copied"],
+        missing=counts["missing"],
+        errors=counts["errors"],
+    )
+
+
+def _extract_benchmark_candidates(*blocks: dict[str, object] | None) -> list[dict[str, object]]:
+    """Collect cache entry metadata dictionaries from warmup/audit payloads."""
+
+    entries: list[dict[str, object]] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        payload = block.get("payload") if isinstance(block.get("payload"), dict) else block
+        if not isinstance(payload, dict):
+            continue
+        items = payload.get("items")
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if isinstance(entry, dict):
+                entries.append(entry)
+    return entries
+
+
+def _benchmark_cache_entries(
+    entries: list[dict[str, object]],
+    *,
+    sample_limit: int,
+    read_limit_bytes: int,
+) -> dict[str, object]:
+    """Read cached files to estimate throughput respecting sampling limits."""
+
+    if sample_limit <= 0:
+        return {
+            "requested_samples": sample_limit,
+            "available_samples": len(entries),
+            "read_samples": 0,
+            "bytes": 0,
+            "seconds": 0.0,
+            "throughput_bytes_per_s": 0.0,
+            "read_limit_bytes": read_limit_bytes,
+        }
+
+    unique_paths: list[Path] = []
+    seen: set[str] = set()
+    for entry in entries:
+        cache_path = entry.get("cache_path")
+        if not isinstance(cache_path, str):
+            continue
+        if cache_path in seen:
+            continue
+        candidate = Path(cache_path)
+        if not candidate.exists():
+            continue
+        unique_paths.append(candidate)
+        seen.add(cache_path)
+        if len(unique_paths) >= sample_limit:
+            break
+
+    start = _now()
+    total_bytes = 0
+    read_files = 0
+    for path in unique_paths:
+        try:
+            size = path.stat().st_size
+        except Exception:
+            continue
+        to_read = size if read_limit_bytes <= 0 else min(size, read_limit_bytes)
+        if to_read <= 0:
+            continue
+        remaining = to_read
+        try:
+            with path.open("rb") as handle:
+                while remaining > 0:
+                    chunk = handle.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    remaining -= len(chunk)
+        except Exception:
+            continue
+        read_files += 1
+
+    elapsed = _duration_since(start)
+    throughput = total_bytes / elapsed if elapsed > 0 else 0.0
     return {
-        "payload": payload,
-        "json": json_text,
-        "total": counts["total"],
-        "warmed": counts["warmed"],
-        "copied": counts["copied"],
-        "missing": counts["missing"],
-        "errors": counts["errors"],
+        "requested_samples": sample_limit,
+        "available_samples": len(entries),
+        "read_samples": read_files,
+        "bytes": total_bytes,
+        "seconds": elapsed,
+        "throughput_bytes_per_s": throughput,
+        "read_limit_bytes": read_limit_bytes,
     }
 
 
@@ -1539,6 +1722,42 @@ class ArenaAutoCacheAudit:
                     },
                 ),
             }
+            ,
+            "optional": {
+                "extended_stats": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.extended_stats"),
+                        "tooltip": t("input.extended_stats"),
+                    },
+                ),
+                "apply_settings": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.apply_settings"),
+                        "tooltip": t("input.apply_settings"),
+                    },
+                ),
+                "do_trim_now": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.do_trim_now"),
+                        "tooltip": t("input.do_trim_now"),
+                    },
+                ),
+                "settings_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.settings_json"),
+                        "tooltip": t("input.settings_json"),
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("STRING", "INT", "INT", "INT")
@@ -1821,7 +2040,42 @@ class ArenaAutoCacheDashboard:
                         "tooltip": t("input.default_category"),
                     },
                 ),
-            }
+            },
+            "optional": {
+                "extended_stats": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.extended_stats"),
+                        "tooltip": t("input.extended_stats"),
+                    },
+                ),
+                "apply_settings": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.apply_settings"),
+                        "tooltip": t("input.apply_settings"),
+                    },
+                ),
+                "do_trim_now": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "description": t("input.do_trim_now"),
+                        "tooltip": t("input.do_trim_now"),
+                    },
+                ),
+                "settings_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": t("input.settings_json"),
+                        "tooltip": t("input.settings_json"),
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
@@ -1836,10 +2090,117 @@ class ArenaAutoCacheDashboard:
     CATEGORY = "Arena/AutoCache"
     DESCRIPTION = t("node.dashboard")
 
-    def run(self, category: str, items: str, workflow_json: str, default_category: str):
+    def run(
+        self,
+        category: str,
+        items: str,
+        workflow_json: str,
+        default_category: str,
+        extended_stats: bool = False,
+        apply_settings: bool = False,
+        do_trim_now: bool = False,
+        settings_json: str = "",
+    ):
+        config_block: dict[str, object] | None = None
+        config_duration = 0.0
+        if apply_settings:
+            overrides: dict[str, object] = {}
+            if settings_json.strip():
+                try:
+                    decoded = json.loads(settings_json)
+                    if isinstance(decoded, dict):
+                        overrides = decoded
+                except Exception:
+                    overrides = {}
+            current = get_settings()
+            root_override = overrides.get("cache_root", overrides.get("root"))
+            max_override = overrides.get("max_size_gb", overrides.get("max_gb"))
+            enable_override = overrides.get("enable")
+            verbose_override = overrides.get("verbose")
+
+            config_started = _now()
+            result = set_cache_settings(
+                root=root_override if root_override is not None else current.root,
+                max_gb=max_override if max_override is not None else current.max_gb,
+                enable=enable_override if enable_override is not None else current.enable,
+                verbose=verbose_override if verbose_override is not None else current.verbose,
+            )
+            config_duration = _duration_since(config_started)
+            if result.get("ok"):
+                result.setdefault("note", "settings applied")
+            else:
+                result.setdefault("note", "settings unchanged")
+            result.setdefault("source", "dashboard")
+            config_block = {"payload": result}
+
+        stats_started = _now()
         stats_result = collect_stats(category)
+        stats_duration = _duration_since(stats_started)
+
+        if extended_stats:
+            stats_payload = dict(stats_result.get("payload", {}))
+            stats_payload.setdefault("timings", {"duration_seconds": stats_duration})
+            stats_payload.setdefault(
+                "ui",
+                {
+                    "headline": f"Stats: {stats_payload.get('items', 0)} entries",
+                    "details": [
+                        f"Size: {stats_payload.get('total_gb', 0):.4f} GiB",
+                        f"Cache root: {stats_payload.get('cache_root', '')}",
+                    ],
+                },
+            )
+            stats_result = dict(stats_result)
+            stats_result["payload"] = stats_payload
+            stats_result["json"] = json.dumps(stats_payload, ensure_ascii=False, indent=2)
+
         audit_result = audit_items(items, workflow_json, default_category)
-        summary = make_ui_summary(stats=stats_result, audit=audit_result)
+
+        trim_result: dict[str, object] | None = None
+        trim_duration = 0.0
+        if do_trim_now:
+            trim_started = _now()
+            raw_trim = trim_category(category)
+            trim_duration = _duration_since(trim_started)
+            trim_payload = dict(raw_trim.get("payload", {}))
+            trim_payload.setdefault("timings", {"duration_seconds": trim_duration})
+            trim_result = {
+                "payload": trim_payload,
+                "json": json.dumps(trim_payload, ensure_ascii=False, indent=2),
+                "timings": {"duration_seconds": trim_duration},
+            }
+        summary = make_ui_summary(
+            config=config_block,
+            stats=stats_result,
+            audit=audit_result,
+            trim=trim_result,
+        )
+
+        timings_block = dict(summary.get("timings") if isinstance(summary.get("timings"), dict) else {})
+        timings_block.setdefault("stats", {"seconds": stats_duration})
+        audit_timings = audit_result.get("timings") if isinstance(audit_result.get("timings"), dict) else None
+        if audit_timings:
+            timings_block.setdefault("audit", audit_timings)
+        if trim_result is not None:
+            timings_block.setdefault("trim", {"seconds": trim_duration})
+        if config_block is not None:
+            timings_block.setdefault("config", {"seconds": config_duration})
+        summary["timings"] = timings_block
+
+        ui_details = [
+            f"Category: {category}",
+            f"Audit cached: {audit_result.get('cached', 0)}",
+            f"Audit missing: {audit_result.get('missing', 0)}",
+        ]
+        if config_block is not None:
+            config_payload = config_block.get("payload", {})
+            applied = "applied" if isinstance(config_payload, dict) and config_payload.get("ok") else "unchanged"
+            ui_details.append(f"Settings: {applied}")
+        if trim_result is not None:
+            trim_note = trim_result.get("payload", {}).get("note", "trim executed")
+            ui_details.append(f"Trim: {trim_note}")
+        summary["ui"] = {"headline": "Dashboard updated", "details": ui_details}
+
         summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
         return (summary_json, stats_result["json"], audit_result["json"])
 
@@ -1885,23 +2246,39 @@ class ArenaAutoCacheOps:
                         "tooltip": t("input.default_category"),
                     },
                 ),
-                "do_warmup": (
-                    "BOOLEAN",
+                "mode": (
+                    "STRING",
                     {
-                        "default": False,
-                        "description": t("input.do_warmup"),
-                        "tooltip": t("input.do_warmup"),
+                        "default": "audit_then_warmup",
+                        "description": t("input.mode"),
+                        "tooltip": t("input.mode"),
                     },
                 ),
-                "do_trim": (
-                    "BOOLEAN",
+            },
+            "optional": {
+                "benchmark_samples": (
+                    "INT",
                     {
-                        "default": False,
-                        "description": t("input.do_trim"),
-                        "tooltip": t("input.do_trim"),
+                        "default": 0,
+                        "min": 0,
+                        "max": 64,
+                        "step": 1,
+                        "description": t("input.benchmark_samples"),
+                        "tooltip": t("input.benchmark_samples"),
                     },
                 ),
-            }
+                "benchmark_read_mb": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": 0.0,
+                        "max": 1024.0,
+                        "step": 0.25,
+                        "description": t("input.benchmark_read_mb"),
+                        "tooltip": t("input.benchmark_read_mb"),
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
@@ -1922,13 +2299,59 @@ class ArenaAutoCacheOps:
         items: str,
         workflow_json: str,
         default_category: str,
-        do_warmup: bool,
-        do_trim: bool,
+        mode: str,
+        benchmark_samples: int = 0,
+        benchmark_read_mb: float = 0.0,
     ):
-        trim_result = trim_category(category) if do_trim else None
-        warmup_result = warmup_items(items, workflow_json, default_category) if do_warmup else None
+        normalized_mode = (mode or "audit_then_warmup").strip().lower()
+        run_audit = normalized_mode in {"audit", "audit_then_warmup"}
+        run_warmup = normalized_mode in {"warmup", "audit_then_warmup"}
+        run_trim = normalized_mode == "trim"
 
+        audit_result: dict[str, object] | None = None
+        warmup_result: dict[str, object] | None = None
+        trim_result: dict[str, object] | None = None
+        summary_timings: dict[str, dict[str, object]] = {}
+
+        if run_audit:
+            audit_started = _now()
+            audit_result = audit_items(items, workflow_json, default_category)
+            audit_duration = _duration_since(audit_started)
+            audit_timings = audit_result.get("timings") if isinstance(audit_result.get("timings"), dict) else {}
+            if not audit_timings:
+                audit_timings = {"duration_seconds": audit_duration}
+                audit_result = dict(audit_result)
+                audit_result["timings"] = audit_timings
+            summary_timings["audit"] = audit_timings
+
+        if run_warmup:
+            warmup_started = _now()
+            warmup_result = warmup_items(items, workflow_json, default_category)
+            warmup_duration = _duration_since(warmup_started)
+            warmup_timings = warmup_result.get("timings") if isinstance(warmup_result.get("timings"), dict) else {}
+            if not warmup_timings:
+                warmup_timings = {"duration_seconds": warmup_duration}
+                warmup_result = dict(warmup_result)
+                warmup_result["timings"] = warmup_timings
+            summary_timings["warmup"] = warmup_timings
+
+        if run_trim:
+            trim_started = _now()
+            raw_trim = trim_category(category)
+            trim_duration = _duration_since(trim_started)
+            trim_payload = dict(raw_trim.get("payload", {}))
+            trim_payload.setdefault("timings", {"duration_seconds": trim_duration})
+            trim_result = {
+                "payload": trim_payload,
+                "json": json.dumps(trim_payload, ensure_ascii=False, indent=2),
+                "timings": {"duration_seconds": trim_duration},
+            }
+            summary_timings["trim"] = trim_result["timings"]
+
+        stats_started = _now()
         stats_result = collect_stats(category)
+        stats_duration = _duration_since(stats_started)
+        summary_timings["stats"] = {"seconds": stats_duration}
 
         stats_payload = stats_result.get("payload", {}) if isinstance(stats_result, dict) else {}
 
@@ -1946,6 +2369,7 @@ class ArenaAutoCacheOps:
             trim_result = {
                 "payload": trim_payload,
                 "json": json.dumps(trim_payload, ensure_ascii=False, indent=2),
+                "timings": {"duration_seconds": 0.0},
             }
 
         if warmup_result is None:
@@ -1961,6 +2385,7 @@ class ArenaAutoCacheOps:
                 "note": "warmup skipped",
                 "counts": warmup_counts,
                 "items": [],
+                "timings": {"duration_seconds": 0.0},
             }
             warmup_result = {
                 "payload": warmup_payload,
@@ -1970,15 +2395,61 @@ class ArenaAutoCacheOps:
                 "copied": 0,
                 "missing": 0,
                 "errors": 0,
+                "timings": {"duration_seconds": 0.0},
             }
+            summary_timings.setdefault("warmup", warmup_result["timings"])
+        else:
+            warm_timings = warmup_result.get("timings") if isinstance(warmup_result.get("timings"), dict) else None
+            if warm_timings:
+                summary_timings.setdefault("warmup", warm_timings)
+
+        entries_for_benchmark = _extract_benchmark_candidates(warmup_result, audit_result)
+        benchmark_bytes_limit = int(max(0.0, float(benchmark_read_mb)) * 1024 * 1024)
+        benchmark_result = _benchmark_cache_entries(
+            entries_for_benchmark,
+            sample_limit=int(max(0, benchmark_samples)),
+            read_limit_bytes=benchmark_bytes_limit,
+        )
+        if benchmark_result.get("requested_samples", 0) > 0 or benchmark_result.get("read_samples", 0) > 0:
+            summary_timings["benchmark"] = benchmark_result
 
         summary = make_ui_summary(
             stats=stats_result,
+            audit=audit_result,
             warmup=warmup_result,
             trim=trim_result,
         )
-        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
 
+        existing_timings = summary.get("timings") if isinstance(summary.get("timings"), dict) else {}
+        merged_timings = dict(existing_timings)
+        merged_timings.update(summary_timings)
+        summary["timings"] = merged_timings
+
+        ui_details = [
+            f"Mode: {normalized_mode}",
+            f"Category: {category}",
+        ]
+        audit_meta = summary.get("audit_meta") if isinstance(summary.get("audit_meta"), dict) else {}
+        if audit_meta:
+            ui_details.append(
+                f"Audit cached/missing: {audit_meta.get('cached', 0)}/{audit_meta.get('missing', 0)}",
+            )
+        warm_counts = warmup_result.get("payload", {}).get("counts") if isinstance(warmup_result.get("payload"), dict) else {}
+        if isinstance(warm_counts, dict):
+            ui_details.append(
+                f"Warmup warmed: {warm_counts.get('warmed', 0)}/{warm_counts.get('total', 0)}",
+            )
+        if summary_timings.get("benchmark"):
+            throughput_bytes = summary_timings["benchmark"].get("throughput_bytes_per_s", 0.0)
+            ui_details.append(
+                f"Benchmark: {throughput_bytes / (1024 * 1024):.2f} MiB/s",
+            )
+        summary["ui"] = {
+            "headline": "Arena Ops report",
+            "details": ui_details,
+        }
+
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
         return (
             summary_json,
             warmup_result["json"],

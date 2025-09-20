@@ -134,6 +134,118 @@ class ArenaAutoCacheAuditWarmupFlowTest(unittest.TestCase):
             self.assertEqual(statuses_second["model.safetensors"], "cached")
             self.assertEqual(statuses_second["missing.safetensors"], "missing_source")
 
+    def test_audit_wrapper_includes_ui_and_timings(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            audit_node = module.ArenaAutoCacheAudit()
+
+            report_json, total, cached, missing = audit_node.run(
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+            )
+
+            payload = json.loads(report_json)
+            self.assertEqual(total, 1)
+            self.assertEqual(cached, 0)
+            self.assertEqual(missing, 1)
+            self.assertIn("ui", payload)
+            self.assertIn("timings", payload)
+            self.assertGreaterEqual(payload["timings"]["duration_seconds"], 0.0)
+
+    def test_dashboard_extended_stats_and_trim_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            dashboard = module.ArenaAutoCacheDashboard()
+
+            settings_json = json.dumps({"max_size_gb": 5})
+            summary_json, stats_json, audit_json = dashboard.run(
+                "checkpoints",
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+                True,
+                True,
+                True,
+                settings_json,
+            )
+
+            summary = json.loads(summary_json)
+            stats_payload = json.loads(stats_json)
+            audit_payload = json.loads(audit_json)
+
+            self.assertIn("timings", summary)
+            self.assertIn("config", summary["timings"])
+            self.assertIn("trim", summary["timings"])
+            self.assertIn("stats", summary["timings"])
+            self.assertIn("Trim:", " ".join(summary["ui"]["details"]))
+            self.assertIn("timings", stats_payload)
+            self.assertIn("ui", stats_payload)
+            self.assertIn("timings", audit_payload)
+            self.assertIn("ui", audit_payload)
+
+    def test_ops_audit_mode_generates_ui_and_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            ops_node = module.ArenaAutoCacheOps()
+
+            summary_json, warmup_json, trim_json = ops_node.run(
+                "checkpoints",
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+                "audit",
+            )
+
+            summary = json.loads(summary_json)
+            warmup_payload = json.loads(warmup_json)
+            trim_payload = json.loads(trim_json)
+
+            self.assertEqual(summary["ui"]["headline"], "Arena Ops report")
+            self.assertIn("Mode: audit", summary["ui"]["details"])
+            self.assertEqual(warmup_payload["note"], "warmup skipped")
+            self.assertEqual(trim_payload["note"], "trim skipped")
+            timings = summary["timings"]
+            self.assertIn("audit", timings)
+            self.assertIn("stats", timings)
+
+    def test_ops_trim_mode_emits_trim_timings(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            ops_node = module.ArenaAutoCacheOps()
+
+            summary_json, warmup_json, trim_json = ops_node.run(
+                "checkpoints",
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+                "trim",
+            )
+
+            summary = json.loads(summary_json)
+            trim_payload = json.loads(trim_json)
+
+            self.assertEqual(summary["ui"]["headline"], "Arena Ops report")
+            self.assertIn("Mode: trim", summary["ui"]["details"])
+            self.assertIn("trim", summary["timings"])
+            self.assertIn("timings", trim_payload)
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
