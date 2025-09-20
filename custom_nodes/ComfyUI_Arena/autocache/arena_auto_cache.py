@@ -9,11 +9,22 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable, Optional
 
-ARENA_LANG = (os.getenv("ARENA_LANG", "en") or "en").strip().lower()
-if "_" in ARENA_LANG:
-    ARENA_LANG = ARENA_LANG.split("_", 1)[0]
-if "-" in ARENA_LANG:
-    ARENA_LANG = ARENA_LANG.split("-", 1)[0]
+def _normalize_lang(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if "_" in normalized:
+        normalized = normalized.split("_", 1)[0]
+    if "-" in normalized:
+        normalized = normalized.split("-", 1)[0]
+    return normalized or None
+
+
+_comfyui_lang = _normalize_lang(os.getenv("COMFYUI_LANG"))
+_arena_lang = _normalize_lang(os.getenv("ARENA_LANG")) or "en"
+ARENA_LANG = _comfyui_lang or _arena_lang
 
 I18N: dict[str, dict[str, str]] = {
     "en": {
