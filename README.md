@@ -21,11 +21,12 @@ Custom nodes for ComfyUI with the **Arena** prefix bundled in a **single package
 
 ## Documentation
 - 🇷🇺 Русская документация: [Обзор](docs/ru/index.md), [Быстрый старт](docs/ru/quickstart.md), [CLI](docs/ru/cli.md), [Конфигурация](docs/ru/config.md), [Диагностика](docs/ru/troubleshooting.md).
-- 🇬🇧 English placeholders: [Overview](docs/en/index.md), [Quickstart](docs/en/quickstart.md), [CLI](docs/en/cli.md), [Configuration](docs/en/config.md), [Troubleshooting](docs/en/troubleshooting.md).
+- 🇬🇧 English placeholders: [Overview](docs/en/index.md), [Quickstart](docs/en/quickstart.md), [CLI](docs/en/cli.md), [Configuration](docs/en/config.md),
+- [Troubleshooting](docs/en/troubleshooting.md).
+- [Agents rules](AGENTS.md) - guidelines for developing and integrating Codex & ComfyUI agents.
 
 ## Codex workflow
-
-1. Codex генерирует код (EN identifiers, RU comments).
+1. odex генерирует код (EN identifiers, RU comments).
 2. Создаёт/обновляет Issue: `Codex: <module> — <topic> — <date>` с блоками
    **SUMMARY / ISSUES & TASKS / TEST PLAN / NOTES**.
 3. Все изменения идут через PR; тело PR — по шаблону (см. `.github/pull_request_template.md`).
