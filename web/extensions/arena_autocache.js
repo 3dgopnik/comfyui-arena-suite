@@ -694,7 +694,11 @@
     }
   }
 
-  app.registerExtension({
+  const REGISTRATION_RETRY_DELAY_MS = 50;
+  let extensionRegistered = false;
+  let pendingRegistrationTimer = null;
+
+  const extensionDefinition = {
     name: EXTENSION_NAME,
     init(appInstance) {
       graphApp = appInstance;
@@ -722,5 +726,67 @@
         updateNodeFromOutputs(locatorId, outputs);
       }
     },
-  });
+  };
+
+  function resolveComfyAppInstance() {
+    const globalScope = typeof globalThis !== "undefined" ? globalThis : window;
+    if (!globalScope) {
+      return null;
+    }
+    const directApp = globalScope.app;
+    if (directApp && typeof directApp.registerExtension === "function") {
+      return directApp;
+    }
+    const comfyApp = globalScope.ComfyApp?.app;
+    if (comfyApp && typeof comfyApp.registerExtension === "function") {
+      return comfyApp;
+    }
+    return null;
+  }
+
+  function scheduleExtensionRegistration() {
+    if (extensionRegistered || pendingRegistrationTimer != null) {
+      return;
+    }
+    const globalScope = typeof globalThis !== "undefined" ? globalThis : window;
+    if (!globalScope || typeof globalScope.setTimeout !== "function") {
+      return;
+    }
+    pendingRegistrationTimer = globalScope.setTimeout(() => {
+      pendingRegistrationTimer = null;
+      attemptExtensionRegistration();
+    }, REGISTRATION_RETRY_DELAY_MS);
+  }
+
+  function attemptExtensionRegistration() {
+    if (extensionRegistered) {
+      return;
+    }
+    const comfyApp = resolveComfyAppInstance();
+    if (!comfyApp) {
+      scheduleExtensionRegistration();
+      return;
+    }
+    comfyApp.registerExtension(extensionDefinition);
+    extensionRegistered = true;
+  }
+
+  function subscribeToComfyUiReadyEvent() {
+    const globalScope = typeof globalThis !== "undefined" ? globalThis : window;
+    const target = globalScope?.document || globalScope;
+    const addEventListener = target?.addEventListener;
+    if (typeof addEventListener !== "function") {
+      return;
+    }
+    const handleReady = () => {
+      attemptExtensionRegistration();
+      if (typeof target.removeEventListener === "function") {
+        target.removeEventListener("comfyui:ready", handleReady);
+      }
+    };
+    addEventListener.call(target, "comfyui:ready", handleReady);
+  }
+
+  subscribeToComfyUiReadyEvent();
+  attemptExtensionRegistration();
 })();
