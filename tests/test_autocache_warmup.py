@@ -115,12 +115,13 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
             self.assertTrue(cache_file.exists())
 
             audit_node = module.ArenaAutoCacheAudit()
-            audit_json, audit_total, cached, missing_count = audit_node.run(
+            audit_json, audit_total, cached, missing_count, summary_json = audit_node.run(
                 "checkpoints:model.safetensors\nloras:style.safetensors",
                 "",
                 "checkpoints",
             )
             audit_payload = json.loads(audit_json)
+            summary_payload = json.loads(summary_json)
 
             self.assertEqual(audit_total, 2)
             self.assertEqual(cached, 1)
@@ -128,6 +129,7 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
             statuses = {item["name"]: item["status"] for item in audit_payload["items"]}
             self.assertEqual(statuses["model.safetensors"], "cached")
             self.assertEqual(statuses["style.safetensors"], "missing_source")
+            self.assertIn("ui", summary_payload)
 
     def test_warmup_wrapper_emits_ui_and_timings(self) -> None:
         with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Arena AutoCache audit/warmup helpers with unified item spec parsing and JSON reports.
 - Add regression tests covering Arena AutoCache audit and warmup flows.
 - Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
+- Extend the Arena AutoCache Audit node with optional `summary_json` output, runtime overrides, and multi-category extended stats plus trim execution feedback.
 ### Changed
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
@@ -20,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow `COMFYUI_LANG` to override the AutoCache localization fallback before `ARENA_LANG`.
 - Set the legacy tiles segmentation node category to `Arena/Tiles` for improved UI grouping.
 - Enrich audit and warmup payloads with `ui`/`timings` metadata and extend ops execution to cover audit, warmup, and trim modes.
+- Record audit summaries with explicit action feedback so UI widgets can confirm applied settings and trims.
 ### Docs
 - Surface an AutoCache TL;DR environment setup block in the README, node README, and RU/EN overview docs.
+- Document the new Audit node summary output, runtime overrides, and trim behaviour in the AutoCache README and RU/EN node references.
 - Expand the Audit/Warmup node docs with bilingual multiline/JSON examples and `workflow_json` guidance, and mention the nodes in the root README.
 - Publish bilingual node reference covering AutoCache and legacy tiles nodes in `custom_nodes/ComfyUI_Arena/README.md` and `docs/{ru,en}/nodes.md`.
 - Document the Impact Pack dependency and credit ltdrdata in the README install instructions.

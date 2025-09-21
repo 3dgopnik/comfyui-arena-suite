@@ -57,11 +57,18 @@ Checks whether source models exist and whether the cache already contains the co
   - `items` (`STRING`, multiline) — `category:file` strings or a JSON array of strings/objects with `category` + `name`/`filename`.
   - `workflow_json` (`STRING`, multiline) — optional workflow JSON dump for automatic discovery.
   - `default_category` (`STRING`, default `"checkpoints"`) — fallback category when not specified.
+  - `extended_stats` (`BOOLEAN`, optional) — collects extended statistics for all detected categories and augments `summary_json` with aggregates.
+  - `apply_settings` (`BOOLEAN`, optional) — applies overrides from `settings_json` before running the audit.
+  - `do_trim_now` (`BOOLEAN`, optional) — runs the LRU trim against every affected category right after the audit completes.
+  - `settings_json` (`STRING`, multiline, optional) — JSON payload with `cache_root`, `max_size_gb`, `enable`, `verbose` overrides used when `apply_settings=true`.
 - **Outputs**
   - `STRING` (`json`) — report listing each item with `cached`, `missing_cache`, `missing_source` statuses and aggregated `counts`. The payload also includes `ui` and `timings.duration_seconds` fields for dashboard rendering.
   - `INT` (`total`) — number of unique entries in the report.
   - `INT` (`cached`) — entries already present in the cache.
   - `INT` (`missing`) — entries missing either from the cache or from the source directories.
+  - `STRING` (`summary_json`) — UI summary with an `actions` list (settings/stats/trim), `stats_meta`/`audit_meta` blocks, the processed categories, and per-operation timings.
+
+> **Limitations**: `apply_settings` updates the global cache configuration, while `do_trim_now` trims every category discovered through `items` and `workflow_json`. When multiple categories are detected, `summary_json` aggregates their stats and records each trim result in the `actions` list.
 
 ### 🅰️ Arena AutoCache Warmup (`ArenaAutoCacheWarmup`)
 

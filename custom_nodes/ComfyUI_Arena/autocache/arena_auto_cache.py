@@ -1760,18 +1760,20 @@ class ArenaAutoCacheAudit:
             },
         }
 
-    RETURN_TYPES = ("STRING", "INT", "INT", "INT")
+    RETURN_TYPES = ("STRING", "INT", "INT", "INT", "STRING")
     RETURN_NAMES = (
         t("output.json"),
         t("output.total"),
         t("output.cached"),
         t("output.missing"),
+        t("output.summary_json"),
     )
     RETURN_DESCRIPTIONS = (
         t("output.json"),
         t("output.total"),
         t("output.cached"),
         t("output.missing"),
+        t("output.summary_json"),
     )
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
@@ -1788,13 +1790,201 @@ class ArenaAutoCacheAudit:
         do_trim_now: bool = False,
         settings_json: str = "",
     ):
-        _ = (extended_stats, apply_settings, do_trim_now, settings_json)
-        result = audit_items(items, workflow_json, default_category)
+        parsed_items = parse_items_spec(items, workflow_json, default_category)
+        categories = sorted({entry.get("category", "") for entry in parsed_items if isinstance(entry, dict)})
+        if not categories:
+            categories = [_normalize_category_name(default_category, "checkpoints")]
+
+        config_block: dict[str, object] | None = None
+        config_duration = 0.0
+        if apply_settings:
+            overrides: dict[str, object] = {}
+            if settings_json.strip():
+                try:
+                    decoded = json.loads(settings_json)
+                    if isinstance(decoded, dict):
+                        overrides = decoded
+                except Exception:
+                    overrides = {}
+            current = get_settings()
+            root_override = overrides.get("cache_root", overrides.get("root"))
+            max_override = overrides.get("max_size_gb", overrides.get("max_gb"))
+            enable_override = overrides.get("enable")
+            verbose_override = overrides.get("verbose")
+
+            config_started = _now()
+            result = set_cache_settings(
+                root=root_override if root_override is not None else current.root,
+                max_gb=max_override if max_override is not None else current.max_gb,
+                enable=enable_override if enable_override is not None else current.enable,
+                verbose=verbose_override if verbose_override is not None else current.verbose,
+            )
+            config_duration = _duration_since(config_started)
+            payload = dict(result)
+            if payload.get("ok"):
+                payload.setdefault("note", "settings applied")
+            else:
+                payload.setdefault("note", "settings unchanged")
+            payload.setdefault("source", "audit")
+            payload.setdefault("timings", {"duration_seconds": config_duration})
+            config_block = {"payload": payload, "timings": {"duration_seconds": config_duration}}
+
+        stats_result: dict[str, object] | None = None
+        stats_duration = 0.0
+        stats_categories: dict[str, dict[str, object]] = {}
+        if extended_stats:
+            stats_started = _now()
+            aggregated_items = 0
+            aggregated_total_gb = 0.0
+            for category in categories:
+                category_stats = collect_stats(category)
+                stats_categories[category] = category_stats
+                aggregated_items += int(category_stats.get("items", 0) or 0)
+                aggregated_total_gb += float(category_stats.get("total_gb", 0.0) or 0.0)
+                if stats_result is None:
+                    stats_result = dict(category_stats)
+            stats_duration = _duration_since(stats_started)
+            if stats_result is not None:
+                payload = dict(stats_result.get("payload", {}))
+                payload.setdefault("category_order", categories)
+                payload["categories"] = {
+                    name: data.get("payload", {}) for name, data in stats_categories.items()
+                }
+                payload.setdefault(
+                    "aggregated_totals",
+                    {"items": aggregated_items, "total_gb": aggregated_total_gb},
+                )
+                stats_result = dict(stats_result)
+                stats_result["payload"] = payload
+                stats_result["json"] = json.dumps(payload, ensure_ascii=False, indent=2)
+                stats_result["items"] = aggregated_items
+                stats_result["total_gb"] = aggregated_total_gb
+                if len(categories) > 1:
+                    stats_result["cache_root"] = str(get_settings().root)
+
+        audit_result = audit_items(items, workflow_json, default_category)
+
+        trim_result: dict[str, object] | None = None
+        trim_duration_total = 0.0
+        trimmed_categories: list[str] = []
+        if do_trim_now:
+            trim_payloads: list[dict[str, object]] = []
+            for category in categories:
+                trimmed_categories.append(category)
+                trim_started = _now()
+                raw_trim = trim_category(category)
+                duration = _duration_since(trim_started)
+                trim_duration_total += duration
+                payload = dict(raw_trim.get("payload", {}))
+                payload.setdefault("category", category)
+                timings = payload.get("timings") if isinstance(payload.get("timings"), dict) else {}
+                timings = dict(timings)
+                timings.setdefault("duration_seconds", duration)
+                payload["timings"] = timings
+                trim_payloads.append(
+                    {
+                        "category": category,
+                        "payload": payload,
+                        "json": json.dumps(payload, ensure_ascii=False, indent=2),
+                        "timings": timings,
+                    }
+                )
+            if trim_payloads:
+                if len(trim_payloads) == 1:
+                    trim_result = trim_payloads[0]
+                else:
+                    aggregate_payload = {
+                        "ok": all(p["payload"].get("ok", True) for p in trim_payloads),
+                        "categories": [p["category"] for p in trim_payloads],
+                        "results": [p["payload"] for p in trim_payloads],
+                        "note": "multiple categories trimmed",
+                    }
+                    aggregate_payload["timings"] = {"duration_seconds": trim_duration_total}
+                    trim_result = {
+                        "payload": aggregate_payload,
+                        "json": json.dumps(aggregate_payload, ensure_ascii=False, indent=2),
+                        "timings": {"duration_seconds": trim_duration_total},
+                    }
+
+        summary = make_ui_summary(
+            config=config_block,
+            stats=stats_result if extended_stats else None,
+            audit=audit_result,
+            trim=trim_result,
+        )
+
+        timings_block: dict[str, object] = {}
+        if isinstance(audit_result.get("timings"), dict):
+            timings_block["audit"] = audit_result["timings"]
+        if config_block is not None:
+            timings_block["config"] = {"seconds": config_duration}
+        if extended_stats and stats_result is not None:
+            timings_block["stats"] = {"seconds": stats_duration}
+        if trim_result is not None:
+            timings_block["trim"] = {"seconds": trim_duration_total}
+        if timings_block:
+            summary["timings"] = timings_block
+
+        actions: list[dict[str, object]] = []
+        if config_block is not None:
+            payload = config_block.get("payload", {}) if isinstance(config_block, dict) else {}
+            actions.append(
+                {
+                    "type": "settings",
+                    "ok": bool(payload.get("ok", False)),
+                    "duration_seconds": config_duration,
+                    "effective_root": payload.get("effective_root"),
+                    "max_size_gb": payload.get("max_size_gb"),
+                }
+            )
+        if extended_stats and stats_result is not None:
+            actions.append(
+                {
+                    "type": "stats",
+                    "categories": categories,
+                    "duration_seconds": stats_duration,
+                    "items": stats_result.get("items"),
+                    "total_gb": stats_result.get("total_gb"),
+                }
+            )
+        if trim_result is not None:
+            actions.append(
+                {
+                    "type": "trim",
+                    "categories": trimmed_categories,
+                    "duration_seconds": trim_duration_total,
+                }
+            )
+        if actions:
+            summary["actions"] = actions
+
+        summary["categories"] = categories
+
+        ui_details = [
+            f"Audit total: {audit_result.get('total', 0)}",
+            f"Audit missing: {audit_result.get('missing', 0)}",
+        ]
+        if config_block is not None:
+            payload = config_block.get("payload", {}) if isinstance(config_block, dict) else {}
+            applied = "applied" if payload.get("ok") else "unchanged"
+            ui_details.append(f"Settings: {applied}")
+        if extended_stats and stats_result is not None:
+            ui_details.append(f"Stats categories: {len(categories)}")
+        if trim_result is not None:
+            if len(trimmed_categories) == 1:
+                note = trim_result.get("payload", {}).get("note", "trim executed")
+                ui_details.append(f"Trim: {note} ({trimmed_categories[0]})")
+            else:
+                ui_details.append(f"Trim: {len(trimmed_categories)} categories")
+        summary["ui"] = {"headline": "Audit updated", "details": ui_details}
+
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
         return (
-            result["json"],
-            result["total"],
-            result["cached"],
-            result["missing"],
+            audit_result["json"],
+            audit_result["total"],
+            audit_result["cached"],
+            audit_result["missing"],
+            summary_json,
         )
 
 
