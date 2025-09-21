@@ -35,6 +35,8 @@ RU: Набор узлов Arena: наследие (legacy), SSD‑кэширов
 3. Добавьте узел с префиксом "Arena" (например, "Arena AutoCache: Stats" / `ArenaAutoCacheStats`).
 4. Настройте SSD‑кэш и манифесты при необходимости (см. документацию ниже).
 
+Примечание (ComfyUI Desktop): для перезагрузки фронтенда (JS‑расширений) используйте клавишу `R` в главном окне приложения. Изменения Python‑узлов требуют полного перезапуска Desktop.
+
 ## Documentation
 - Русская документация: `docs/ru/index.md`, `docs/ru/quickstart.md`, `docs/ru/cli.md`, `docs/ru/config.md`, `docs/ru/troubleshooting.md`, `docs/ru/nodes.md`
 - English placeholders: `docs/en/index.md`, `docs/en/quickstart.md`, `docs/en/cli.md`, `docs/en/config.md`, `docs/en/troubleshooting.md`
@@ -51,4 +53,3 @@ RU: Набор узлов Arena: наследие (legacy), SSD‑кэширов
 - См. `CONTRIBUTING.md` для локального окружения и запуска тестов.
 - Следуйте `AGENTS.md` и `GLOBAL RULES.md` при добавлении агентов/узлов.
 - В CI запускаются тесты на PR — держите их зелёными.
-

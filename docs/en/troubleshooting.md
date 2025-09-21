@@ -27,3 +27,7 @@ description: "Common issues and fixes for Arena Suite."
 - Inspect active path in `ArenaAutoCacheConfig/Stats`.
 - Update `ARENA_CACHE_ROOT` and restart.
 
+## ComfyUI Desktop: how to reload the UI
+- ComfyUI Desktop does not use F5. Press the `R` key (English layout) in the app window to reload the frontend (JS extensions, including the Arena overlay).
+- Frontend reload does not restart Python nodes. If you changed `.py` code, fully restart Desktop (close and reopen).
+- To refresh the list of custom nodes use “Refresh custom nodes” in Manager (if available) or restart Desktop.
