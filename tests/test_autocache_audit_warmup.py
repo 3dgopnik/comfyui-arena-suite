@@ -85,14 +85,20 @@ class ArenaAutoCacheAuditWarmupFlowTest(unittest.TestCase):
                 },
             )
 
-            audit_json, total, cached, missing = audit_node.run(items_spec, workflow_json, "checkpoints")
+            audit_json, total, cached, missing, summary_json = audit_node.run(
+                items_spec,
+                workflow_json,
+                "checkpoints",
+            )
             audit_payload = json.loads(audit_json)
+            summary_payload = json.loads(summary_json)
             statuses_before = {item["name"]: item["status"] for item in audit_payload["items"]}
             self.assertEqual(total, 2)
             self.assertEqual(cached, 0)
             self.assertEqual(missing, 2)
             self.assertEqual(statuses_before["model.safetensors"], "missing_cache")
             self.assertEqual(statuses_before["missing.safetensors"], "missing_source")
+            self.assertIn("categories", summary_payload)
 
             warm_json, total_warm, warmed, copied, missing_warm, errors = warmup_node.run(
                 items_spec, workflow_json, "checkpoints"
@@ -110,16 +116,20 @@ class ArenaAutoCacheAuditWarmupFlowTest(unittest.TestCase):
             cache_file = cache_root / "checkpoints" / "model.safetensors"
             self.assertTrue(cache_file.exists())
 
-            audit_json_after, total_after, cached_after, missing_after = audit_node.run(
-                items_spec, workflow_json, "checkpoints"
+            audit_json_after, total_after, cached_after, missing_after, summary_after = audit_node.run(
+                items_spec,
+                workflow_json,
+                "checkpoints",
             )
             audit_payload_after = json.loads(audit_json_after)
+            summary_payload_after = json.loads(summary_after)
             statuses_after = {item["name"]: item["status"] for item in audit_payload_after["items"]}
             self.assertEqual(total_after, 2)
             self.assertEqual(cached_after, 1)
             self.assertEqual(missing_after, 1)
             self.assertEqual(statuses_after["model.safetensors"], "cached")
             self.assertEqual(statuses_after["missing.safetensors"], "missing_source")
+            self.assertIn("categories", summary_payload_after)
 
             warm_json_second, total_second, warmed_second, copied_second, missing_second, errors_second = warmup_node.run(
                 items_spec, workflow_json, "checkpoints"
@@ -143,19 +153,21 @@ class ArenaAutoCacheAuditWarmupFlowTest(unittest.TestCase):
             module = self._prepare_module(cache_root, source_dir)
             audit_node = module.ArenaAutoCacheAudit()
 
-            report_json, total, cached, missing = audit_node.run(
+            report_json, total, cached, missing, summary_json = audit_node.run(
                 "checkpoints:model.safetensors",
                 "",
                 "checkpoints",
             )
 
             payload = json.loads(report_json)
+            summary_payload = json.loads(summary_json)
             self.assertEqual(total, 1)
             self.assertEqual(cached, 0)
             self.assertEqual(missing, 1)
             self.assertIn("ui", payload)
             self.assertIn("timings", payload)
             self.assertGreaterEqual(payload["timings"]["duration_seconds"], 0.0)
+            self.assertIn("ui", summary_payload)
 
     def test_dashboard_extended_stats_and_trim_flow(self) -> None:
         with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
@@ -191,6 +203,50 @@ class ArenaAutoCacheAuditWarmupFlowTest(unittest.TestCase):
             self.assertIn("ui", stats_payload)
             self.assertIn("timings", audit_payload)
             self.assertIn("ui", audit_payload)
+
+    def test_audit_flags_emit_summary_feedback(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            audit_node = module.ArenaAutoCacheAudit()
+
+            settings_json = json.dumps({"max_size_gb": 5})
+            audit_json, total, cached, missing, summary_json = audit_node.run(
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+                True,
+                True,
+                True,
+                settings_json,
+            )
+
+            summary = json.loads(summary_json)
+            audit_payload = json.loads(audit_json)
+
+            self.assertEqual(total, 1)
+            self.assertEqual(cached, 0)
+            self.assertEqual(missing, 1)
+            self.assertEqual(module.get_settings().max_gb, 5)
+            self.assertIn("actions", summary)
+            action_types = {action["type"] for action in summary["actions"]}
+            self.assertIn("settings", action_types)
+            self.assertIn("stats", action_types)
+            self.assertIn("trim", action_types)
+            self.assertIn("timings", summary)
+            self.assertIn("config", summary["timings"])
+            self.assertIn("stats", summary["timings"])
+            self.assertIn("trim", summary["timings"])
+            self.assertIn("stats_meta", summary)
+            self.assertIn("audit_meta", summary)
+            self.assertIn("categories", summary)
+            self.assertEqual(summary["categories"], ["checkpoints"])
+            self.assertIn("ui", summary)
+            self.assertTrue(any("Trim" in detail for detail in summary["ui"]["details"]))
+            self.assertIn("timings", audit_payload)
 
     def test_ops_audit_mode_generates_ui_and_counts(self) -> None:
         with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:

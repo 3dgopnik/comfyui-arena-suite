@@ -31,7 +31,7 @@ Single-package for all **Arena** nodes.
 | 🅰️ Arena AutoCache: Config (`ArenaAutoCacheConfig`) | Без изменений; связывайте вывод с Dashboard/Ops как блок `config` | Используйте для настройки кэша во время сессии. / Tweak runtime cache settings. |
 | 🅰️ Arena AutoCache: Stats (`ArenaAutoCacheStats`) | 🅰️ Dashboard → `stats_json` | Dashboard добавляет статусную строку и метаданные. / Dashboard augments raw stats with status/meta fields. |
 | 🅰️ Arena AutoCache: StatsEx (`ArenaAutoCacheStatsEx`) | 🅰️ Dashboard → `summary_json` | Числовые сокеты остаются в StatsEx; `summary_json` дублирует показатели для UI. / StatsEx sockets stay while `summary_json` mirrors totals for UI overlays. |
-| 🅰️ Arena AutoCache Audit (`ArenaAutoCacheAudit`) | 🅰️ Dashboard → `audit_json` | Совмещает аудит с дашбордом и статусом `ok/missing`. / Combines audit results with the status line. |
+| 🅰️ Arena AutoCache Audit (`ArenaAutoCacheAudit`) | 🅰️ Dashboard → `audit_json` + `summary_json` | Добавлены `summary_json`, `extended_stats`, `apply_settings`, `do_trim_now`; подтверждение действий в UI. / Now mirrors dashboard feedback with `summary_json`, `extended_stats`, `apply_settings`, `do_trim_now`. |
 | 🅰️ Arena AutoCache Warmup (`ArenaAutoCacheWarmup`) | 🅰️ Ops → `do_warmup=true` | Включите warmup в Ops для сценария `audit_then_warmup`. / Toggle warmup in Ops for an `audit_then_warmup` flow. |
 | 🅰️ Arena AutoCache: Trim (`ArenaAutoCacheTrim`) | 🅰️ Ops → `do_trim=true` | Позволяет запускать очистку вместе с прогревом. / Run trims alongside warmups. |
 | 🅰️ Arena AutoCache: Manager (`ArenaAutoCacheManager`) | 🅰️ Ops / 🅰️ Dashboard | Manager остаётся для совместимости; новые узлы дают сводки и управление. / Manager stays compatible, Dashboard/Ops surface summaries. |
@@ -223,11 +223,18 @@ Extended statistics with dedicated sockets for numeric values and session counte
   - `items` (`STRING`, многострочный) — перечень путей вида `category:file.safetensors` или JSON-список. Комментарии начинающиеся с `#` игнорируются.
   - `workflow_json` (`STRING`, многострочный) — опционально: сырой JSON сохранённого workflow для автоматического извлечения моделей.
   - `default_category` (`STRING`, по умолчанию `"checkpoints"`) — категория для элементов без префикса.
+  - `extended_stats` (`BOOLEAN`, опционально) — собирает расширенную статистику по всем обнаруженным категориям и добавляет агрегаты в `summary_json`.
+  - `apply_settings` (`BOOLEAN`, опционально) — применяет переопределения из `settings_json` до запуска аудита.
+  - `do_trim_now` (`BOOLEAN`, опционально) — запускает LRU-очистку для всех затронутых категорий сразу после аудита.
+  - `settings_json` (`STRING`, многострочный, опционально) — JSON с полями `cache_root`, `max_size_gb`, `enable`, `verbose`; используется, когда `apply_settings=true`.
 - **Выходы**
   - `STRING` (`json`) — подробный отчёт с полями `items[]`, статусами (`cached`, `missing_cache`, `missing_source`) и сводкой `counts`.
   - `INT` (`total`) — количество уникальных записей в отчёте.
   - `INT` (`cached`) — число элементов, присутствующих в кэше.
   - `INT` (`missing`) — число элементов без кэша или без исходника.
+  - `STRING` (`summary_json`) — сводка для UI: содержит массив `actions` (settings/stats/trim), блоки `stats_meta`/`audit_meta`, список категорий и тайминги выполненных операций.
+
+> **Ограничения**: `apply_settings` меняет глобальные параметры кэша, а `do_trim_now` запускает очистку для всех категорий, найденных в `items`/`workflow_json`. При множестве категорий `summary_json` агрегирует статистику по каждой и фиксирует результаты очисток в массиве `actions`.
 - **Примеры**
   - Многострочный список c комментариями:
 
@@ -261,11 +268,18 @@ Traverses the provided item list, verifies that source files exist and the cache
   - `items` (`STRING`, multiline) — list of `category:file` entries or a JSON array. Lines beginning with `#` are ignored.
   - `workflow_json` (`STRING`, multiline, optional) — raw workflow JSON for automatic model discovery.
   - `default_category` (`STRING`, default `"checkpoints"`) — fallback cache category when the spec omits a prefix.
+  - `extended_stats` (`BOOLEAN`, optional) — collects extended stats for every discovered category and adds aggregates to `summary_json`.
+  - `apply_settings` (`BOOLEAN`, optional) — applies overrides from `settings_json` before the audit run.
+  - `do_trim_now` (`BOOLEAN`, optional) — triggers an immediate LRU trim for each affected category after the audit completes.
+  - `settings_json` (`STRING`, multiline, optional) — JSON with `cache_root`, `max_size_gb`, `enable`, `verbose` overrides used when `apply_settings=true`.
 - **Outputs**
   - `STRING` (`json`) — detailed report with `items[]`, status fields (`cached`, `missing_cache`, `missing_source`) and a `counts` summary.
   - `INT` (`total`) — number of unique entries covered by the audit.
   - `INT` (`cached`) — entries already cached.
   - `INT` (`missing`) — entries missing from cache or sources.
+  - `STRING` (`summary_json`) — UI-friendly summary that lists executed `actions` (settings/stats/trim), exposes `stats_meta`/`audit_meta`, the processed categories, and operation timings.
+
+> **Limitations**: `apply_settings` mutates the global cache configuration, and `do_trim_now` trims every category discovered via `items`/`workflow_json`. When multiple categories are involved, `summary_json` aggregates their stats and records trim results inside the `actions` array.
 - **Examples**
   - Multiline list with inline comments:
 
