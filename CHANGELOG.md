@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Arena AutoCache web overlay (experimental) has been removed from the package by default to prioritize stability across ComfyUI Desktop builds. The feature is tracked for a future iteration in the roadmap.
 ### Fixed
 - Arena AutoCache UI overlay: added Russian output aliases to correctly detect `summary_json`/`warmup_json`/`trim_json` when RU labels are used (e.g., «Сводка (JSON)», «Прогрев (JSON)», «Очистка (JSON)»).
+- Arena AutoCache: removed placeholder Russian labels and covered the localization helper with tests to ensure `t()` returns the expected RU strings.
 - Overlay now also listens to execution events (`onAfterExecute`/`onExecuted`) in addition to `onNodeOutputsUpdated` to support ComfyUI Desktop builds that don't emit the outputs-updated callback consistently.
 - Overlay polling fallback: periodically reads node outputs (~500 ms) for Dashboard/Ops/Audit nodes to keep the UI in sync even when no frontend events are fired (Desktop compatibility).
 - Desktop execution store fallback: when `getOutputData()` returns nothing, the overlay now attempts to read outputs from the Desktop `executionStore` (supports Map/object containers and locator ids like `subgraph:localId`).
