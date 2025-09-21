@@ -53,3 +53,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restore package-level exports so ComfyUI can import `comfyui-arena-suite` from `custom_nodes`.
 - Keep cache helpers importable and return stub responses when the cache is disabled.
 - Avoid recording cache hits when `.copying` locks disappear but the cached file is missing by falling back to the source path.
+- Reset the AutoCache overlay palette and messages when node outputs are cleared so idle nodes no longer show stale highlights.
