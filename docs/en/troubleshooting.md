@@ -15,6 +15,7 @@ Troubleshooting tips will be translated to English in a future update. Use the R
 1. Restart ComfyUI so it reloads extensions after updating the package.
 2. Verify that the `web/extensions/arena_autocache.js` file is present inside the Arena nodes repository folder.
 3. Starting with this release the module locates the `web` directory by walking up to the repository root, so manual symlinks or copies are no longer required.
+4. If that root folder is missing (for example when installing from a trimmed package), the extension falls back to `custom_nodes/ComfyUI_Arena/web`.
 
 ---
 

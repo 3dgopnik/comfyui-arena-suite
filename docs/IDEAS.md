@@ -26,3 +26,5 @@
 | 2024-05-23-bootstrap-escape-check | Add automated validation that cache paths ending with backslashes are safely escaped before persistence | Tooling | 0.2 | proposed |
 | 2024-05-24-bootstrap-status-telemetry | Collect anonymous success metrics for the WinForms bootstrap helper to guide UX polish | Tooling | 0.2 | proposed |
 | 2024-05-24-bootstrap-cli-tests | Automate CLI fallback smoke tests to verify bootstrap prompts on systems without PowerShell | Testing | 0.3 | proposed |
+| 2024-05-25-web-fallback-packaging | Add a packaging check that ensures the fallback `custom_nodes/ComfyUI_Arena/web` assets ship with releases | Testing | 0.3 | proposed |
+| 2024-05-25-web-assets-sync | Provide a helper script that syncs repository web assets into the package fallback directory before building | Tooling | 0.4 | proposed |
