@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
 - Extend the Arena AutoCache Audit node with optional `summary_json` output, runtime overrides, and multi-category extended stats plus trim execution feedback.
 ### Changed
+- Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
 - Prefix Arena AutoCache and legacy tiles node display names with the 🅰️ marker for consistent UI grouping.

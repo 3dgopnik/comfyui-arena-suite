@@ -91,15 +91,14 @@ The dashboard node fuses stats and audit into one observability surface. Its `su
 
 **RU**
 
-Операционный узел объединяет прогрев (`Warmup`) и очистку (`Trim`). Установите `do_warmup=true`, чтобы копировать после аудита — это рекомендуемый сценарий `audit_then_warmup`. Добавьте `do_trim=true`, когда нужно освободить место в той же связке. `summary_json` отражает блоки `warmup_meta` и `trim` для UI.
+Операционный узел объединяет прогрев (`Warmup`) и очистку (`Trim`). Выберите режим `audit_then_warmup`, чтобы выполнить аудит и затем прогреть кэш — это рекомендуемый сценарий. Режим `audit` запускает только аудит, `warmup` — только прогрев, а `trim` — только очистку. `summary_json` отражает блоки `warmup_meta` и `trim` для UI.
 
 - **Входы**
   - `category` (`STRING`, по умолчанию `"checkpoints"`).
   - `items` (`STRING`, многострочный) — общая спецификация Audit/Warmup.
   - `workflow_json` (`STRING`, многострочный) — автодобавление моделей из workflow.
   - `default_category` (`STRING`, по умолчанию `"checkpoints"`).
-  - `do_warmup` (`BOOLEAN`, по умолчанию `false`).
-  - `do_trim` (`BOOLEAN`, по умолчанию `false`).
+  - `mode` (`STRING`, по умолчанию `"audit_then_warmup"`) — варианты: `audit_then_warmup`, `audit`, `warmup`, `trim`.
 - **Выходы**
   - `STRING` (`summary_json`) — объединённая сводка статуса и операций.
   - `STRING` (`warmup_json`) — отчёт прогрева.
@@ -107,15 +106,14 @@ The dashboard node fuses stats and audit into one observability surface. Its `su
 
 **EN**
 
-The Ops node coordinates warmups and trims. Toggle `do_warmup` to run copy jobs right after auditing — this is the recommended `audit_then_warmup` workflow. Enable `do_trim` when you want to reclaim space in the same pass. The resulting `summary_json` adds `warmup_meta` and `trim` blocks for dashboards.
+The Ops node coordinates warmups and trims. Pick the `audit_then_warmup` mode to run an audit followed by a warmup — this is the recommended workflow. Use `audit` for audit-only passes, `warmup` when you just need to fill the cache, and `trim` for cleanup-only operations. The resulting `summary_json` adds `warmup_meta` and `trim` blocks for dashboards.
 
 - **Inputs**
   - `category` (`STRING`, default `"checkpoints"`).
   - `items` (`STRING`, multiline) — same spec as Audit/Warmup.
   - `workflow_json` (`STRING`, multiline) — adds workflow-discovered models.
   - `default_category` (`STRING`, default `"checkpoints"`).
-  - `do_warmup` (`BOOLEAN`, default `false`).
-  - `do_trim` (`BOOLEAN`, default `false`).
+  - `mode` (`STRING`, default `"audit_then_warmup"`) — choices: `audit_then_warmup`, `audit`, `warmup`, `trim`.
 - **Outputs**
   - `STRING` (`summary_json`) — consolidated status + operations report.
   - `STRING` (`warmup_json`) — warmup report payload.
@@ -125,7 +123,7 @@ The Ops node coordinates warmups and trims. Toggle `do_warmup` to run copy jobs 
 
 1. Подайте один и тот же список `items` в Dashboard и Ops. / Feed the same `items` list into both Dashboard and Ops.
 2. Оцените `audit_meta.missing` в `summary_json` Dashboard. / Inspect `audit_meta.missing` in the Dashboard summary.
-3. Включите `do_warmup=true` (и при необходимости `do_trim=true`). / Flip `do_warmup=true` (and `do_trim=true` if needed).
+3. Переключите `mode` в `audit_then_warmup` (и выберите `trim`, если нужна только очистка). / Switch `mode` to `audit_then_warmup` (pick `trim` when you only need cleanup).
 4. Передайте `warmup_json` и `trim_json` в текстовые виджеты или логгеры. / Pipe `warmup_json` and `trim_json` to text widgets or loggers.
 
 **Бенчмаркинг / Benchmarking tips**
