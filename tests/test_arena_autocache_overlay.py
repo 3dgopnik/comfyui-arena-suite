@@ -164,6 +164,181 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         self.assertTrue(payload["registered"])
         self.assertEqual(payload["calls"], 1)
 
+    def test_overlay_falls_back_to_execution_events(self) -> None:
+        extension_path = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
+        script = textwrap.dedent(
+            """
+            const fs = require('node:fs');
+            const vm = require('node:vm');
+
+            const sourcePath = process.argv[1];
+            const source = fs.readFileSync(sourcePath, 'utf8');
+            const importLine = 'import { app } from "/scripts/app.js";';
+            const patched = source.replace(importLine, 'const app = globalThis.app;');
+
+            function createSignal(label) {
+              const listeners = new Set();
+              return {
+                label,
+                listeners,
+                removedCount: 0,
+                addListener(cb) { this.listeners.add(cb); },
+                removeListener(cb) {
+                  if (this.listeners.delete(cb)) {
+                    this.removedCount += 1;
+                  }
+                },
+                emit(...args) {
+                  for (const cb of Array.from(this.listeners)) {
+                    cb(...args);
+                  }
+                },
+              };
+            }
+
+            const extensionHolder = { value: null };
+
+            const sandbox = { console };
+            sandbox.app = {
+              registerExtension(ext) {
+                extensionHolder.value = ext;
+              },
+            };
+            sandbox.globalThis = sandbox;
+            sandbox.window = sandbox;
+            sandbox.global = sandbox;
+            sandbox.self = sandbox;
+
+            vm.createContext(sandbox);
+            vm.runInContext(patched, sandbox, { filename: sourcePath });
+
+            if (!extensionHolder.value) {
+              throw new Error('Extension not registered');
+            }
+
+            const extension = extensionHolder.value;
+
+            const dirtyCalls = [];
+
+            const firstSignal = createSignal('first');
+            const firstGraph = {
+              _nodes: [],
+              onExecuted: firstSignal,
+              getNodeById(id) {
+                return this._nodes.find((node) => node.id === id) || null;
+              },
+              setDirtyCanvas(flagA, flagB) {
+                dirtyCalls.push(['first', flagA, flagB]);
+              },
+            };
+
+            const graphApp = { graph: firstGraph };
+
+            const nodeA = {
+              id: 1,
+              constructor: { comfyClass: 'ArenaAutoCacheAudit' },
+              graph: firstGraph,
+              size: [220, 160],
+              boxcolor: '#151515',
+              bgcolor: '#252525',
+              color: '#f5f5f5',
+              title_color: '#ffffff',
+            };
+            firstGraph._nodes.push(nodeA);
+
+            extension.init(graphApp);
+
+            const outputsA = {
+              summary_json: '{"ok": true, "ui": {"headline": "Audit"}}',
+            };
+
+            firstSignal.emit(nodeA, outputsA);
+
+            const firstState = {
+              listeners: firstSignal.listeners.size,
+              removedCount: firstSignal.removedCount,
+              nodeColor: nodeA.boxcolor,
+              decorated: Boolean(nodeA.__arenaAutoCacheDecorated),
+            };
+
+            const secondSignal = createSignal('second');
+            const secondGraph = {
+              _nodes: [],
+              onExecuted: secondSignal,
+              getNodeById(id) {
+                return this._nodes.find((node) => node.id === id) || null;
+              },
+              setDirtyCanvas(flagA, flagB) {
+                dirtyCalls.push(['second', flagA, flagB]);
+              },
+            };
+
+            const nodeB = {
+              id: 2,
+              constructor: { comfyClass: 'ArenaAutoCacheOps' },
+              graph: secondGraph,
+              size: [200, 140],
+              boxcolor: '#141414',
+              bgcolor: '#242424',
+              color: '#f2f2f2',
+              title_color: '#ffffff',
+            };
+            secondGraph._nodes.push(nodeB);
+
+            graphApp.graph = secondGraph;
+            extension.loadedGraph();
+
+            const midState = {
+              firstListeners: firstSignal.listeners.size,
+              firstRemoved: firstSignal.removedCount,
+              secondListeners: secondSignal.listeners.size,
+            };
+
+            const outputsB = {
+              warmup_json: '{"counts": {"total": 4, "warmed": 4}}',
+              trim_json: '{"items": 0}',
+            };
+
+            secondSignal.emit(nodeB, outputsB);
+
+            const finalState = {
+              nodeAColor: nodeA.boxcolor,
+              nodeBColor: nodeB.boxcolor,
+              dirtyCalls: dirtyCalls.length,
+              firstRemoved: firstSignal.removedCount,
+              firstRemaining: firstSignal.listeners.size,
+              secondListeners: secondSignal.listeners.size,
+              nodeADecorated: Boolean(nodeA.__arenaAutoCacheDecorated),
+              nodeBDecorated: Boolean(nodeB.__arenaAutoCacheDecorated),
+            };
+
+            console.log(JSON.stringify({ firstState, midState, finalState }));
+            """
+        ).strip()
+
+        completed = subprocess.run(
+            ["node", "-e", script, str(extension_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        output_lines = [line for line in completed.stdout.splitlines() if line.strip()]
+        payload = json.loads(output_lines[-1])
+
+        self.assertTrue(payload["firstState"]["decorated"])
+        self.assertEqual(payload["firstState"]["nodeColor"], "#2e7d32")
+        self.assertEqual(payload["firstState"]["listeners"], 1)
+
+        self.assertEqual(payload["midState"]["firstListeners"], 0)
+        self.assertEqual(payload["midState"]["firstRemoved"], 1)
+        self.assertEqual(payload["midState"]["secondListeners"], 1)
+
+        self.assertEqual(payload["finalState"]["nodeBColor"], "#2e7d32")
+        self.assertEqual(payload["finalState"]["firstRemaining"], 0)
+        self.assertEqual(payload["finalState"]["secondListeners"], 1)
+        self.assertGreaterEqual(payload["finalState"]["dirtyCalls"], 2)
+
 
 if __name__ == "__main__":  # pragma: no cover - unittest main hook
     unittest.main()
