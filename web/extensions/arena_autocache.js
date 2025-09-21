@@ -486,22 +486,15 @@ function refreshExecutionSubscription() {
     detachFallbackExecutionListener();
     return;
   }
-  if (hasOutputsUpdatedCallback(graph)) {
-    if (typeof fallbackExecutionUnsubscribe === "function") {
-      detachFallbackExecutionListener();
-    }
-    fallbackExecutionGraph = graph;
-    return;
-  }
+  // Always keep an execution listener in Desktop/legacy front-ends,
+  // even if onNodeOutputsUpdated exists (some builds don't dispatch it).
   if (fallbackExecutionGraph !== graph) {
     detachFallbackExecutionListener();
   }
-  if (typeof fallbackExecutionUnsubscribe !== "function") {
-    const unsubscribe = subscribeToExecutionEvents(graph);
-    if (typeof unsubscribe === "function") {
-      fallbackExecutionUnsubscribe = unsubscribe;
-      fallbackExecutionGraph = graph;
-    }
+  const unsubscribe = subscribeToExecutionEvents(graph);
+  if (typeof unsubscribe === "function") {
+    fallbackExecutionUnsubscribe = unsubscribe;
+    fallbackExecutionGraph = graph;
   }
 }
 
@@ -813,6 +806,11 @@ function buildDisplay(state) {
     }
   }
 
+  if (!summary && !warmup && !trim) {
+    // Hint so users see overlay is active even before first run
+    detailSet.add("Run the node to populate overlay");
+  }
+
   const details = Array.from(detailSet).slice(0, 4);
   const messages = issues.slice(0, 3);
   const progressBars = Array.from(progressMap.values());
@@ -1028,6 +1026,10 @@ const extensionDefinition = {
       return;
     }
     for (const [locatorId, outputs] of Object.entries(nodeOutputs)) {
+      try {
+        const keys = outputs && typeof outputs === 'object' ? Object.keys(outputs) : [];
+        console.debug('[Arena.AutoCache.Overlay] outputsUpdated', locatorId, keys);
+      } catch {}
       if (!outputs || typeof outputs !== "object") {
         continue;
       }

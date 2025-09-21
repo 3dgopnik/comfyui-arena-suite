@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - Arena AutoCache UI overlay: added Russian output aliases to correctly detect `summary_json`/`warmup_json`/`trim_json` when RU labels are used (e.g., «Сводка (JSON)», «Прогрев (JSON)», «Очистка (JSON)»).
+- Overlay now also listens to execution events (`onAfterExecute`/`onExecuted`) in addition to `onNodeOutputsUpdated` to support ComfyUI Desktop builds that don't emit the outputs-updated callback consistently.
 
 ### Added
 - Declare setuptools metadata with explicit package listings and bundle docs/web assets into distributions so wheels ship the Arena overlay.
