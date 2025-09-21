@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record audit summaries with explicit action feedback so UI widgets can confirm applied settings and trims.
 ### Docs
 - Document the AutoCache web overlay behaviour and coverage in the bilingual node reference.
+- Add step-by-step AutoCache web overlay enablement instructions with UI indicator summaries across the README and RU/EN docs.
 - Surface an AutoCache TL;DR environment setup block in the README, node README, and RU/EN overview docs.
 - Document the new Audit node summary output, runtime overrides, and trim behaviour in the AutoCache README and RU/EN node references.
 - Expand the Audit/Warmup node docs with bilingual multiline/JSON examples and `workflow_json` guidance, and mention the nodes in the root README.

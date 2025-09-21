@@ -24,6 +24,35 @@ Single-package for all **Arena** nodes.
 
 > Python bytecode and `__pycache__` are excluded by `.gitignore`.
 
+## Веб-оверлей AutoCache / AutoCache Web Overlay
+
+**RU — Шаги подключения**
+
+1. Убедитесь, что репозиторий установлен целиком: через ComfyUI Manager он попадает в `custom_nodes/comfyui-arena-suite`, при ручной установке дополнительно скопируйте содержимое `web/extensions/` в каталог `ComfyUI/web/extensions/`.
+2. Перезапустите ComfyUI после установки или обновления, чтобы фронтенд подхватил расширение `arena_autocache.js`.
+3. Добавьте на Canvas узел `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps` или `ArenaAutoCacheAudit` и выполните граф, чтобы получить данные в сокетах `summary_json`/`warmup_json`/`trim_json`.
+4. Как только узел вернёт JSON, заголовок и подписи обновятся автоматически: появятся подсветка, полосы прогресса и всплывающие подсказки.
+
+**EN — Enablement steps**
+
+1. Ensure the repository is installed as-is: ComfyUI Manager keeps it under `custom_nodes/comfyui-arena-suite`; for manual installs also copy the `web/extensions/` contents into `ComfyUI/web/extensions/`.
+2. Restart ComfyUI after installing or updating so the front-end loads the `arena_autocache.js` extension.
+3. Drop an `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps`, or `ArenaAutoCacheAudit` node onto the canvas and run the workflow to emit `summary_json` / `warmup_json` / `trim_json` payloads.
+4. Once the node outputs JSON, the overlay refreshes automatically with header highlights, progress bars, and inline hints.
+
+**Интерфейс и подсказки / UI cues and hints**
+
+- RU: Строка статуса берётся из `summary_json.ui.headline`; до первого ответа отображается заглушка «Arena AutoCache».
+  EN: The status headline comes from `summary_json.ui.headline`; before the first update it falls back to “Arena AutoCache”.
+- RU: Цвет заголовка показывает серьёзность (`ok` → зелёный, `warn` → янтарный, `error` → красный); при отсутствии данных сохраняются цвета ComfyUI.
+  EN: Header colors match the severity (`ok` → green, `warn` → amber, `error` → red); while idle the default ComfyUI palette is preserved.
+- RU: Полосы прогресса отображают аудит, прогрев, трим и заполненность кэша (`Capacity`), используя счётчики из JSON.
+  EN: Progress bars surface audit, warmup, trim, and overall cache usage (`Capacity`) based on the reported counters.
+- RU: Блок `ui.details` выводится списком до четырёх строк, позволяя оставить краткие комментарии в отчёте.
+  EN: Up to four lines from `ui.details` are rendered, making it easy to surface inline notes from the report.
+- RU: Предупреждения `⚠` появляются при пропущенных моделях, ошибках прогрева, заметках трима и ошибках парсинга JSON.
+  EN: `⚠` warnings show up for missing models, warmup errors, trim notes, and JSON parsing issues.
+
 ## Совместимость AutoCache / AutoCache Compatibility
 
 | Старый узел / Legacy node | Новый режим / New mode | Примечание / Notes |
