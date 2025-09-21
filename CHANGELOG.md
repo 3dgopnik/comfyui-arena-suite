@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Declare setuptools metadata with explicit package listings and bundle docs/web assets into distributions so wheels ship the Arena overlay.
+- Add a CI smoke test that runs `python -m build` on Python 3.10 and 3.11 to guard packaging regressions.
 - Add Arena AutoCache web overlay extension that parses `summary_json`/`warmup_json`/`trim_json` sockets and surfaces live node status, progress bars, and warnings inside the ComfyUI graph.
 - Introduce dedicated Audit and Warmup nodes together with a companion CLI utility so users can inspect and prefill Arena caches directly from ComfyUI or automation scripts.
 - Add Arena AutoCache audit/warmup helpers with unified item spec parsing and JSON reports.

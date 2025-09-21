@@ -1,9 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "comfyui-arena-suite"
 version = "0.0.1"
 description = "ComfyUI custom nodes in a single package: Arena legacy + AutoCache + Updater"
+readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
 dependencies = []
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+    "custom_nodes.ComfyUI_Arena",
+    "custom_nodes.ComfyUI_Arena.autocache",
+    "custom_nodes.ComfyUI_Arena.legacy",
+    "custom_nodes.ComfyUI_Arena.updater",
+]
+
+[tool.setuptools.data-files]
+"web/extensions" = ["web/extensions/arena_autocache.js"]
+"docs" = ["docs/*.md"]
+"docs/en" = ["docs/en/*.md"]
+"docs/ru" = ["docs/ru/*.md"]
 
 [tool.black]
 line-length = 100

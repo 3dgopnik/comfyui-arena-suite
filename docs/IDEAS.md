@@ -36,3 +36,5 @@
 | 2024-06-01-overlay-event-monitor | Surface a debug widget listing active overlay event subscriptions and their sources | Reliability | 0.2 | proposed |
 | 2024-06-01-overlay-fallback-toggle | Expose a settings toggle to force-enable or disable the execution-event fallback for the overlay | UX | 0.2 | proposed |
 | 2024-06-02-web-fallback-selftest | Add a lightweight unit test that simulates missing global assets to confirm the package-local web fallback stays valid | Reliability | 0.2 | proposed |
+| 2024-06-05-packaging-metadata-tool | Provide a CLI helper that validates MANIFEST/pyproject consistency before release | Packaging | 0.3 | proposed |
+| 2024-06-05-build-cache-matrix | Cache `python -m build` artifacts in CI to speed up multi-version smoke checks | CI | 0.2 | proposed |
