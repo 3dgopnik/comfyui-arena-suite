@@ -43,3 +43,4 @@
 | 2024-06-07-overlay-cache-backfill | Add a dev script that repopulates missing overlay assets from packaged wheels during setup | Tooling | 0.3 | proposed |
 | 2024-06-08-locale-regression-suite | Extend localization tests to cover all Arena nodes across supported languages with snapshot assertions | Testing | 0.3 | proposed |
 | 2024-06-09-autocache-locale-addon | Explore optional community-driven language packs for Arena AutoCache nodes with external maintenance | AutoCache | 0.2 | proposed |
+| 2024-06-11-ops-mode-config-hints | Add inline docs explaining how to extend Arena Ops mode choices via config stubs for custom workflows | AutoCache | 0.3 | proposed |

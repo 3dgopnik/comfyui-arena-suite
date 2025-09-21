@@ -2340,6 +2340,16 @@ class ArenaAutoCacheDashboard:
         return (summary_json, stats_result["json"], audit_result["json"])
 
 
+ARENA_OPS_MODES: tuple[str, ...] = (
+    "audit_then_warmup",
+    "audit",
+    "warmup",
+    "trim",
+)
+
+ARENA_OPS_MODE_SET = set(ARENA_OPS_MODES)
+
+
 class ArenaAutoCacheOps:
     """RU: Комбинированные операции прогрева и очистки с отчётом."""
 
@@ -2623,12 +2633,3 @@ NODE_DISPLAY_NAME_MAPPINGS.update(
         "ArenaAutoCacheManager": t("node.manager"),
     }
 )
-ARENA_OPS_MODES: tuple[str, ...] = (
-    "audit_then_warmup",
-    "audit",
-    "warmup",
-    "trim",
-)
-
-ARENA_OPS_MODE_SET = set(ARENA_OPS_MODES)
-
