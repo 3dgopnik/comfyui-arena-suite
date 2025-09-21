@@ -1,4 +1,5 @@
 import { app } from "/scripts/app.js";
+import { api } from "/scripts/api.js";
 
 /* eslint-disable no-undef */
 const EXTENSION_NAME = "Arena.AutoCache.Overlay";
@@ -120,6 +121,7 @@ let pendingRegistrationTimer = null;
 let fallbackExecutionUnsubscribe = null;
 let fallbackExecutionGraph = null;
 let pollTimer = null;
+let apiUnsubscribe = null;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -487,6 +489,7 @@ function refreshExecutionSubscription() {
   if (!graph) {
     detachFallbackExecutionListener();
     stopPolling();
+    detachApiListener();
     return;
   }
   // Always keep an execution listener in Desktop/legacy front-ends,
@@ -500,6 +503,7 @@ function refreshExecutionSubscription() {
     fallbackExecutionGraph = graph;
   }
   startPolling();
+  attachApiListener();
 }
 
 function startPolling() {
@@ -555,6 +559,59 @@ function pollTargetNodes() {
       updateNodeFromOutputs(String(node.id), outputs);
     } catch {}
   }
+}
+
+function attachApiListener() {
+  detachApiListener();
+  if (!api || typeof api.addEventListener !== "function") {
+    return;
+  }
+  const handler = function arenaAutoCacheApiExecuted(evt) {
+    try {
+      const payload = evt?.detail || evt || null;
+      const nodeId = resolveExecutedNodeId(payload);
+      if (!nodeId) return;
+      const node = resolveNode(String(nodeId));
+      if (!isTargetNode(node)) return;
+      const outputs = normalizeExecutionOutputs(node, [payload, payload?.output, payload?.outputs, payload?.result]);
+      if (outputs && Object.keys(outputs).length > 0) {
+        updateNodeFromOutputs(String(node.id), outputs);
+      }
+      const state = ensureState(node);
+      rebuildDisplay(node, state);
+    } catch (e) {
+      try { console.debug('[Arena.AutoCache.Overlay] api.executed handler error', e); } catch {}
+    }
+  };
+  try {
+    api.addEventListener?.('executed', handler);
+    apiUnsubscribe = () => {
+      try { api.removeEventListener?.('executed', handler); } catch {}
+      apiUnsubscribe = null;
+    };
+  } catch (e) {
+    // ignore
+  }
+}
+
+function detachApiListener() {
+  if (typeof apiUnsubscribe === 'function') {
+    try { apiUnsubscribe(); } catch {}
+  }
+  apiUnsubscribe = null;
+}
+
+function resolveExecutedNodeId(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidates = [payload.node, payload.node_id, payload.nodeId, payload.id, payload.locator, payload.key];
+  for (const c of candidates) {
+    if (c == null) continue;
+    if (typeof c === 'number' || (typeof c === 'string' && c)) {
+      const parsed = parseNodeLocatorId(String(c));
+      return parsed ? parsed.localNodeId : c;
+    }
+  }
+  return null;
 }
 
 function readOutputsFromExecutionStore(node) {
