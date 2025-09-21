@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add regression tests covering Arena AutoCache audit and warmup flows.
 - Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
 - Extend the Arena AutoCache Audit node with optional `summary_json` output, runtime overrides, and multi-category extended stats plus trim execution feedback.
+- Add a snapshot-backed test to lock the Arena AutoCache summary/warmup/trim JSON payload structure.
 ### Changed
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
