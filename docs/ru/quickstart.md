@@ -26,9 +26,9 @@ description: "Установка и первичная проверка ComfyUI 
 
 ## 3. Ручная установка
 1. Клонируйте репозиторий в любую директорию: `git clone https://github.com/<your-org>/comfyui-arena-suite`.
-2. Скопируйте каталог `custom_nodes/ComfyUI_Arena` в `ComfyUI/custom_nodes/` вашей установки.
-3. Скопируйте файлы из `web/extensions/` в `ComfyUI/web/extensions/`, чтобы активировать веб-оверлей AutoCache.
-4. Перезапустите ComfyUI, чтобы ядро и фронтенд подхватили новые узлы и расширение.
+2. Перенесите весь каталог `comfyui-arena-suite` в `ComfyUI/custom_nodes/` так, чтобы путь стал `ComfyUI/custom_nodes/comfyui-arena-suite/` — фронтенд автоматически найдёт расширение в подпапке `web`.
+3. Перезапустите ComfyUI, чтобы ядро и фронтенд подхватили новые узлы и расширение.
+4. После запуска откройте DevTools браузера → **Network** и убедитесь, что ресурс `extensions/arena_autocache.js` загружен без ошибок; если расширение не появляется, проверьте консоль ComfyUI и браузера.
 
 ## 4. Проверка установки
 1. После запуска ComfyUI откройте список узлов и найдите блоки с префиксом **Arena**.

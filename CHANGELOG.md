@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce `arena_bootstrap_cache.bat` to persist Arena AutoCache variables on Windows and prime the current session.
 - Add a WinForms bootstrap helper (`scripts/arena_bootstrap_cache.ps1`) for selecting the cache folder and limit on Windows.
 ### Changed
+- Auto-detect the Arena AutoCache web overlay from `ComfyUI/custom_nodes/comfyui-arena-suite/web`, eliminating manual copy steps. / **RU:** Автоматически определяем веб-оверлей Arena AutoCache из `ComfyUI/custom_nodes/comfyui-arena-suite/web`, ручное копирование больше не требуется.
 - Log legacy module import failures as warnings so the package loads without those nodes instead of aborting.
 - Launch `arena_bootstrap_cache.bat` with the WinForms helper when PowerShell is available and fall back to CLI prompts otherwise.
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrich audit and warmup payloads with `ui`/`timings` metadata and extend ops execution to cover audit, warmup, and trim modes.
 - Record audit summaries with explicit action feedback so UI widgets can confirm applied settings and trims.
 ### Docs
+- Document the auto-discovery path and DevTools verification flow for the Arena web overlay in the README, RU/EN guides, and node reference. / **RU:** Задокументирован путь автообнаружения и проверка через DevTools для веб-оверлея Arena в README, русских/английских гайдах и справочнике узлов.
 - Document the AutoCache web overlay behaviour and coverage in the bilingual node reference.
 - Add step-by-step AutoCache web overlay enablement instructions with UI indicator summaries across the README and RU/EN docs.
 - Surface an AutoCache TL;DR environment setup block in the README, node README, and RU/EN overview docs.
