@@ -19,10 +19,10 @@ The suite ships with the `web/extensions/arena_autocache.js` front-end extension
 
 ### Enablement
 
-1. **Install the repository as a whole.** ComfyUI Manager clones everything into `custom_nodes/comfyui-arena-suite`. For manual installs copy the files under `web/extensions/` into `ComfyUI/web/extensions/`.
+1. **Install the repository as a whole.** ComfyUI Manager keeps it under `ComfyUI/custom_nodes/comfyui-arena-suite/`, and the front-end automatically discovers the overlay inside that package's `web` folder.
 2. **Restart ComfyUI.** Reload the interface after installing or updating so the `arena_autocache.js` extension initializes.
 3. **Add a supported node.** Drop `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps`, or `ArenaAutoCacheAudit` and run the workflow so they emit JSON on the relevant sockets.
-4. **Watch the highlights.** Once data is available the header, progress bars, and tooltips refresh automatically.
+4. **Verify the load and highlights.** Open DevTools → **Network** in your browser to confirm `extensions/arena_autocache.js` loads without errors, and review the ComfyUI/browser consoles for any warnings. Once data is available the header, progress bars, and tooltips refresh automatically.
 
 ### UI cues and hints
 

@@ -28,17 +28,17 @@ Single-package for all **Arena** nodes.
 
 **RU — Шаги подключения**
 
-1. Убедитесь, что репозиторий установлен целиком: через ComfyUI Manager он попадает в `custom_nodes/comfyui-arena-suite`, при ручной установке дополнительно скопируйте содержимое `web/extensions/` в каталог `ComfyUI/web/extensions/`.
+1. Убедитесь, что репозиторий установлен целиком: через ComfyUI Manager он попадает в `ComfyUI/custom_nodes/comfyui-arena-suite/`, и фронтенд автоматически ищет расширение в каталоге `web` этого пакета.
 2. Перезапустите ComfyUI после установки или обновления, чтобы фронтенд подхватил расширение `arena_autocache.js`.
 3. Добавьте на Canvas узел `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps` или `ArenaAutoCacheAudit` и выполните граф, чтобы получить данные в сокетах `summary_json`/`warmup_json`/`trim_json`.
-4. Как только узел вернёт JSON, заголовок и подписи обновятся автоматически: появятся подсветка, полосы прогресса и всплывающие подсказки.
+4. Откройте DevTools браузера → **Network** и проверьте, что ресурс `extensions/arena_autocache.js` загружен без ошибок; при проблемах ищите сообщения в консоли ComfyUI или браузера. После появления JSON заголовок и подписи обновятся автоматически: подсветка, полосы прогресса и подсказки станут активными.
 
 **EN — Enablement steps**
 
-1. Ensure the repository is installed as-is: ComfyUI Manager keeps it under `custom_nodes/comfyui-arena-suite`; for manual installs also copy the `web/extensions/` contents into `ComfyUI/web/extensions/`.
+1. Ensure the repository is installed as-is: ComfyUI Manager keeps it under `ComfyUI/custom_nodes/comfyui-arena-suite/`, and the front-end automatically looks for the overlay assets inside that package's `web` folder.
 2. Restart ComfyUI after installing or updating so the front-end loads the `arena_autocache.js` extension.
 3. Drop an `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps`, or `ArenaAutoCacheAudit` node onto the canvas and run the workflow to emit `summary_json` / `warmup_json` / `trim_json` payloads.
-4. Once the node outputs JSON, the overlay refreshes automatically with header highlights, progress bars, and inline hints.
+4. Open DevTools → **Network** and confirm the `extensions/arena_autocache.js` asset loads without errors; if something fails, check the ComfyUI or browser consoles. Once the node outputs JSON, the overlay refreshes automatically with header highlights, progress bars, and inline hints.
 
 **Интерфейс и подсказки / UI cues and hints**
 
