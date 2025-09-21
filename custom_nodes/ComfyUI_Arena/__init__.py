@@ -11,10 +11,22 @@ from __future__ import annotations
 from pathlib import Path
 from types import ModuleType
 
+
+def _resolve_web_directory() -> str:
+    """RU: ищем реальный каталог веб-ресурсов расширения."""
+
+    arena_root = Path(__file__).resolve()
+    for parent in arena_root.parents:
+        candidate = parent / "web"
+        if (candidate / "extensions" / "arena_autocache.js").exists():
+            return str(candidate)
+    # RU: если нужный каталог не найден, вернём прежний путь рядом с пакетом
+    return str(arena_root.parent.parent / "web")
+
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
-WEB_DIRECTORY = str(Path(__file__).resolve().parent.parent / "web")
+WEB_DIRECTORY = _resolve_web_directory()
 
 _SUBMODULES: list[ModuleType] = []
 

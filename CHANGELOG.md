@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Dashboard/Ops coverage with compatibility table, status-line examples, and benchmarking guidance in the AutoCache README.
 - Document the new dashboard/ops nodes and timing fields in the bilingual node references.
 ### Fixed
+- Point AutoCache web assets discovery at the repository-level `web` directory so the overlay loads without manual symlinks.
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.
 - Retry cache population after clearing stale `.copying` locks so the cache path is reused on the next request.
