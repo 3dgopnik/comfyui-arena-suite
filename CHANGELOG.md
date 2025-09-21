@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce `arena_bootstrap_cache.bat` to persist Arena AutoCache variables on Windows and prime the current session.
 - Add a WinForms bootstrap helper (`scripts/arena_bootstrap_cache.ps1`) for selecting the cache folder and limit on Windows.
 ### Changed
+- Log legacy module import failures as warnings so the package loads without those nodes instead of aborting.
 - Launch `arena_bootstrap_cache.bat` with the WinForms helper when PowerShell is available and fall back to CLI prompts otherwise.
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.

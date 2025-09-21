@@ -11,6 +11,8 @@ description: "Reference for the ComfyUI Arena Suite nodes and socket layout."
 
 This page lists all Arena nodes shipped with the package, their purpose and socket signatures. Socket names match the ComfyUI interface.
 
+> **Note.** If the `legacy` module cannot be imported (for example due to missing dependencies), ComfyUI loads the package without those nodes and logs `[Arena] legacy disabled: …` as a warning. The remaining Arena subsystems keep working normally.
+
 ## AutoCache web overlay
 
 The suite ships with the `web/extensions/arena_autocache.js` front-end extension, which automatically hooks into ComfyUI and listens to the `summary_json`/`warmup_json`/`trim_json` sockets.

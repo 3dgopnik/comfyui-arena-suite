@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import ModuleType
 
@@ -30,9 +31,14 @@ WEB_DIRECTORY = _resolve_web_directory()
 
 _SUBMODULES: list[ModuleType] = []
 
-from . import legacy as _legacy  # RU: импортирует обязательные ноды
+_LOGGER = logging.getLogger(__name__)
 
-_SUBMODULES.append(_legacy)
+try:
+    from . import legacy as _legacy  # RU: импортирует обязательные ноды
+except Exception as e:  # noqa: BLE001
+    _LOGGER.warning("[Arena] legacy disabled: %s", e)
+else:
+    _SUBMODULES.append(_legacy)
 
 # RU: Попробуем подгрузить WIP-модули, но не упадём, если их нет
 try:  # RU: автокэш (необязателен)
