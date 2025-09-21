@@ -22,7 +22,7 @@ def _resolve_web_directory() -> str:
         if (candidate / "extensions" / "arena_autocache.js").exists():
             return str(candidate)
     # RU: если нужный каталог не найден, вернём прежний путь рядом с пакетом
-    return str(arena_root.parent.parent / "web")
+    return str(arena_root.parent / "web")
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}

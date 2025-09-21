@@ -35,3 +35,4 @@
 | 2024-05-29-overlay-loader-telemetry | Capture overlay load path (ESM vs fallback) and expose it in a debug panel for quicker troubleshooting | Reliability | 0.2 | proposed |
 | 2024-06-01-overlay-event-monitor | Surface a debug widget listing active overlay event subscriptions and their sources | Reliability | 0.2 | proposed |
 | 2024-06-01-overlay-fallback-toggle | Expose a settings toggle to force-enable or disable the execution-event fallback for the overlay | UX | 0.2 | proposed |
+| 2024-06-02-web-fallback-selftest | Add a lightweight unit test that simulates missing global assets to confirm the package-local web fallback stays valid | Reliability | 0.2 | proposed |
