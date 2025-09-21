@@ -17,3 +17,4 @@
 | 2024-05-15-ui-payload-examples | Publish curated summary_json/warmup_json/trim_json samples in the docs for integrators | Docs | 0.3 | proposed |
 | 2024-05-16-overlay-idle-animation | Add a subtle fade transition when the AutoCache overlay returns to the idle palette to emphasize recovery | UX | 0.2 | proposed |
 | 2024-05-18-web-assets-check | Add an integration check that ensures the Arena web overlay assets are discoverable after installation | Testing | 0.3 | proposed |
+| 2024-05-20-cache-env-ui | Provide a tiny Windows tray helper that toggles ARENA_CACHE_* variables and updates the current session | Tooling | 0.3 | proposed |
