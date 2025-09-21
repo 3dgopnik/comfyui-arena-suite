@@ -41,3 +41,4 @@
 | 2024-06-06-overlay-asset-selfheal | Provide an optional CLI fixer that downloads missing Arena web assets when the warning is detected | Reliability | 0.3 | proposed |
 | 2024-06-07-overlay-pytest-fixture | Provide a shared pytest plugin that validates Arena overlay assets before integration tests | Testing | 0.2 | proposed |
 | 2024-06-07-overlay-cache-backfill | Add a dev script that repopulates missing overlay assets from packaged wheels during setup | Tooling | 0.3 | proposed |
+| 2024-06-08-locale-regression-suite | Extend localization tests to cover all Arena nodes across supported languages with snapshot assertions | Testing | 0.3 | proposed |
