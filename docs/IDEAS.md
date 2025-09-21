@@ -32,3 +32,4 @@
 | 2024-05-26-overlay-console-bundle | Emit a startup console summary of overlay discovery and any asset load errors for quicker troubleshooting | Reliability | 0.3 | proposed |
 | 2024-05-27-overlay-idle-prefill | Provide configurable defaults for idle overlay messaging to highlight node mode or category context | UX | 0.3 | proposed |
 | 2024-05-28-overlay-ready-indicator | Surface a small status hint when the AutoCache overlay registers late so operators know the UI is still initialising | UX | 0.3 | proposed |
+| 2024-05-29-overlay-loader-telemetry | Capture overlay load path (ESM vs fallback) and expose it in a debug panel for quicker troubleshooting | Reliability | 0.2 | proposed |

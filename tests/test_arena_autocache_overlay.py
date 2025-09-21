@@ -24,6 +24,8 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
 
             const sourcePath = process.argv[1];
             const source = fs.readFileSync(sourcePath, 'utf8');
+            const importLine = 'import { app } from "/scripts/app.js";';
+            const patched = source.replace(importLine, 'const app = globalThis.app;');
 
             const extensionHolder = { value: null };
             const sandbox = { console };
@@ -35,9 +37,10 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
             sandbox.globalThis = sandbox;
             sandbox.window = sandbox;
             sandbox.global = sandbox;
+            sandbox.self = sandbox;
 
             vm.createContext(sandbox);
-            vm.runInContext(source, sandbox, { filename: sourcePath });
+            vm.runInContext(patched, sandbox, { filename: sourcePath });
 
             if (!extensionHolder.value) {
               throw new Error('Extension not registered');
@@ -98,7 +101,8 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
             text=True,
         )
 
-        payload = json.loads(completed.stdout.strip())
+        output_lines = [line for line in completed.stdout.splitlines() if line.strip()]
+        payload = json.loads(output_lines[-1])
 
         self.assertTrue(payload["decorated"])
         self.assertGreaterEqual(payload["dirtyCalls"], 1)
@@ -113,6 +117,8 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
 
             const sourcePath = process.argv[1];
             const source = fs.readFileSync(sourcePath, 'utf8');
+            const importLine = 'import { app } from "/scripts/app.js";';
+            const patched = source.replace(importLine, 'const app = globalThis.app;');
 
             const extensionHolder = { value: null, calls: 0 };
 
@@ -122,9 +128,10 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
             sandbox.globalThis = sandbox;
             sandbox.window = sandbox;
             sandbox.global = sandbox;
+            sandbox.self = sandbox;
 
             vm.createContext(sandbox);
-            vm.runInContext(source, sandbox, { filename: sourcePath });
+            vm.runInContext(patched, sandbox, { filename: sourcePath });
 
             sandbox.setTimeout(() => {
               sandbox.app = {
@@ -151,7 +158,8 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
             text=True,
         )
 
-        payload = json.loads(completed.stdout.strip())
+        output_lines = [line for line in completed.stdout.splitlines() if line.strip()]
+        payload = json.loads(output_lines[-1])
 
         self.assertTrue(payload["registered"])
         self.assertEqual(payload["calls"], 1)
