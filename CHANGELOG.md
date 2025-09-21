@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Arena AutoCache dashboard and ops nodes with mode selection, benchmarking toggles, and dedicated smoke tests.
 - Extend the Arena AutoCache Audit node with optional `summary_json` output, runtime overrides, and multi-category extended stats plus trim execution feedback.
 - Add a snapshot-backed test to lock the Arena AutoCache summary/warmup/trim JSON payload structure.
+- Introduce `arena_bootstrap_cache.bat` to persist Arena AutoCache variables on Windows and prime the current session.
 ### Changed
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
@@ -42,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refresh README and bilingual docs to mention the 🅰️-prefixed display names for AutoCache and legacy tiles nodes.
 - Add Dashboard/Ops coverage with compatibility table, status-line examples, and benchmarking guidance in the AutoCache README.
 - Document the new dashboard/ops nodes and timing fields in the bilingual node references.
+- Clarify Windows cache bootstrap vs. session overrides in the quickstart/config guides (RU/EN).
 ### Fixed
 
 - Normalize AutoCache overlay output aliases so localized socket names update the summary, warmup, and trim panels consistently.
