@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop execution store fallback: when `getOutputData()` returns nothing, the overlay now attempts to read outputs from the Desktop `executionStore` (supports Map/object containers and locator ids like `subgraph:localId`).
 - Subscribe to `api.executed` events (via `/scripts/api.js`) and update overlay directly from execution payloads; improves reliability across Desktop frontends.
 - Arena AutoCache overlay tests now skip when the web asset bundle is missing, preventing false negatives on minimal installations.
+- Legacy preview bridge now reuses cached identifiers for repeated node/file pairs so duplicate entries no longer accumulate.
 
 ### Added
 - Declare setuptools metadata with explicit package listings and bundle docs/web assets into distributions so wheels ship the Arena overlay.
