@@ -38,7 +38,7 @@ Acceptance Criteria
 ### v0.4.0 — Benchmarks & UI Observability
 Deliverables
 - Benchmark I/O throughput and cache hit‑rate; publish results and tuning tips.
-- UI nodes rendering cache/updater status inside ComfyUI.
+- (Deferred) Re‑introduce lightweight UI overlay for AutoCache with robust Desktop compatibility (no reliance on unstable events; graceful fallbacks).
 - Guidance for exporting metrics to external dashboards.
 
 Acceptance Criteria
@@ -57,4 +57,3 @@ Acceptance Criteria
 ### Long‑Term (Beyond v0.3.0)
 - Explore benchmarks and UI enhancements once foundations stabilize.
 - Evaluate backlog items (e.g., multi‑instance cache coordination).
-

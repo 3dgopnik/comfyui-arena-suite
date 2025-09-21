@@ -9,10 +9,8 @@ description: "Common issues and fixes for Arena Suite."
 
 # Common issues
 
-## Web overlay not loading
-- Ensure `web/extensions/arena_autocache.js` exists.
-- Check DevTools → Network for successful load.
-- Check ComfyUI/browser consoles for errors.
+## Web overlay
+The experimental UI overlay has been removed by default to prioritize stability on ComfyUI Desktop. Refer to the roadmap for future plans.
 
 ## Environment variables ignored
 - Set variables before launching ComfyUI.

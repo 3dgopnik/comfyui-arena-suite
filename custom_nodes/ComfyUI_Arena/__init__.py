@@ -33,7 +33,9 @@ def _resolve_web_directory() -> str | None:
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
-WEB_DIRECTORY = _resolve_web_directory()
+# UI overlay removed for now. Keep WEB_DIRECTORY unset to avoid loading assets.
+WEB_DIRECTORY = None
+_LOGGER.info("[Arena] web overlay disabled (removed); see ROADMAP for future plans")
 
 _SUBMODULES: list[ModuleType] = []
 
@@ -67,4 +69,3 @@ __all__ = [
     "NODE_DISPLAY_NAME_MAPPINGS",
     "WEB_DIRECTORY",
 ]
-

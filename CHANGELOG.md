@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Removed
+- Arena AutoCache web overlay (experimental) has been removed from the package by default to prioritize stability across ComfyUI Desktop builds. The feature is tracked for a future iteration in the roadmap.
 ### Fixed
 - Arena AutoCache UI overlay: added Russian output aliases to correctly detect `summary_json`/`warmup_json`/`trim_json` when RU labels are used (e.g., «Сводка (JSON)», «Прогрев (JSON)», «Очистка (JSON)»).
 - Overlay now also listens to execution events (`onAfterExecute`/`onExecuted`) in addition to `onNodeOutputsUpdated` to support ComfyUI Desktop builds that don't emit the outputs-updated callback consistently.

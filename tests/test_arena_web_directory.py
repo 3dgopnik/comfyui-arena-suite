@@ -1,4 +1,4 @@
-"""Ensure the Arena web assets are resolved from the repository root."""
+"""Web overlay is currently disabled; WEB_DIRECTORY should be None."""
 
 from __future__ import annotations
 
@@ -23,25 +23,14 @@ def _import_fresh_arena_module():
     return importlib.import_module(MODULE_NAME)
 
 
-def test_web_directory_points_to_repo_root() -> None:
-    """WEB_DIRECTORY should locate the shared web extension assets."""
+def test_web_directory_is_none() -> None:
+    """WEB_DIRECTORY should be None when overlay is disabled/removed."""
 
     module = _import_fresh_arena_module()
-    web_dir = Path(module.WEB_DIRECTORY)
-
-    expected = PROJECT_ROOT / "web"
-    assert web_dir.resolve() == expected.resolve()
-    assert (web_dir / "extensions" / "arena_autocache.js").exists()
-
-
-def test_web_directory_missing_assets_logs_warning_and_returns_none(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """If the overlay assets are missing the module should not expose a fake path."""
-
-    with mock.patch("pathlib.Path.exists", return_value=False):
-        with caplog.at_level("WARNING", logger="custom_nodes.ComfyUI_Arena"):
-            module = _import_fresh_arena_module()
-
     assert getattr(module, "WEB_DIRECTORY", None) is None
-    assert "web assets missing" in caplog.text
+
+
+def test_module_exports_without_web_dir() -> None:
+    module = _import_fresh_arena_module()
+    assert isinstance(module.NODE_CLASS_MAPPINGS, dict)
+    assert isinstance(module.NODE_DISPLAY_NAME_MAPPINGS, dict)

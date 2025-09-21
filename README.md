@@ -20,7 +20,7 @@ RU: Набор узлов Arena: наследие (legacy), SSD‑кэширов
 - Legacy nodes — утилиты с прежними интерфейсами под `ComfyUI_Arena/legacy`.
 - AutoCache — рантайм‑патч `folder_paths` с SSD‑кэшем + узлы Config/StatsEx/Trim/Manager.
 - Audit & Warmup — проверка и прогрев кэша по спискам или workflow JSON.
-- AutoCache web overlay — фронтенд‑надстройка, загружается из `web/extensions/arena_autocache.js`.
+- (Отложено) UI‑оверлей был экспериментом и удалён по умолчанию для стабильности в ComfyUI Desktop. Возможное возвращение описано в ROADMAP.
 - Updater scaffolding — заготовки для Hugging Face/CivitAI (WIP) с управлением симлинками `current`.
 
 ## System requirements

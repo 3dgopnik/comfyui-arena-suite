@@ -21,7 +21,6 @@ packages = [
 ]
 
 [tool.setuptools.data-files]
-"web/extensions" = ["web/extensions/arena_autocache.js"]
 "docs" = ["docs/*.md"]
 "docs/en" = ["docs/en/*.md"]
 "docs/ru" = ["docs/ru/*.md"]
