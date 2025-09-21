@@ -1,6 +1,7 @@
 """RU: Единый пакет нод Arena для ComfyUI.
-- legacy: перенос существующих нод без изменений логики
-- autocache: рантайм-патч путей моделей и LRU SSD-кеш
+
+- legacy: перенос существующих нод без изменения логики
+- autocache: рантайм‑патч путей моделей и LRU SSD‑кэш
 - updater: обновление моделей с HF/CivitAI по манифесту
 
 Идентификаторы — на английском, комментарии — на русском.
@@ -37,21 +38,20 @@ WEB_DIRECTORY = _resolve_web_directory()
 _SUBMODULES: list[ModuleType] = []
 
 try:
-    from . import legacy as _legacy  # RU: импортирует обязательные ноды
+    from . import legacy as _legacy  # RU: модуль устаревших узлов (совместимость)
 except Exception as e:  # noqa: BLE001
     _LOGGER.warning("[Arena] legacy disabled: %s", e)
 else:
     _SUBMODULES.append(_legacy)
 
-# RU: Попробуем подгрузить WIP-модули, но не упадём, если их нет
-try:  # RU: автокэш (необязателен)
+try:  # RU: автокэш (в разработке?)
     from . import autocache as _autocache
 except Exception as e:  # noqa: BLE001
     print(f"[Arena] autocache disabled: {e}")
 else:
     _SUBMODULES.append(_autocache)
 
-try:  # RU: обновлятор (необязателен)
+try:  # RU: обновление моделей (в разработке?)
     from . import updater as _updater
 except Exception as e:  # noqa: BLE001
     print(f"[Arena] updater disabled: {e}")
@@ -67,3 +67,4 @@ __all__ = [
     "NODE_DISPLAY_NAME_MAPPINGS",
     "WEB_DIRECTORY",
 ]
+

@@ -1,5 +1,5 @@
 name: "Codex task"
-description: "Шаблон задачи для Codex: кратко, по делу, с тест-планом"
+description: "Техническая задача для Codex: цели, шаги, и план тестов"
 title: "Codex: <module> — <short topic> — <YYYY-MM-DD>"
 labels: ["codex", "tech-debt"]
 assignees: []
@@ -8,34 +8,35 @@ body:
     id: summary
     attributes:
       label: SUMMARY (ru)
-      description: 2–5 предложений о сути изменений/рисков
-      placeholder: "Краткое описание…"
+      description: Краткое описание проблемы/цели (2–5 предложений)
+      placeholder: "Краткое описание изменений"
     validations:
       required: true
   - type: textarea
     id: tasks
     attributes:
       label: ISSUES & TASKS (ru)
-      description: Чёткий чеклист задач
+      description: Чек‑лист конкретных действий
       value: |
-        - [ ] Задача 1
-        - [ ] Задача 2
-        - [ ] Задача 3
+        - [ ] Шаг 1
+        - [ ] Шаг 2
+        - [ ] Шаг 3
     validations:
       required: true
   - type: textarea
     id: test-plan
     attributes:
       label: TEST PLAN (ru)
-      description: Пошаговая инструкция проверки с ожидаемыми результатами
-      placeholder: "1) … 2) … 3) …"
+      description: Как проверяем результат и как откатить при проблемах
+      placeholder: "1) ... 2) ... 3) ..."
     validations:
       required: true
   - type: textarea
     id: notes
     attributes:
       label: NOTES (ru)
-      description: Ссылки, артефакты, логи (опционально)
-      placeholder: "Опционально…"
+      description: Ссылки, артефакты, мотивация (опционально)
+      placeholder: "Дополнительные заметки"
     validations:
       required: false
+

@@ -1,20 +1,25 @@
 ---
 title: "Configuration"
-description: "Placeholder for the upcoming English configuration guide."
+description: "Environment variables and AutoCache node parameters."
 ---
 
 [Overview](index.md) · [Quickstart](quickstart.md) · [CLI](cli.md) · **Configuration** · [Troubleshooting](troubleshooting.md)
 
 ---
 
-# Configuration (translation pending)
+# Environment variables
 
-The English configuration guide is not yet available. Please refer to `../ru/config.md` for detailed setup instructions.
+- `ARENA_CACHE_ROOT` — SSD cache root. Defaults:
+  - Windows: `%LOCALAPPDATA%\ArenaAutoCache`
+  - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
+- `ARENA_CACHE_ENABLE` — `1`/`0` to enable/disable the runtime patch.
+- `ARENA_CACHE_MAX_GB` — cache size limit in GiB (default `300`).
+- `ARENA_LANG` — force node language (`en`/`ru`). Defaults to `COMFYUI_LANG`.
 
-**Windows bootstrap recap:** Run `scripts/arena_bootstrap_cache.bat` to launch the WinForms helper (PowerShell required) and pick the cache directory plus GiB limit; when PowerShell is unavailable the script falls back to the CLI prompts. In both cases it writes `ARENA_CACHE_ROOT`, `ARENA_CACHE_MAX_GB`, `ARENA_CACHE_ENABLE`, and `ARENA_CACHE_VERBOSE` via `setx` and applies them to the current session.
+# AutoCache nodes
+- Config — apply/override cache settings at runtime.
+- Stats / StatsEx — cache statistics.
+- Trim — clear cache by category.
+- Manager — manage categories and paths.
+- Audit / Warmup — audit presence and pre‑fill cache from lists/JSON workflow.
 
-**Temporary overrides:** Execute `call scripts/arena_set_cache.bat <cache_dir> [enable] [verbose]` from CMD when you need session-scoped adjustments without touching the persisted user variables.
-
----
-
-[← Back: CLI](cli.md) · [Next: Troubleshooting →](troubleshooting.md)

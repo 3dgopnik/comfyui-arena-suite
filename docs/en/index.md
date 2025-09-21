@@ -1,9 +1,9 @@
 ---
 title: "Overview"
-description: "Placeholder for the upcoming English documentation."
+description: "English documentation is under preparation."
 ---
 
-**Overview** · [Quickstart](quickstart.md) · [CLI](cli.md) · [Configuration](config.md) · [Troubleshooting](troubleshooting.md) · [Nodes](nodes.md)
+Overview · [Quickstart](quickstart.md) · [CLI](cli.md) · [Configuration](config.md) · [Troubleshooting](troubleshooting.md) · [Nodes](nodes.md)
 
 ---
 
@@ -11,9 +11,9 @@ description: "Placeholder for the upcoming English documentation."
 
 > **TL;DR — AutoCache setup**
 > - Default cache root if `ARENA_CACHE_ROOT` is not set:
->   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (for example, `C:\Users\you\AppData\Local\ArenaAutoCache`)
+>   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (e.g. `C:\Users\you\AppData\Local\ArenaAutoCache`)
 >   - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
-> - Set `ARENA_CACHE_ROOT=<path>` before launching ComfyUI so the SSD patch writes to your desired location. 🅰️ Arena AutoCache nodes (Config/Stats/Trim/Manager) will show the active directory.
+> - Set `ARENA_CACHE_ROOT=<path>` before launching ComfyUI so the SSD patch writes to your desired location. Arena AutoCache nodes (Config/Stats/Trim/Manager) will show the active directory.
 > - Restart ComfyUI after changing environment variables.
 > - Examples:
 >   - PowerShell: `$env:ARENA_CACHE_ROOT='D:\ComfyCache'; python main.py`
@@ -23,10 +23,9 @@ description: "Placeholder for the upcoming English documentation."
 
 For socket-level guidance refer to the [Nodes](nodes.md) reference.
 
-
-
-The English documentation is under preparation. Please refer to the Russian guide in `../ru/index.md` for the most up-to-date instructions.
+The English documentation is under preparation. Please refer to the Russian guide in `../ru/index.md` for up-to-date instructions.
 
 ---
 
 [Next: Quickstart →](quickstart.md)
+
