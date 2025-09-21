@@ -70,14 +70,16 @@ def is_execution_model_version_supported():
 def set_previewbridge_image(node_id, file, item):
     global pb_id_cnt
 
-    if file in preview_bridge_image_name_map:
-        pb_id = preview_bridge_image_name_map[node_id, file]
-        if pb_id.startswith(f"${node_id}"):
-            return pb_id
+    key = (node_id, file)
+
+    if key in preview_bridge_image_name_map:
+        cached_pb_id, cached_item = preview_bridge_image_name_map[key]
+        preview_bridge_image_id_map.setdefault(cached_pb_id, (file, cached_item))
+        return cached_pb_id
 
     pb_id = f"${node_id}-{pb_id_cnt}"
     preview_bridge_image_id_map[pb_id] = (file, item)
-    preview_bridge_image_name_map[node_id, file] = (pb_id, item)
+    preview_bridge_image_name_map[key] = (pb_id, item)
     pb_id_cnt += 1
 
     return pb_id
