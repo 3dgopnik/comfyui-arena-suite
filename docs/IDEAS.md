@@ -33,3 +33,5 @@
 | 2024-05-27-overlay-idle-prefill | Provide configurable defaults for idle overlay messaging to highlight node mode or category context | UX | 0.3 | proposed |
 | 2024-05-28-overlay-ready-indicator | Surface a small status hint when the AutoCache overlay registers late so operators know the UI is still initialising | UX | 0.3 | proposed |
 | 2024-05-29-overlay-loader-telemetry | Capture overlay load path (ESM vs fallback) and expose it in a debug panel for quicker troubleshooting | Reliability | 0.2 | proposed |
+| 2024-06-01-overlay-event-monitor | Surface a debug widget listing active overlay event subscriptions and their sources | Reliability | 0.2 | proposed |
+| 2024-06-01-overlay-fallback-toggle | Expose a settings toggle to force-enable or disable the execution-event fallback for the overlay | UX | 0.2 | proposed |

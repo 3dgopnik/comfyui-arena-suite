@@ -93,6 +93,8 @@ let graphApp = null;
 const REGISTRATION_RETRY_DELAY_MS = 50;
 let extensionRegistered = false;
 let pendingRegistrationTimer = null;
+let fallbackExecutionUnsubscribe = null;
+let fallbackExecutionGraph = null;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -199,6 +201,284 @@ function scheduleDraw(node) {
   const graph = node?.graph || graphApp?.graph;
   if (graph && typeof graph.setDirtyCanvas === "function") {
     graph.setDirtyCanvas(true, true);
+  }
+}
+
+function hasOutputsUpdatedCallback(graph) {
+  if (!graph) {
+    return false;
+  }
+  const callback = graph.onNodeOutputsUpdated;
+  if (!callback) {
+    return false;
+  }
+  if (typeof callback === "function") {
+    return true;
+  }
+  const potentialMethods = [
+    "add",
+    "addListener",
+    "addEventListener",
+    "connect",
+    "subscribe",
+  ];
+  return potentialMethods.some((method) => typeof callback?.[method] === "function");
+}
+
+function detachFallbackExecutionListener() {
+  if (typeof fallbackExecutionUnsubscribe === "function") {
+    try {
+      fallbackExecutionUnsubscribe();
+    } catch (detachError) {
+      console.error("Arena.AutoCache.Overlay failed to detach execution listener:", detachError);
+    }
+  }
+  fallbackExecutionUnsubscribe = null;
+  fallbackExecutionGraph = null;
+}
+
+function attachListenerToEventSource(context, key, source, handler) {
+  if (!source) {
+    return null;
+  }
+
+  const methodPairs = [
+    ["addEventListener", "removeEventListener"],
+    ["addListener", "removeListener"],
+    ["add", "remove"],
+    ["on", "off"],
+    ["connect", "disconnect"],
+    ["attach", "detach"],
+    ["subscribe", "unsubscribe"],
+  ];
+
+  for (const [attachName, detachName] of methodPairs) {
+    if (typeof source[attachName] === "function" && typeof source[detachName] === "function") {
+      try {
+        source[attachName](handler);
+      } catch (attachError) {
+        console.error(`Arena.AutoCache.Overlay failed to attach ${String(key)} listener:`, attachError);
+        return null;
+      }
+      return () => {
+        try {
+          source[detachName](handler);
+        } catch (detachError) {
+          console.error(`Arena.AutoCache.Overlay failed to detach ${String(key)} listener:`, detachError);
+        }
+      };
+    }
+  }
+
+  if (typeof source === "function" && context && key) {
+    const original = source;
+    const wrapper = function arenaAutoCacheWrappedExecutionListener() {
+      let result;
+      if (typeof original === "function") {
+        result = original.apply(this, arguments);
+      }
+      try {
+        handler.apply(this, arguments);
+      } catch (handlerError) {
+        console.error("Arena.AutoCache.Overlay execution listener failed:", handlerError);
+      }
+      return result;
+    };
+    context[key] = wrapper;
+    return () => {
+      if (context[key] === wrapper) {
+        context[key] = original;
+      }
+    };
+  }
+
+  return null;
+}
+
+function convertCandidateToOutputs(node, candidate) {
+  if (candidate == null) {
+    return null;
+  }
+
+  if (candidate instanceof Map) {
+    const mapResult = {};
+    let mapHasEntries = false;
+    for (const [key, value] of candidate.entries()) {
+      if (key == null || value === undefined) {
+        continue;
+      }
+      mapResult[String(key)] = value;
+      mapHasEntries = true;
+    }
+    return mapHasEntries ? mapResult : null;
+  }
+
+  if (Array.isArray(candidate)) {
+    const outputs = Array.isArray(node?.outputs) ? node.outputs : [];
+    const result = {};
+    let hasEntries = false;
+    for (let index = 0; index < candidate.length; index += 1) {
+      const slot = outputs[index];
+      const key = typeof slot?.name === "string" ? slot.name : typeof slot?.label === "string" ? slot.label : String(index);
+      if (!key) {
+        continue;
+      }
+      const value = candidate[index];
+      if (value === undefined) {
+        continue;
+      }
+      result[key] = value;
+      hasEntries = true;
+    }
+    return hasEntries ? result : null;
+  }
+
+  if (typeof candidate === "object") {
+    if (Array.isArray(candidate.outputData)) {
+      const nested = convertCandidateToOutputs(node, candidate.outputData);
+      if (nested) {
+        return nested;
+      }
+    }
+    if (candidate.outputs && typeof candidate.outputs === "object") {
+      const nested = convertCandidateToOutputs(node, candidate.outputs);
+      if (nested) {
+        return nested;
+      }
+    }
+    const result = {};
+    let hasEntries = false;
+    for (const [key, value] of Object.entries(candidate)) {
+      if (value === undefined) {
+        continue;
+      }
+      result[key] = value;
+      hasEntries = true;
+    }
+    return hasEntries ? result : null;
+  }
+
+  return null;
+}
+
+function buildOutputsFromNode(node) {
+  if (!node || !Array.isArray(node.outputs) || node.outputs.length === 0) {
+    return null;
+  }
+  const result = {};
+  let hasEntries = false;
+  for (let index = 0; index < node.outputs.length; index += 1) {
+    const slot = node.outputs[index];
+    const key = typeof slot?.name === "string" ? slot.name : typeof slot?.label === "string" ? slot.label : String(index);
+    if (!key) {
+      continue;
+    }
+    let value;
+    if (typeof node.getOutputData === "function") {
+      try {
+        value = node.getOutputData(index);
+      } catch (readError) {
+        value = undefined;
+      }
+    } else if (slot && Object.prototype.hasOwnProperty.call(slot, "value")) {
+      value = slot.value;
+    }
+    if (value === undefined) {
+      continue;
+    }
+    result[key] = value;
+    hasEntries = true;
+  }
+  return hasEntries ? result : null;
+}
+
+function normalizeExecutionOutputs(node, candidates) {
+  if (!node || !Array.isArray(candidates)) {
+    return null;
+  }
+  for (const candidate of candidates) {
+    const normalized = convertCandidateToOutputs(node, candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return buildOutputsFromNode(node);
+}
+
+function extractExecutionPayload(graph, args) {
+  if (!graph) {
+    return { node: null, candidates: [] };
+  }
+  if (!Array.isArray(args) || args.length === 0) {
+    return { node: null, candidates: [] };
+  }
+  const [first, ...rest] = args;
+  if (first && typeof first === "object" && typeof first.id !== "undefined") {
+    return { node: first, candidates: rest };
+  }
+  if ((typeof first === "number" || typeof first === "string") && typeof graph.getNodeById === "function") {
+    const node = graph.getNodeById(first) || null;
+    return { node, candidates: rest };
+  }
+  return { node: null, candidates: args };
+}
+
+function subscribeToExecutionEvents(graph) {
+  if (!graph) {
+    return null;
+  }
+
+  const handler = function arenaAutoCacheExecutionListener() {
+    const { node, candidates } = extractExecutionPayload(graph, Array.from(arguments));
+    if (!node || !isTargetNode(node)) {
+      return;
+    }
+    const outputs = normalizeExecutionOutputs(node, candidates);
+    if (outputs && Object.keys(outputs).length > 0) {
+      try {
+        updateNodeFromOutputs(String(node.id), outputs);
+      } catch (updateError) {
+        console.error("Arena.AutoCache.Overlay execution update failed:", updateError);
+      }
+    }
+    const state = ensureState(node);
+    rebuildDisplay(node, state);
+  };
+
+  const candidateKeys = ["onExecuted", "onNodeExecuted", "onAfterExecute"];
+  for (const key of candidateKeys) {
+    const source = graph[key];
+    const unsubscribe = attachListenerToEventSource(graph, key, source, handler);
+    if (typeof unsubscribe === "function") {
+      return unsubscribe;
+    }
+  }
+
+  return null;
+}
+
+function refreshExecutionSubscription() {
+  const graph = graphApp?.graph || null;
+  if (!graph) {
+    detachFallbackExecutionListener();
+    return;
+  }
+  if (hasOutputsUpdatedCallback(graph)) {
+    if (typeof fallbackExecutionUnsubscribe === "function") {
+      detachFallbackExecutionListener();
+    }
+    fallbackExecutionGraph = graph;
+    return;
+  }
+  if (fallbackExecutionGraph !== graph) {
+    detachFallbackExecutionListener();
+  }
+  if (typeof fallbackExecutionUnsubscribe !== "function") {
+    const unsubscribe = subscribeToExecutionEvents(graph);
+    if (typeof unsubscribe === "function") {
+      fallbackExecutionUnsubscribe = unsubscribe;
+      fallbackExecutionGraph = graph;
+    }
   }
 }
 
@@ -702,9 +982,11 @@ const extensionDefinition = {
   name: EXTENSION_NAME,
   init(appInstance) {
     graphApp = appInstance;
+    refreshExecutionSubscription();
     bootstrapExistingNodes();
   },
   loadedGraph() {
+    refreshExecutionSubscription();
     bootstrapExistingNodes();
   },
   nodeCreated(node) {

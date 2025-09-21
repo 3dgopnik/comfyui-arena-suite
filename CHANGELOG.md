@@ -71,3 +71,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid recording cache hits when `.copying` locks disappear but the cached file is missing by falling back to the source path.
 - Reset the AutoCache overlay palette and messages when node outputs are cleared so idle nodes no longer show stale highlights.
 - Defer AutoCache web overlay registration until the ComfyUI app exposes `registerExtension`, preventing crashes when `app` is not ready yet. / **RU:** Откладываем регистрацию веб-оверлея AutoCache до появления метода `registerExtension` в ComfyUI, чтобы скрипт не падал при поздней инициализации `app`.
+- Keep the AutoCache overlay in sync on Desktop builds by falling back to node execution events when `graph.onNodeOutputsUpdated` is unavailable. / **RU:** Поддерживаем актуальность оверлея AutoCache в Desktop-сборках, подписываясь на выполнение узлов при отсутствии `graph.onNodeOutputsUpdated`.
