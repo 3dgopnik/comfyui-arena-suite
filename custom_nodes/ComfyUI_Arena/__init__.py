@@ -1,27 +1,42 @@
-"""RU: Единый пакет нод Arena для ComfyUI.
-- legacy: перенос существующих нод без изменений логики
-- autocache: рантайм-патч путей моделей и LRU SSD-кеш
-- updater: обновление моделей с HF/CivitAI по манифесту
+"""ComfyUI Arena Suite package initializer.
 
-Идентификаторы — на английском, комментарии — на русском.
+Registers node classes from submodules and exposes WEB_DIRECTORY so the
+front‑end can load web extensions (e.g., arena_autocache.js).
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import ModuleType
 
 
-def _resolve_web_directory() -> str:
-    """RU: ищем реальный каталог веб-ресурсов расширения."""
+_LOGGER = logging.getLogger(__name__)
 
-    arena_root = Path(__file__).resolve()
-    for parent in arena_root.parents:
+
+def _resolve_web_directory() -> str | None:
+    """Locate the actual web assets directory for the extension.
+
+    Looks upwards from this file for a `web/extensions/arena_autocache.js`.
+    Falls back to a module‑local `web/` directory if present.
+    """
+
+    module_file = Path(__file__).resolve()
+    for parent in module_file.parents:
         candidate = parent / "web"
         if (candidate / "extensions" / "arena_autocache.js").exists():
             return str(candidate)
-    # RU: если нужный каталог не найден, вернём прежний путь рядом с пакетом
-    return str(arena_root.parent / "web")
+
+    # Fallback to module‑local web directory if it exists
+    module_web = module_file.parent / "web"
+    if (module_web / "extensions" / "arena_autocache.js").exists():
+        return str(module_web)
+
+    _LOGGER.warning(
+        "[Arena] web assets not found: expected web/extensions/arena_autocache.js"
+    )
+    return None
+
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
@@ -30,20 +45,25 @@ WEB_DIRECTORY = _resolve_web_directory()
 
 _SUBMODULES: list[ModuleType] = []
 
-from . import legacy as _legacy  # RU: импортирует обязательные ноды
+# Legacy is optional and may require external packs; do not block package import
+try:
+    from . import legacy as _legacy  # type: ignore
+except Exception as e:  # noqa: BLE001
+    _LOGGER.warning("[Arena] legacy disabled: %s", e)
+else:
+    _SUBMODULES.append(_legacy)
 
-_SUBMODULES.append(_legacy)
-
-# RU: Попробуем подгрузить WIP-модули, но не упадём, если их нет
-try:  # RU: автокэш (необязателен)
-    from . import autocache as _autocache
+# Autocache subpackage
+try:
+    from . import autocache as _autocache  # type: ignore
 except Exception as e:  # noqa: BLE001
     print(f"[Arena] autocache disabled: {e}")
 else:
     _SUBMODULES.append(_autocache)
 
-try:  # RU: обновлятор (необязателен)
-    from . import updater as _updater
+# Updater subpackage
+try:
+    from . import updater as _updater  # type: ignore
 except Exception as e:  # noqa: BLE001
     print(f"[Arena] updater disabled: {e}")
 else:
@@ -60,3 +80,4 @@ __all__ = [
     "NODE_DISPLAY_NAME_MAPPINGS",
     "WEB_DIRECTORY",
 ]
+
