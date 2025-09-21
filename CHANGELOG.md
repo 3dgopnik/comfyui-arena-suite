@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Normalize AutoCache overlay output aliases so localized socket names update the summary, warmup, and trim panels consistently.
 - Ensure `arena_set_cache.bat` leaves `ARENA_CACHE_*` variables available in the parent CMD session for subsequent launches.
+- Trigger the Arena cache folder picker when no path is supplied and quote the PowerShell command so the selection populates `CACHE_ROOT` correctly.
 - Point AutoCache web assets discovery at the repository-level `web` directory so the overlay loads without manual symlinks.
 - Aggregate Arena node and display mapping exports at the package root so ComfyUI can discover nodes even when optional submodules fail to import.
 - Allow cache lookups to fall back to source files when `.copying` locks persist and clean up stale locks before retrying copies.

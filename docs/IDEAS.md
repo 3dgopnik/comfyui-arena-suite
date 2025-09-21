@@ -20,4 +20,4 @@
 | 2024-05-19-overlay-alias-config | Allow the overlay alias list to be extended from a user config file for niche deployments | UX | 0.3 | proposed |
 | 2024-05-19-overlay-i18n-tooling | Build a CLI helper that replays localized payload samples against the overlay to guard translations | Testing | 0.4 | proposed |
 | 2024-05-20-cache-env-ui | Provide a tiny Windows tray helper that toggles ARENA_CACHE_* variables and updates the current session | Tooling | 0.3 | proposed |
-
+| 2024-05-21-cache-selector-cli | Offer a cross-platform CLI prompt for selecting the Arena cache directory when Windows dialogs are unavailable | Tooling | 0.2 | proposed |

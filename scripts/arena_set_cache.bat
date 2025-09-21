@@ -7,6 +7,9 @@ if "%~1"=="/?" goto :help
 
 set "CACHE_ROOT=%~1"
 if not defined CACHE_ROOT (
+    call :select_cache_root
+)
+if not defined CACHE_ROOT (
     if defined ARENA_CACHE_ROOT (
         set "CACHE_ROOT=%ARENA_CACHE_ROOT%"
     ) else if defined LOCALAPPDATA (
@@ -39,6 +42,16 @@ if defined ARENA_CACHE_VERBOSE echo   ARENA_CACHE_VERBOSE=%ARENA_CACHE_VERBOSE%
 echo.
 echo Use "call %SCRIPT_NAME% <cache_dir> [enable] [verbose]" from CMD to persist variables.
 
+goto :eof
+
+:select_cache_root
+for /f "delims=" %%I in ('powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.Description = 'Select Arena AutoCache folder'; $dialog.ShowNewFolderButton = $true; if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }"') do (
+    set "CACHE_ROOT=%%~I"
+    goto :select_cache_root_done
+)
+goto :eof
+
+:select_cache_root_done
 goto :eof
 
 :help
