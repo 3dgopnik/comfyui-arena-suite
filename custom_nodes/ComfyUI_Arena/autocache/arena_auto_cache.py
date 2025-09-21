@@ -45,6 +45,7 @@ I18N: dict[str, dict[str, str]] = {
         "input.do_trim": "Trim category after applying config",
         "input.do_warmup": "Warmup cache for listed items",
         "input.mode": "Operation mode",
+        "input.mode.tooltip": "Select operation mode: audit_then_warmup, audit, warmup, or trim",
         "input.benchmark_samples": "Benchmark sample count",
         "input.benchmark_read_mb": "Benchmark read limit (MiB)",
         "input.do_trim_now": "Trim category immediately",
@@ -92,6 +93,7 @@ I18N: dict[str, dict[str, str]] = {
         "input.do_trim": "Очистить категорию после применения настроек",
         "input.do_warmup": "Прогреть кэш для перечисленных элементов",
         "input.mode": "Режим операции",
+        "input.mode.tooltip": "Выберите режим: audit_then_warmup, audit, warmup или trim",
         "input.benchmark_samples": "Количество файлов для замера скорости",
         "input.benchmark_read_mb": "Лимит чтения для бенчмарка (МиБ)",
         "input.do_trim_now": "Очистить категорию немедленно",
@@ -2449,9 +2451,10 @@ class ArenaAutoCacheOps:
                 "mode": (
                     "STRING",
                     {
-                        "default": "audit_then_warmup",
+                        "default": ARENA_OPS_MODES[0],
+                        "choices": ARENA_OPS_MODES,
                         "description": t("input.mode"),
-                        "tooltip": t("input.mode"),
+                        "tooltip": t("input.mode.tooltip"),
                     },
                 ),
             },
@@ -2503,7 +2506,9 @@ class ArenaAutoCacheOps:
         benchmark_samples: int = 0,
         benchmark_read_mb: float = 0.0,
     ):
-        normalized_mode = (mode or "audit_then_warmup").strip().lower()
+        normalized_mode = str(mode or ARENA_OPS_MODES[0]).strip().lower()
+        if normalized_mode not in ARENA_OPS_MODE_SET:
+            normalized_mode = ARENA_OPS_MODES[0]
         run_audit = normalized_mode in {"audit", "audit_then_warmup"}
         run_warmup = normalized_mode in {"warmup", "audit_then_warmup"}
         run_trim = normalized_mode == "trim"
@@ -2684,3 +2689,12 @@ NODE_DISPLAY_NAME_MAPPINGS.update(
         "ArenaAutoCacheManager": t("node.manager"),
     }
 )
+ARENA_OPS_MODES: tuple[str, ...] = (
+    "audit_then_warmup",
+    "audit",
+    "warmup",
+    "trim",
+)
+
+ARENA_OPS_MODE_SET = set(ARENA_OPS_MODES)
+
