@@ -23,3 +23,4 @@
 | 2024-05-21-cache-selector-cli | Offer a cross-platform CLI prompt for selecting the Arena cache directory when Windows dialogs are unavailable | Tooling | 0.2 | proposed |
 | 2024-05-22-bootstrap-healthcheck | Add a smoke test script that validates persisted ARENA_CACHE_* variables and disk free space after running the bootstrap | Tooling | 0.3 | proposed |
 | 2024-05-22-bootstrap-gui | Build a small WinUI front-end for managing Arena cache limits and toggles beyond the initial bootstrap | UX | 0.4 | proposed |
+| 2024-05-23-bootstrap-escape-check | Add automated validation that cache paths ending with backslashes are safely escaped before persistence | Tooling | 0.2 | proposed |

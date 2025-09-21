@@ -136,12 +136,17 @@ exit /b 0
 set "VAR_NAME=%~1"
 set "VAR_VALUE=%~2"
 if not defined VAR_NAME exit /b 0
-setx "%VAR_NAME%" "%VAR_VALUE%" >nul
+set "VAR_ESCAPED=%VAR_VALUE%"
+if defined VAR_ESCAPED (
+    if "%VAR_ESCAPED:~-1%"=="\" set "VAR_ESCAPED=%VAR_ESCAPED%\"
+)
+setx "%VAR_NAME%" "%VAR_ESCAPED%" >nul
 if errorlevel 1 (
     echo Failed to persist %VAR_NAME% with SETX.
 ) else (
     set "PERSIST_SUCCESS=1"
 )
+if defined VAR_NAME set "%VAR_NAME%=%VAR_VALUE%"
 exit /b 0
 
 :help
