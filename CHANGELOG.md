@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a WinForms bootstrap helper (`scripts/arena_bootstrap_cache.ps1`) for selecting the cache folder and limit on Windows.
 ### Changed
 - Auto-detect the Arena AutoCache web overlay from `ComfyUI/custom_nodes/comfyui-arena-suite/web`, eliminating manual copy steps. / **RU:** Автоматически определяем веб-оверлей Arena AutoCache из `ComfyUI/custom_nodes/comfyui-arena-suite/web`, ручное копирование больше не требуется.
+- Register the Arena AutoCache web overlay as an ESM module while falling back to the legacy global `app` lookup and logging a clear status message. / **RU:** Регистрируем веб-оверлей Arena AutoCache как ESM-модуль с откатом к глобальному `app` и понятным сообщением о статусе загрузки.
 - Log legacy module import failures as warnings so the package loads without those nodes instead of aborting.
 - Launch `arena_bootstrap_cache.bat` with the WinForms helper when PowerShell is available and fall back to CLI prompts otherwise.
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
