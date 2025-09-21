@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extend the Arena AutoCache Audit node with optional `summary_json` output, runtime overrides, and multi-category extended stats plus trim execution feedback.
 - Add a snapshot-backed test to lock the Arena AutoCache summary/warmup/trim JSON payload structure.
 - Introduce `arena_bootstrap_cache.bat` to persist Arena AutoCache variables on Windows and prime the current session.
+- Add a WinForms bootstrap helper (`scripts/arena_bootstrap_cache.ps1`) for selecting the cache folder and limit on Windows.
 ### Changed
+- Launch `arena_bootstrap_cache.bat` with the WinForms helper when PowerShell is available and fall back to CLI prompts otherwise.
 - Expose Arena AutoCache Ops mode selection as a validated dropdown and document the available options.
 - Prepare the AutoCache Audit node to accept extended stats and settings override arguments without altering current behaviour.
 - Extend Arena AutoCache index metadata to expose byte totals and the last HIT/MISS/TRIM/COPY event.
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document the new dashboard/ops nodes and timing fields in the bilingual node references.
 - Clarify Windows cache bootstrap vs. session overrides in the quickstart/config guides (RU/EN).
 ### Fixed
+- Prevent the bootstrap CLI fallback from hitting `Unexpected at this time` when cache paths end with a backslash or the limit prompt returns empty input.
 
 - Normalize AutoCache overlay output aliases so localized socket names update the summary, warmup, and trim panels consistently.
 - Escape trailing backslashes when persisting Windows cache variables so `setx` handles quoted paths without errors.

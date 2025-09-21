@@ -24,3 +24,5 @@
 | 2024-05-22-bootstrap-healthcheck | Add a smoke test script that validates persisted ARENA_CACHE_* variables and disk free space after running the bootstrap | Tooling | 0.3 | proposed |
 | 2024-05-22-bootstrap-gui | Build a small WinUI front-end for managing Arena cache limits and toggles beyond the initial bootstrap | UX | 0.4 | proposed |
 | 2024-05-23-bootstrap-escape-check | Add automated validation that cache paths ending with backslashes are safely escaped before persistence | Tooling | 0.2 | proposed |
+| 2024-05-24-bootstrap-status-telemetry | Collect anonymous success metrics for the WinForms bootstrap helper to guide UX polish | Tooling | 0.2 | proposed |
+| 2024-05-24-bootstrap-cli-tests | Automate CLI fallback smoke tests to verify bootstrap prompts on systems without PowerShell | Testing | 0.3 | proposed |

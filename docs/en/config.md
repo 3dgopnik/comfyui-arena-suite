@@ -11,7 +11,7 @@ description: "Placeholder for the upcoming English configuration guide."
 
 The English configuration guide is not yet available. Please refer to `../ru/config.md` for detailed setup instructions.
 
-**Windows bootstrap recap:** Run `scripts/arena_bootstrap_cache.bat` to select the cache directory and a GiB limit once; it writes `ARENA_CACHE_ROOT`, `ARENA_CACHE_MAX_GB`, `ARENA_CACHE_ENABLE`, and `ARENA_CACHE_VERBOSE` via `setx` and applies them to the current session.
+**Windows bootstrap recap:** Run `scripts/arena_bootstrap_cache.bat` to launch the WinForms helper (PowerShell required) and pick the cache directory plus GiB limit; when PowerShell is unavailable the script falls back to the CLI prompts. In both cases it writes `ARENA_CACHE_ROOT`, `ARENA_CACHE_MAX_GB`, `ARENA_CACHE_ENABLE`, and `ARENA_CACHE_VERBOSE` via `setx` and applies them to the current session.
 
 **Temporary overrides:** Execute `call scripts/arena_set_cache.bat <cache_dir> [enable] [verbose]` from CMD when you need session-scoped adjustments without touching the persisted user variables.
 
