@@ -9,126 +9,58 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable, Optional
 
-def _normalize_lang(value: str | None) -> str | None:
-    if not value:
-        return None
-    normalized = value.strip().lower()
-    if not normalized:
-        return None
-    if "_" in normalized:
-        normalized = normalized.split("_", 1)[0]
-    if "-" in normalized:
-        normalized = normalized.split("-", 1)[0]
-    return normalized or None
-
-
-_comfyui_lang = _normalize_lang(os.getenv("COMFYUI_LANG"))
-_arena_lang = _normalize_lang(os.getenv("ARENA_LANG")) or "en"
-ARENA_LANG = _comfyui_lang or _arena_lang
-
-I18N: dict[str, dict[str, str]] = {
-    "en": {
-        "node.config": "🅰️ Arena AutoCache: Config",
-        "node.stats": "🅰️ Arena AutoCache: Stats",
-        "node.statsex": "🅰️ Arena AutoCache: StatsEx",
-        "node.audit": "🅰️ Arena AutoCache Audit",
-        "node.warmup": "🅰️ Arena AutoCache Warmup",
-        "node.trim": "🅰️ Arena AutoCache: Trim",
-        "node.manager": "🅰️ Arena AutoCache: Manager",
-        "node.dashboard": "🅰️ Arena AutoCache: Dashboard",
-        "node.ops": "🅰️ Arena AutoCache: Ops",
-        "input.cache_root": "Cache root directory",
-        "input.max_size_gb": "Maximum cache size (GB)",
-        "input.enable": "Enable AutoCache",
-        "input.verbose": "Verbose logging",
-        "input.category": "Model category",
-        "input.do_trim": "Trim category after applying config",
-        "input.do_warmup": "Warmup cache for listed items",
-        "input.mode": "Operation mode",
-        "input.mode.tooltip": "Select operation mode: audit_then_warmup, audit, warmup, or trim",
-        "input.benchmark_samples": "Benchmark sample count",
-        "input.benchmark_read_mb": "Benchmark read limit (MiB)",
-        "input.do_trim_now": "Trim category immediately",
-        "input.apply_settings": "Apply cache settings overrides",
-        "input.extended_stats": "Include extended statistics block",
-        "input.settings_json": "Settings overrides JSON",
-        "input.items": "Items list (one per line)",
-        "input.workflow_json": "Workflow JSON",
-        "input.default_category": "Fallback category",
-        "output.json": "JSON",
-        "output.items": "Items",
-        "output.total_gb": "Total size (GB)",
-        "output.cache_root": "Cache root",
-        "output.session_hits": "Session hits",
-        "output.session_misses": "Session misses",
-        "output.session_trims": "Session trims",
-        "output.total": "Total",
-        "output.cached": "Cached",
-        "output.missing": "Missing",
-        "output.warmed": "Warmed",
-        "output.copied": "Copied",
-        "output.errors": "Errors",
-        "output.stats_json": "Stats JSON",
-        "output.action_json": "Action JSON",
-        "output.summary_json": "Summary JSON",
-        "output.audit_json": "Audit JSON",
-        "output.warmup_json": "Warmup JSON",
-        "output.trim_json": "Trim JSON",
-    },
-    "ru": {
-        "node.config": "🅰️ Arena AutoCache: Настройки",
-        "node.stats": "🅰️ Arena AutoCache: Статистика",
-        "node.statsex": "🅰️ Arena AutoCache: Расширенная статистика",
-        "node.audit": "🅰️ Arena AutoCache Аудит",
-        "node.warmup": "🅰️ Arena AutoCache Прогрев",
-        "node.trim": "🅰️ Arena AutoCache: Очистка",
-        "node.manager": "🅰️ Arena AutoCache: Менеджер",
-        "node.dashboard": "🅰️ Arena AutoCache: Дашборд",
-        "node.ops": "🅰️ Arena AutoCache: Операции",
-        "input.cache_root": "Корневая папка кэша",
-        "input.max_size_gb": "Максимальный размер кэша (ГБ)",
-        "input.enable": "Включить AutoCache",
-        "input.verbose": "Подробный лог",
-        "input.category": "Категория моделей",
-        "input.do_trim": "Очистить категорию после применения настроек",
-        "input.do_warmup": "Прогреть кэш для перечисленных элементов",
-        "input.mode": "Режим операции",
-        "input.mode.tooltip": "Выберите режим: audit_then_warmup, audit, warmup или trim",
-        "input.benchmark_samples": "Количество файлов для замера скорости",
-        "input.benchmark_read_mb": "Лимит чтения для бенчмарка (МиБ)",
-        "input.do_trim_now": "Очистить категорию немедленно",
-        "input.apply_settings": "Применить переопределения настроек",
-        "input.extended_stats": "Добавить расширенную статистику",
-        "input.settings_json": "JSON с переопределениями настроек",
-        "input.items": "Список элементов (по одному в строке)",
-        "input.workflow_json": "JSON рабочего процесса",
-        "input.default_category": "Категория по умолчанию",
-        "output.json": "JSON",
-        "output.items": "Элементы",
-        "output.total_gb": "Общий размер (ГБ)",
-        "output.cache_root": "Корень кэша",
-        "output.session_hits": "Попадания за сессию",
-        "output.session_misses": "Промахи за сессию",
-        "output.session_trims": "Очистки за сессию",
-        "output.total": "Всего",
-        "output.cached": "В кэше",
-        "output.missing": "Отсутствует",
-        "output.warmed": "Прогрето",
-        "output.copied": "Скопировано",
-        "output.errors": "Ошибки",
-        "output.stats_json": "JSON со статистикой",
-        "output.action_json": "JSON действий",
-        "output.summary_json": "JSON сводки",
-        "output.audit_json": "JSON аудита",
-        "output.warmup_json": "JSON прогрева",
-        "output.trim_json": "JSON очистки",
-    },
+LABELS: dict[str, str] = {
+    "node.config": "🅰️ Arena AutoCache: Config",
+    "node.stats": "🅰️ Arena AutoCache: Stats",
+    "node.statsex": "🅰️ Arena AutoCache: StatsEx",
+    "node.audit": "🅰️ Arena AutoCache Audit",
+    "node.warmup": "🅰️ Arena AutoCache Warmup",
+    "node.trim": "🅰️ Arena AutoCache: Trim",
+    "node.manager": "🅰️ Arena AutoCache: Manager",
+    "node.dashboard": "🅰️ Arena AutoCache: Dashboard",
+    "node.ops": "🅰️ Arena AutoCache: Ops",
+    "input.cache_root": "Cache root directory",
+    "input.max_size_gb": "Maximum cache size (GB)",
+    "input.enable": "Enable AutoCache",
+    "input.verbose": "Verbose logging",
+    "input.category": "Model category",
+    "input.do_trim": "Trim category after applying config",
+    "input.do_warmup": "Warmup cache for listed items",
+    "input.mode": "Operation mode",
+    "input.mode.tooltip": "Select operation mode: audit_then_warmup, audit, warmup, or trim",
+    "input.benchmark_samples": "Benchmark sample count",
+    "input.benchmark_read_mb": "Benchmark read limit (MiB)",
+    "input.do_trim_now": "Trim category immediately",
+    "input.apply_settings": "Apply cache settings overrides",
+    "input.extended_stats": "Include extended statistics block",
+    "input.settings_json": "Settings overrides JSON",
+    "input.items": "Items list (one per line)",
+    "input.workflow_json": "Workflow JSON",
+    "input.default_category": "Fallback category",
+    "output.json": "JSON",
+    "output.items": "Items",
+    "output.total_gb": "Total size (GB)",
+    "output.cache_root": "Cache root",
+    "output.session_hits": "Session hits",
+    "output.session_misses": "Session misses",
+    "output.session_trims": "Session trims",
+    "output.total": "Total",
+    "output.cached": "Cached",
+    "output.missing": "Missing",
+    "output.warmed": "Warmed",
+    "output.copied": "Copied",
+    "output.errors": "Errors",
+    "output.stats_json": "Stats JSON",
+    "output.action_json": "Action JSON",
+    "output.summary_json": "Summary JSON",
+    "output.audit_json": "Audit JSON",
+    "output.warmup_json": "Warmup JSON",
+    "output.trim_json": "Trim JSON",
 }
 
+
 def t(key: str) -> str:
-    base = I18N.get("en", {})
-    lang_map = I18N.get(ARENA_LANG, base)
-    return lang_map.get(key, base.get(key, key))
+    return LABELS.get(key, key)
 
 _STALE_LOCK_SECONDS = 60
 

@@ -14,9 +14,9 @@ description: "Environment variables and AutoCache node parameters."
   - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
 - `ARENA_CACHE_ENABLE` — `1`/`0` to enable/disable the runtime patch.
 - `ARENA_CACHE_MAX_GB` — cache size limit in GiB (default `300`).
-- `ARENA_LANG` — force node language (`en`/`ru`). Defaults to `COMFYUI_LANG`.
 
 # AutoCache nodes
+- Labels, tooltips, and sockets are available in English only.
 - Config — apply/override cache settings at runtime.
 - Stats / StatsEx — cache statistics.
 - Trim — clear cache by category.
