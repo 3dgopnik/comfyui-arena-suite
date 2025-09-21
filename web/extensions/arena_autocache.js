@@ -7,6 +7,7 @@ const TARGET_CLASSES = new Set([
   "ArenaAutoCacheDashboard",
   "ArenaAutoCacheOps",
 ]);
+const POLL_INTERVAL_MS = 500; // desktop-friendly fallback
 const SOCKET_FIELDS = {
   summary_json: "summary",
   warmup_json: "warmup",
@@ -118,6 +119,7 @@ let extensionRegistered = false;
 let pendingRegistrationTimer = null;
 let fallbackExecutionUnsubscribe = null;
 let fallbackExecutionGraph = null;
+let pollTimer = null;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -484,6 +486,7 @@ function refreshExecutionSubscription() {
   const graph = graphApp?.graph || null;
   if (!graph) {
     detachFallbackExecutionListener();
+    stopPolling();
     return;
   }
   // Always keep an execution listener in Desktop/legacy front-ends,
@@ -495,6 +498,55 @@ function refreshExecutionSubscription() {
   if (typeof unsubscribe === "function") {
     fallbackExecutionUnsubscribe = unsubscribe;
     fallbackExecutionGraph = graph;
+  }
+  startPolling();
+}
+
+function startPolling() {
+  stopPolling();
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : window;
+  if (!globalScope || typeof globalScope.setInterval !== "function") {
+    return;
+  }
+  pollTimer = globalScope.setInterval(() => {
+    try {
+      pollTargetNodes();
+    } catch (pollError) {
+      // swallow errors to keep UI responsive
+    }
+  }, POLL_INTERVAL_MS);
+}
+
+function stopPolling() {
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : window;
+  if (pollTimer && globalScope && typeof globalScope.clearInterval === "function") {
+    try { globalScope.clearInterval(pollTimer); } catch {}
+  }
+  pollTimer = null;
+}
+
+function pollTargetNodes() {
+  const graph = graphApp?.graph;
+  if (!graph || !Array.isArray(graph._nodes)) {
+    return;
+  }
+  for (const node of graph._nodes) {
+    if (!isTargetNode(node)) {
+      continue;
+    }
+    const outputs = buildOutputsFromNode(node);
+    if (!outputs || Object.keys(outputs).length === 0) {
+      continue;
+    }
+    let hash = null;
+    try { hash = JSON.stringify(outputs); } catch {}
+    if (hash && node.__arenaAutoCacheLastPollHash === hash) {
+      continue;
+    }
+    node.__arenaAutoCacheLastPollHash = hash;
+    try {
+      updateNodeFromOutputs(String(node.id), outputs);
+    } catch {}
   }
 }
 
