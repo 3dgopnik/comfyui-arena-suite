@@ -984,10 +984,12 @@ const extensionDefinition = {
     graphApp = appInstance;
     refreshExecutionSubscription();
     bootstrapExistingNodes();
+    try { console.info('[Arena.AutoCache.Overlay] init'); } catch {}
   },
   loadedGraph() {
     refreshExecutionSubscription();
     bootstrapExistingNodes();
+    try { console.info('[Arena.AutoCache.Overlay] loadedGraph'); } catch {}
   },
   nodeCreated(node) {
     if (!isTargetNode(node)) {
@@ -996,6 +998,7 @@ const extensionDefinition = {
     decorateNode(node);
     const state = ensureState(node);
     rebuildDisplay(node, state);
+    try { console.info('[Arena.AutoCache.Overlay] nodeCreated', node?.title || node?.type || node?.constructor?.name); } catch {}
   },
   onNodeOutputsUpdated(nodeOutputs) {
     if (!nodeOutputs || typeof nodeOutputs !== "object") {

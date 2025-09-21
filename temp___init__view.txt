@@ -1,0 +1,70 @@
+﻿"""RU: Р•РґРёРЅС‹Р№ РїР°РєРµС‚ РЅРѕРґ Arena РґР»СЏ ComfyUI.
+- legacy: РїРµСЂРµРЅРѕСЃ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… РЅРѕРґ Р±РµР· РёР·РјРµРЅРµРЅРёР№ Р»РѕРіРёРєРё
+- autocache: СЂР°РЅС‚Р°Р№Рј-РїР°С‚С‡ РїСѓС‚РµР№ РјРѕРґРµР»РµР№ Рё LRU SSD-РєРµС€
+- updater: РѕР±РЅРѕРІР»РµРЅРёРµ РјРѕРґРµР»РµР№ СЃ HF/CivitAI РїРѕ РјР°РЅРёС„РµСЃС‚Сѓ
+
+РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂС‹ вЂ” РЅР° Р°РЅРіР»РёР№СЃРєРѕРј, РєРѕРјРјРµРЅС‚Р°СЂРёРё вЂ” РЅР° СЂСѓСЃСЃРєРѕРј.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from types import ModuleType
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_web_directory() -> str | None:
+    """Locate the actual web assets directory for the extension."""
+
+    arena_root = Path(__file__).resolve()
+    for parent in arena_root.parents:
+        candidate = parent / "web"
+        if (candidate / "extensions" / "arena_autocache.js").exists():
+            return str(candidate)
+
+    _LOGGER.warning("[Arena] web assets missing: expected web/extensions/arena_autocache.js")
+    return None
+
+
+NODE_CLASS_MAPPINGS: dict[str, type] = {}
+NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
+
+WEB_DIRECTORY = _resolve_web_directory()
+
+_SUBMODULES: list[ModuleType] = []
+
+try:
+    from . import legacy as _legacy  # RU: РёРјРїРѕСЂС‚РёСЂСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РЅРѕРґС‹
+except Exception as e:  # noqa: BLE001
+    _LOGGER.warning("[Arena] legacy disabled: %s", e)
+else:
+    _SUBMODULES.append(_legacy)
+
+# RU: РџРѕРїСЂРѕР±СѓРµРј РїРѕРґРіСЂСѓР·РёС‚СЊ WIP-РјРѕРґСѓР»Рё, РЅРѕ РЅРµ СѓРїР°РґС‘Рј, РµСЃР»Рё РёС… РЅРµС‚
+try:  # RU: Р°РІС‚РѕРєСЌС€ (РЅРµРѕР±СЏР·Р°С‚РµР»РµРЅ)
+    from . import autocache as _autocache
+except Exception as e:  # noqa: BLE001
+    print(f"[Arena] autocache disabled: {e}")
+else:
+    _SUBMODULES.append(_autocache)
+
+try:  # RU: РѕР±РЅРѕРІР»СЏС‚РѕСЂ (РЅРµРѕР±СЏР·Р°С‚РµР»РµРЅ)
+    from . import updater as _updater
+except Exception as e:  # noqa: BLE001
+    print(f"[Arena] updater disabled: {e}")
+else:
+    _SUBMODULES.append(_updater)
+
+for _module in _SUBMODULES:
+    NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
+    NODE_DISPLAY_NAME_MAPPINGS.update(getattr(_module, "NODE_DISPLAY_NAME_MAPPINGS", {}))
+
+__all__ = [
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "WEB_DIRECTORY",
+]
+
