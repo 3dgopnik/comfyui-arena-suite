@@ -26,3 +26,5 @@
 | 2024-05-23-bootstrap-escape-check | Add automated validation that cache paths ending with backslashes are safely escaped before persistence | Tooling | 0.2 | proposed |
 | 2024-05-24-bootstrap-status-telemetry | Collect anonymous success metrics for the WinForms bootstrap helper to guide UX polish | Tooling | 0.2 | proposed |
 | 2024-05-24-bootstrap-cli-tests | Automate CLI fallback smoke tests to verify bootstrap prompts on systems without PowerShell | Testing | 0.3 | proposed |
+| 2024-05-25-legacy-healthcheck | Add a startup health check that reports which Arena submodules failed to load and why | Reliability | 0.3 | proposed |
+| 2024-05-25-legacy-shim | Provide lightweight shim nodes that explain legacy dependencies when the module is missing | UX | 0.2 | proposed |
