@@ -122,6 +122,16 @@
     return state;
   }
 
+  function rebuildDisplay(node, state) {
+    if (!node) {
+      return;
+    }
+    const currentState = state || ensureState(node);
+    currentState.display = buildDisplay(currentState);
+    applyPalette(node, currentState.display.severity);
+    scheduleDraw(node);
+  }
+
   function decorateNode(node) {
     if (!node || node.__arenaAutoCacheDecorated) {
       return;
@@ -667,9 +677,7 @@
     }
 
     if (dirty) {
-      state.display = buildDisplay(state);
-      applyPalette(node, state.display.severity);
-      scheduleDraw(node);
+      rebuildDisplay(node, state);
     }
   }
 
@@ -680,7 +688,8 @@
     for (const node of graphApp.graph._nodes) {
       if (isTargetNode(node)) {
         decorateNode(node);
-        ensureState(node);
+        const state = ensureState(node);
+        rebuildDisplay(node, state);
       }
     }
   }
@@ -699,7 +708,8 @@
         return;
       }
       decorateNode(node);
-      ensureState(node);
+      const state = ensureState(node);
+      rebuildDisplay(node, state);
     },
     onNodeOutputsUpdated(nodeOutputs) {
       if (!nodeOutputs || typeof nodeOutputs !== "object") {

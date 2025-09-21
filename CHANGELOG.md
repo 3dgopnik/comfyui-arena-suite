@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set the legacy tiles segmentation node category to `Arena/Tiles` for improved UI grouping.
 - Enrich audit and warmup payloads with `ui`/`timings` metadata and extend ops execution to cover audit, warmup, and trim modes.
 - Record audit summaries with explicit action feedback so UI widgets can confirm applied settings and trims.
+- Prefill Arena AutoCache overlay state on node creation so idle nodes render their headline and palette without waiting for outputs.
 ### Docs
 - Document the auto-discovery path and DevTools verification flow for the Arena web overlay in the README, RU/EN guides, and node reference. / **RU:** Задокументирован путь автообнаружения и проверка через DevTools для веб-оверлея Arena в README, русских/английских гайдах и справочнике узлов.
 - Document the AutoCache web overlay behaviour and coverage in the bilingual node reference.
