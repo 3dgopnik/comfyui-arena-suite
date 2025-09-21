@@ -104,6 +104,58 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         self.assertGreaterEqual(payload["dirtyCalls"], 1)
         self.assertEqual(payload["boxcolor"], "#2e7d32")
 
+    def test_overlay_registers_when_app_is_delayed(self) -> None:
+        extension_path = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
+        script = textwrap.dedent(
+            """
+            const fs = require('node:fs');
+            const vm = require('node:vm');
+
+            const sourcePath = process.argv[1];
+            const source = fs.readFileSync(sourcePath, 'utf8');
+
+            const extensionHolder = { value: null, calls: 0 };
+
+            const sandbox = { console };
+            sandbox.setTimeout = setTimeout;
+            sandbox.clearTimeout = clearTimeout;
+            sandbox.globalThis = sandbox;
+            sandbox.window = sandbox;
+            sandbox.global = sandbox;
+
+            vm.createContext(sandbox);
+            vm.runInContext(source, sandbox, { filename: sourcePath });
+
+            sandbox.setTimeout(() => {
+              sandbox.app = {
+                registerExtension(ext) {
+                  extensionHolder.value = ext;
+                  extensionHolder.calls += 1;
+                },
+              };
+            }, 10);
+
+            sandbox.setTimeout(() => {
+              if (!extensionHolder.value) {
+                throw new Error('Extension not registered after delay');
+              }
+              console.log(JSON.stringify({ registered: Boolean(extensionHolder.value), calls: extensionHolder.calls }));
+            }, 120);
+            """
+        ).strip()
+
+        completed = subprocess.run(
+            ["node", "-e", script, str(extension_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        payload = json.loads(completed.stdout.strip())
+
+        self.assertTrue(payload["registered"])
+        self.assertEqual(payload["calls"], 1)
+
 
 if __name__ == "__main__":  # pragma: no cover - unittest main hook
     unittest.main()

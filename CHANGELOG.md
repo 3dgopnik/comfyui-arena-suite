@@ -69,3 +69,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep cache helpers importable and return stub responses when the cache is disabled.
 - Avoid recording cache hits when `.copying` locks disappear but the cached file is missing by falling back to the source path.
 - Reset the AutoCache overlay palette and messages when node outputs are cleared so idle nodes no longer show stale highlights.
+- Defer AutoCache web overlay registration until the ComfyUI app exposes `registerExtension`, preventing crashes when `app` is not ready yet. / **RU:** Откладываем регистрацию веб-оверлея AutoCache до появления метода `registerExtension` в ComfyUI, чтобы скрипт не падал при поздней инициализации `app`.
