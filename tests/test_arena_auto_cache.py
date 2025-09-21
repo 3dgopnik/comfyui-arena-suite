@@ -158,10 +158,10 @@ class ArenaAutoCacheMissingFileTest(unittest.TestCase):
             self.assertNotIn(filename, index.get("items", {}))
 
 
-class ArenaAutoCacheLocalizationTest(unittest.TestCase):
-    """Ensure localized labels resolve correctly for Russian translations."""
+class ArenaAutoCacheLocalizationFallbackTest(unittest.TestCase):
+    """Ensure localization environment variables are ignored and English labels are used."""
 
-    def test_russian_labels_have_no_placeholders_and_match_expected_values(self) -> None:
+    def test_localization_env_vars_are_ignored(self) -> None:
         module_name = "custom_nodes.ComfyUI_Arena.autocache.arena_auto_cache"
 
         old_arena_lang = os.environ.get("ARENA_LANG")
@@ -176,27 +176,20 @@ class ArenaAutoCacheLocalizationTest(unittest.TestCase):
             self.addCleanup(lambda value=old_comfyui_lang: os.environ.__setitem__("COMFYUI_LANG", value))
         else:
             self.addCleanup(lambda: os.environ.pop("COMFYUI_LANG", None))
-        os.environ.pop("COMFYUI_LANG", None)
+        os.environ["COMFYUI_LANG"] = "de"
 
         sys.modules.pop(module_name, None)
         self.addCleanup(sys.modules.pop, module_name, None)
         arena_auto_cache = importlib.import_module(module_name)
 
-        self.assertEqual(arena_auto_cache.ARENA_LANG, "ru")
-
-        ru_labels = arena_auto_cache.I18N.get("ru", {})
-        self.assertTrue(ru_labels, "Russian translation map should be populated")
-
-        placeholders = {key: value for key, value in ru_labels.items() if "???" in value}
-        self.assertFalse(placeholders, f"Unexpected placeholder values found: {placeholders}")
-
+        self.assertFalse(hasattr(arena_auto_cache, "ARENA_LANG"))
         self.assertEqual(
             arena_auto_cache.t("node.dashboard"),
-            "🅰️ Arena AutoCache: Дашборд",
+            "🅰️ Arena AutoCache: Dashboard",
         )
         self.assertEqual(
             arena_auto_cache.t("input.cache_root"),
-            "Корневая папка кэша",
+            "Cache root directory",
         )
 
 

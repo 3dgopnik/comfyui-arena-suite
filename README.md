@@ -11,6 +11,7 @@
 >   - CMD: `set ARENA_CACHE_ROOT=D:\ComfyCache && python main.py`
 >   - bash: `ARENA_CACHE_ROOT=/mnt/ssd/cache python main.py`
 > - Переопределения: `ARENA_CACHE_ENABLE=0` временно отключает патч; `ARENA_CACHE_MAX_GB=512` ограничивает размер кэша (GiB).
+> - Узлы Arena AutoCache отображают подписи только на английском языке, переменные `ARENA_LANG`/`COMFYUI_LANG` игнорируются.
 
 Custom nodes for ComfyUI with the "Arena" prefix bundled in a single package.
 
