@@ -15,3 +15,4 @@
 | 2024-05-13-overlay-export | Provide a small export panel that copies the latest summary and progress metrics from the overlay to the clipboard | Tooling | 0.4 | proposed |
 | 2024-05-15-ui-schema-validator | Ship a lightweight CLI that diffs stored AutoCache payload schemas to catch breaking changes early | Testing | 0.4 | proposed |
 | 2024-05-15-ui-payload-examples | Publish curated summary_json/warmup_json/trim_json samples in the docs for integrators | Docs | 0.3 | proposed |
+| 2024-05-16-overlay-idle-animation | Add a subtle fade transition when the AutoCache overlay returns to the idle palette to emphasize recovery | UX | 0.2 | proposed |

@@ -544,10 +544,13 @@
         continue;
       }
       state.issues[field] = null;
-      if (parsed.data !== null) {
-        state[field] = parsed.data;
+      if (parsed.data === null) {
+        state[field] = null;
         dirty = true;
+        continue;
       }
+      state[field] = parsed.data;
+      dirty = true;
     }
 
     if (dirty) {
