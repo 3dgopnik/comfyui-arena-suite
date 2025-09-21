@@ -8,15 +8,42 @@ import textwrap
 import unittest
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _require_overlay_asset() -> Path:
+    """Resolve the Arena AutoCache overlay asset or skip the test suite."""
+
+    candidate = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
+    if candidate.is_file():
+        return candidate
+
+    try:
+        import custom_nodes.ComfyUI_Arena as arena  # type: ignore[import-not-found]
+    except Exception:  # noqa: BLE001 - best-effort discovery
+        pytest.skip("Arena AutoCache overlay asset is unavailable (default and package lookup failed)")
+
+    web_directory = getattr(arena, "WEB_DIRECTORY", None)
+    if not web_directory:
+        pytest.skip("Arena AutoCache overlay asset is unavailable (WEB_DIRECTORY not configured)")
+
+    overlay_path = Path(web_directory) / "extensions" / "arena_autocache.js"
+    if overlay_path.is_file():
+        return overlay_path
+
+    pytest.skip("Arena AutoCache overlay asset is unavailable (WEB_DIRECTORY lookup missing file)")
 
 
 class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
     """Ensure localized output labels are normalized for the overlay."""
 
+    def setUp(self) -> None:
+        self.extension_path = _require_overlay_asset()
+
     def test_overlay_updates_with_localized_output_names(self) -> None:
-        extension_path = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
         script = textwrap.dedent(
             """
             const fs = require('node:fs');
@@ -95,7 +122,7 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         ).strip()
 
         completed = subprocess.run(
-            ["node", "-e", script, str(extension_path)],
+            ["node", "-e", script, str(self.extension_path)],
             check=True,
             capture_output=True,
             text=True,
@@ -109,7 +136,6 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         self.assertEqual(payload["boxcolor"], "#2e7d32")
 
     def test_overlay_registers_when_app_is_delayed(self) -> None:
-        extension_path = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
         script = textwrap.dedent(
             """
             const fs = require('node:fs');
@@ -152,7 +178,7 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         ).strip()
 
         completed = subprocess.run(
-            ["node", "-e", script, str(extension_path)],
+            ["node", "-e", script, str(self.extension_path)],
             check=True,
             capture_output=True,
             text=True,
@@ -165,7 +191,6 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         self.assertEqual(payload["calls"], 1)
 
     def test_overlay_falls_back_to_execution_events(self) -> None:
-        extension_path = PROJECT_ROOT / "web" / "extensions" / "arena_autocache.js"
         script = textwrap.dedent(
             """
             const fs = require('node:fs');
@@ -317,7 +342,7 @@ class ArenaAutoCacheOverlayLocalizationTest(unittest.TestCase):
         ).strip()
 
         completed = subprocess.run(
-            ["node", "-e", script, str(extension_path)],
+            ["node", "-e", script, str(self.extension_path)],
             check=True,
             capture_output=True,
             text=True,
