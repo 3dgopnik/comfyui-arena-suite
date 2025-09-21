@@ -41,6 +41,7 @@ if defined ARENA_CACHE_ENABLE echo   ARENA_CACHE_ENABLE=%ARENA_CACHE_ENABLE%
 if defined ARENA_CACHE_VERBOSE echo   ARENA_CACHE_VERBOSE=%ARENA_CACHE_VERBOSE%
 echo.
 echo Use "call %SCRIPT_NAME% <cache_dir> [enable] [verbose]" from CMD to persist variables.
+echo For one-time persistent setup run "arena_bootstrap_cache.bat" instead.
 
 goto :eof
 
@@ -67,5 +68,6 @@ echo Notes:
 echo   - Invoke with CALL so the parent shell captures variables.
 echo   - The default path falls back to %%LOCALAPPDATA%%\ArenaAutoCache if no argument is provided.
 echo   - Existing ARENA_CACHE_* variables remain untouched unless new values are supplied.
+echo   - For permanent user variables run scripts\arena_bootstrap_cache.bat once after installation.
 
 goto :eof
