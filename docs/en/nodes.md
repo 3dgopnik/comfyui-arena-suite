@@ -11,6 +11,17 @@ description: "Reference for the ComfyUI Arena Suite nodes and socket layout."
 
 This page lists all Arena nodes shipped with the package, their purpose and socket signatures. Socket names match the ComfyUI interface.
 
+## AutoCache web overlay
+
+The suite ships with the `web/extensions/arena_autocache.js` front-end extension, which automatically hooks into ComfyUI and listens to the `summary_json`/`warmup_json`/`trim_json` sockets. On every update it:
+
+- parses the JSON payload and renders the status line together with `ui` details;
+- draws progress bars for audit, warmup, trim, and overall cache usage;
+- color-codes the node header according to the severity (`ok`/`warn`/`error`);
+- surfaces warnings about missing models, warmup errors, and JSON parsing problems.
+
+The overlay currently covers `ArenaAutoCacheAudit`, `ArenaAutoCacheDashboard`, and `ArenaAutoCacheOps` and requires no manual configuration—just run ComfyUI with the package installed.
+
 ## AutoCache
 
 ### 🅰️ Arena AutoCache: Config (`ArenaAutoCacheConfig`)

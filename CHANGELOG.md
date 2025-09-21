@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Add Arena AutoCache web overlay extension that parses `summary_json`/`warmup_json`/`trim_json` sockets and surfaces live node status, progress bars, and warnings inside the ComfyUI graph.
 - Introduce dedicated Audit and Warmup nodes together with a companion CLI utility so users can inspect and prefill Arena caches directly from ComfyUI or automation scripts.
 - Add Arena AutoCache audit/warmup helpers with unified item spec parsing and JSON reports.
 - Add regression tests covering Arena AutoCache audit and warmup flows.
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrich audit and warmup payloads with `ui`/`timings` metadata and extend ops execution to cover audit, warmup, and trim modes.
 - Record audit summaries with explicit action feedback so UI widgets can confirm applied settings and trims.
 ### Docs
+- Document the AutoCache web overlay behaviour and coverage in the bilingual node reference.
 - Surface an AutoCache TL;DR environment setup block in the README, node README, and RU/EN overview docs.
 - Document the new Audit node summary output, runtime overrides, and trim behaviour in the AutoCache README and RU/EN node references.
 - Expand the Audit/Warmup node docs with bilingual multiline/JSON examples and `workflow_json` guidance, and mention the nodes in the root README.
