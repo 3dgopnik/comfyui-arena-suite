@@ -18,3 +18,4 @@
 | 2024-05-16-overlay-idle-animation | Add a subtle fade transition when the AutoCache overlay returns to the idle palette to emphasize recovery | UX | 0.2 | proposed |
 | 2024-05-18-web-assets-check | Add an integration check that ensures the Arena web overlay assets are discoverable after installation | Testing | 0.3 | proposed |
 | 2024-05-20-cache-env-ui | Provide a tiny Windows tray helper that toggles ARENA_CACHE_* variables and updates the current session | Tooling | 0.3 | proposed |
+| 2024-05-21-cache-selector-cli | Offer a cross-platform CLI prompt for selecting the Arena cache directory when Windows dialogs are unavailable | Tooling | 0.2 | proposed |
