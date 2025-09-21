@@ -13,14 +13,24 @@ This page lists all Arena nodes shipped with the package, their purpose and sock
 
 ## AutoCache web overlay
 
-The suite ships with the `web/extensions/arena_autocache.js` front-end extension, which automatically hooks into ComfyUI and listens to the `summary_json`/`warmup_json`/`trim_json` sockets. On every update it:
+The suite ships with the `web/extensions/arena_autocache.js` front-end extension, which automatically hooks into ComfyUI and listens to the `summary_json`/`warmup_json`/`trim_json` sockets.
 
-- parses the JSON payload and renders the status line together with `ui` details;
-- draws progress bars for audit, warmup, trim, and overall cache usage;
-- color-codes the node header according to the severity (`ok`/`warn`/`error`);
-- surfaces warnings about missing models, warmup errors, and JSON parsing problems.
+### Enablement
 
-The overlay currently covers `ArenaAutoCacheAudit`, `ArenaAutoCacheDashboard`, and `ArenaAutoCacheOps` and requires no manual configuration—just run ComfyUI with the package installed.
+1. **Install the repository as a whole.** ComfyUI Manager clones everything into `custom_nodes/comfyui-arena-suite`. For manual installs copy the files under `web/extensions/` into `ComfyUI/web/extensions/`.
+2. **Restart ComfyUI.** Reload the interface after installing or updating so the `arena_autocache.js` extension initializes.
+3. **Add a supported node.** Drop `ArenaAutoCacheDashboard`, `ArenaAutoCacheOps`, or `ArenaAutoCacheAudit` and run the workflow so they emit JSON on the relevant sockets.
+4. **Watch the highlights.** Once data is available the header, progress bars, and tooltips refresh automatically.
+
+### UI cues and hints
+
+- **Status headline.** Pulled from `summary_json.ui.headline`; before the first update it falls back to “Arena AutoCache”.
+- **Color palette.** Headers turn green (`ok`), amber (`warn`), or red (`error`). While idle the default ComfyUI colors stay untouched.
+- **Progress bars.** Separate gauges represent audit, warmup, trim, and overall cache usage (`Capacity`) based on the JSON counters.
+- **Report details.** Up to four lines from `ui.details` are rendered beneath the status, making it easy to surface short notes.
+- **Warnings.** The `⚠` badge appears when models are missing, warmups fail, trim notes require attention, or JSON parsing fails.
+
+The overlay currently covers `ArenaAutoCacheAudit`, `ArenaAutoCacheDashboard`, and `ArenaAutoCacheOps` and requires no additional toggles.
 
 ## AutoCache
 

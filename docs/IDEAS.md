@@ -11,3 +11,5 @@
 | 2024-05-10-ops-mode-preset | Offer saved presets that preconfigure Ops node inputs for nightly trim or warmup-only runs | AutoCache | 0.5 | proposed |
 | 2024-05-12-overlay-history | Persist AutoCache overlay snapshots per execution to review audit/warmup trends | AutoCache | 0.4 | proposed |
 | 2024-05-12-overlay-settings | Expose overlay color and threshold tuning in a dedicated settings panel | UX | 0.5 | proposed |
+| 2024-05-13-overlay-toggle | Offer a per-node hotkey or checkbox to temporarily hide the AutoCache overlay during graph editing | UX | 0.3 | proposed |
+| 2024-05-13-overlay-export | Provide a small export panel that copies the latest summary and progress metrics from the overlay to the clipboard | Tooling | 0.4 | proposed |
