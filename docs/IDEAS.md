@@ -9,3 +9,5 @@
 | 2024-05-06-summary-webhook | Allow summary_json payloads to be pushed to a webhook for external monitoring dashboards | Integrations | 0.5 | proposed |
 | 2024-05-10-ops-mode-tooltips | Surface per-mode explanations directly in the Ops node UI to guide new operators | AutoCache | 0.4 | proposed |
 | 2024-05-10-ops-mode-preset | Offer saved presets that preconfigure Ops node inputs for nightly trim or warmup-only runs | AutoCache | 0.5 | proposed |
+| 2024-05-12-overlay-history | Persist AutoCache overlay snapshots per execution to review audit/warmup trends | AutoCache | 0.4 | proposed |
+| 2024-05-12-overlay-settings | Expose overlay color and threshold tuning in a dedicated settings panel | UX | 0.5 | proposed |

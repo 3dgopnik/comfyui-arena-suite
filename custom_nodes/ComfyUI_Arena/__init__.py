@@ -8,10 +8,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import ModuleType
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
+
+WEB_DIRECTORY = str(Path(__file__).resolve().parent.parent / "web")
 
 _SUBMODULES: list[ModuleType] = []
 
@@ -43,4 +46,5 @@ for _module in _SUBMODULES:
 __all__ = [
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",
+    "WEB_DIRECTORY",
 ]
