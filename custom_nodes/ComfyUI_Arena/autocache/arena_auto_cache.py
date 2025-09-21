@@ -1830,6 +1830,7 @@ class ArenaAutoCacheAudit:
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
+    OUTPUT_NODE = True
     DESCRIPTION = t("node.audit")
 
     def run(
@@ -2341,6 +2342,7 @@ class ArenaAutoCacheDashboard:
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
     DESCRIPTION = t("node.dashboard")
+    OUTPUT_NODE = True
 
     def run(
         self,
@@ -2545,6 +2547,7 @@ class ArenaAutoCacheOps:
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
     DESCRIPTION = t("node.ops")
+    OUTPUT_NODE = True
 
     def run(
         self,
