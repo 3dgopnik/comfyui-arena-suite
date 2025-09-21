@@ -11,6 +11,51 @@
     warmup_json: "warmup",
     trim_json: "trim",
   };
+  const OUTPUT_FIELD_ALIASES = {
+    summary: [
+      "summary",
+      "summary json",
+      "json summary",
+      "summary_json",
+      "json summary data",
+      "json сводка",
+      "json сводки",
+      "сводка json",
+      "сводка",
+      "сводки",
+      "итог",
+      "резюме",
+    ],
+    warmup: [
+      "warmup",
+      "warmup json",
+      "json warmup",
+      "warmup_json",
+      "warm up",
+      "prewarm",
+      "прогрев json",
+      "прогрев",
+      "разогрев",
+      "разминка",
+      "подготовка",
+    ],
+    trim: [
+      "trim",
+      "trim json",
+      "json trim",
+      "trim_json",
+      "cleanup",
+      "clean up",
+      "purge",
+      "prune",
+      "обрезка json",
+      "обрезка",
+      "очистка",
+      "удаление",
+      "срез",
+    ],
+  };
+  const OUTPUT_FIELD_LOOKUP = buildOutputFieldLookup(SOCKET_FIELDS, OUTPUT_FIELD_ALIASES);
   const PROGRESS_COLORS = {
     audit: "#42a5f5",
     warmup: "#26a69a",
@@ -141,6 +186,70 @@
     if (graph && typeof graph.setDirtyCanvas === "function") {
       graph.setDirtyCanvas(true, true);
     }
+  }
+
+  function normalizeOutputKeyVariants(name) {
+    if (typeof name !== "string") {
+      return [];
+    }
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) {
+      return [];
+    }
+    const variants = new Set([trimmed]);
+    variants.add(trimmed.replace(/[\s_\-]+/g, ""));
+    variants.add(trimmed.replace(/[^\p{L}\p{N}]+/gu, ""));
+    const withoutJson = trimmed.replace(/\bjson\b/giu, "").trim();
+    if (withoutJson) {
+      variants.add(withoutJson);
+      variants.add(withoutJson.replace(/[\s_\-]+/g, ""));
+      variants.add(withoutJson.replace(/[^\p{L}\p{N}]+/gu, ""));
+    }
+    return Array.from(variants).filter(Boolean);
+  }
+
+  function registerOutputAlias(map, alias, canonical) {
+    if (!alias || typeof alias !== "string") {
+      return;
+    }
+    for (const variant of normalizeOutputKeyVariants(alias)) {
+      if (!variant || map.has(variant)) {
+        continue;
+      }
+      map.set(variant, canonical);
+    }
+  }
+
+  function buildOutputFieldLookup(socketFields, aliasGroups) {
+    const lookup = new Map();
+    for (const [alias, canonical] of Object.entries(socketFields)) {
+      registerOutputAlias(lookup, alias, canonical);
+    }
+    for (const [canonical, aliases] of Object.entries(aliasGroups)) {
+      registerOutputAlias(lookup, canonical, canonical);
+      if (!Array.isArray(aliases)) {
+        continue;
+      }
+      for (const alias of aliases) {
+        registerOutputAlias(lookup, alias, canonical);
+      }
+    }
+    return lookup;
+  }
+
+  function resolveOutputFieldName(key) {
+    if (typeof key !== "string") {
+      return null;
+    }
+    for (const variant of normalizeOutputKeyVariants(key)) {
+      if (!variant) {
+        continue;
+      }
+      if (OUTPUT_FIELD_LOOKUP.has(variant)) {
+        return OUTPUT_FIELD_LOOKUP.get(variant);
+      }
+    }
+    return null;
   }
 
   function extractTextPayload(value) {
@@ -532,11 +641,15 @@
     const state = ensureState(node);
     let dirty = false;
 
-    for (const [socket, field] of Object.entries(SOCKET_FIELDS)) {
-      if (!(socket in outputs)) {
+    const processedFields = new Set();
+
+    for (const [socket, value] of Object.entries(outputs)) {
+      const field = resolveOutputFieldName(socket);
+      if (!field || processedFields.has(field)) {
         continue;
       }
-      const rawText = extractTextPayload(outputs[socket]);
+      processedFields.add(field);
+      const rawText = extractTextPayload(value);
       const parsed = safeParseJson(rawText);
       if (parsed.error) {
         state.issues[field] = parsed.error;
