@@ -30,3 +30,4 @@
 | 2024-05-25-legacy-shim | Provide lightweight shim nodes that explain legacy dependencies when the module is missing | UX | 0.2 | proposed |
 | 2024-05-26-overlay-devtools-hint | Add an overlay tooltip or help link that reminds operators how to verify asset loading via DevTools | UX | 0.2 | proposed |
 | 2024-05-26-overlay-console-bundle | Emit a startup console summary of overlay discovery and any asset load errors for quicker troubleshooting | Reliability | 0.3 | proposed |
+| 2024-05-27-overlay-idle-prefill | Provide configurable defaults for idle overlay messaging to highlight node mode or category context | UX | 0.3 | proposed |
