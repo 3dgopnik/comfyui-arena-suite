@@ -56,6 +56,29 @@ const OUTPUT_FIELD_ALIASES = {
     "срез",
   ],
 };
+// Inject Russian aliases at runtime to avoid encoding issues in source
+try {
+  OUTPUT_FIELD_ALIASES.summary = (OUTPUT_FIELD_ALIASES.summary || []).concat([
+    "сводка",
+    "сводка json",
+    "json сводки",
+    "сводка (json)",
+  ]);
+  OUTPUT_FIELD_ALIASES.warmup = (OUTPUT_FIELD_ALIASES.warmup || []).concat([
+    "прогрев",
+    "прогрев json",
+    "json прогрева",
+    "прогрев (json)",
+  ]);
+  OUTPUT_FIELD_ALIASES.trim = (OUTPUT_FIELD_ALIASES.trim || []).concat([
+    "очистка",
+    "очистка json",
+    "json очистки",
+    "очистка (json)",
+  ]);
+} catch (e) {
+  // no-op
+}
 const OUTPUT_FIELD_LOOKUP = buildOutputFieldLookup(SOCKET_FIELDS, OUTPUT_FIELD_ALIASES);
 const PROGRESS_COLORS = {
   audit: "#42a5f5",

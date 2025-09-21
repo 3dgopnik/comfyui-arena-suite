@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- Arena AutoCache UI overlay: added Russian output aliases to correctly detect `summary_json`/`warmup_json`/`trim_json` when RU labels are used (e.g., «Сводка (JSON)», «Прогрев (JSON)», «Очистка (JSON)»).
+
 ### Added
 - Declare setuptools metadata with explicit package listings and bundle docs/web assets into distributions so wheels ship the Arena overlay.
 - Add a CI smoke test that runs `python -m build` on Python 3.10 and 3.11 to guard packaging regressions.
