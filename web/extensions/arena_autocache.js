@@ -534,7 +534,14 @@ function pollTargetNodes() {
     if (!isTargetNode(node)) {
       continue;
     }
-    const outputs = buildOutputsFromNode(node);
+    let outputs = buildOutputsFromNode(node);
+    if (!outputs || Object.keys(outputs).length === 0) {
+      // Desktop fallback: try to read from execution store
+      const storeOutputs = readOutputsFromExecutionStore(node);
+      if (storeOutputs && Object.keys(storeOutputs).length > 0) {
+        outputs = storeOutputs;
+      }
+    }
     if (!outputs || Object.keys(outputs).length === 0) {
       continue;
     }
@@ -548,6 +555,75 @@ function pollTargetNodes() {
       updateNodeFromOutputs(String(node.id), outputs);
     } catch {}
   }
+}
+
+function readOutputsFromExecutionStore(node) {
+  const appInstance = graphApp || (typeof globalThis !== "undefined" && (globalThis.app || globalThis.ComfyApp?.app)) || null;
+  const store = appInstance?.executionStore || null;
+  if (!store) {
+    return null;
+  }
+
+  const containers = [];
+  try {
+    if (typeof store.getNodeOutputs === "function") {
+      const res = store.getNodeOutputs();
+      if (res) containers.push(res);
+    }
+  } catch {}
+  if (store.nodeOutputs) containers.push(store.nodeOutputs);
+  if (store.outputs) containers.push(store.outputs);
+
+  const localId = String(node.id);
+
+  for (const container of containers) {
+    if (!container) continue;
+    // Map-like
+    if (typeof container.get === "function" && typeof container.has === "function") {
+      // Direct key
+      let value = null;
+      if (container.has(localId)) {
+        try { value = container.get(localId); } catch {}
+      }
+      if (value == null) {
+        // Scan keys to match locator ids like "subgraph:localId"
+        try {
+          for (const [key, candidate] of container.entries()) {
+            const parsed = parseNodeLocatorId(String(key));
+            if (parsed && String(parsed.localNodeId) === localId) {
+              value = candidate;
+              break;
+            }
+          }
+        } catch {}
+      }
+      if (value != null) {
+        const normalized = convertCandidateToOutputs(node, value);
+        if (normalized) return normalized;
+      }
+    }
+    // Plain object
+    if (typeof container === "object") {
+      let value = container[localId];
+      if (value == null) {
+        try {
+          for (const [key, candidate] of Object.entries(container)) {
+            const parsed = parseNodeLocatorId(String(key));
+            if (parsed && String(parsed.localNodeId) === localId) {
+              value = candidate;
+              break;
+            }
+          }
+        } catch {}
+      }
+      if (value != null) {
+        const normalized = convertCandidateToOutputs(node, value);
+        if (normalized) return normalized;
+      }
+    }
+  }
+
+  return null;
 }
 
 function normalizeOutputKeyVariants(name) {
