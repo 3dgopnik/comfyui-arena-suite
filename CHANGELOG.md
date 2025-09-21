@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document the new dashboard/ops nodes and timing fields in the bilingual node references.
 - Clarify Windows cache bootstrap vs. session overrides in the quickstart/config guides (RU/EN).
 ### Fixed
+- Log a warning when Arena web assets are missing instead of exposing a fake `web` directory so ComfyUI skips registration.
 - Prevent the bootstrap CLI fallback from hitting `Unexpected at this time` when cache paths end with a backslash or the limit prompt returns empty input.
 
 - Normalize AutoCache overlay output aliases so localized socket names update the summary, warmup, and trim panels consistently.

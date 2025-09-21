@@ -13,16 +13,21 @@ from pathlib import Path
 from types import ModuleType
 
 
-def _resolve_web_directory() -> str:
-    """RU: ищем реальный каталог веб-ресурсов расширения."""
+_LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_web_directory() -> str | None:
+    """Locate the actual web assets directory for the extension."""
 
     arena_root = Path(__file__).resolve()
     for parent in arena_root.parents:
         candidate = parent / "web"
         if (candidate / "extensions" / "arena_autocache.js").exists():
             return str(candidate)
-    # RU: если нужный каталог не найден, вернём прежний путь рядом с пакетом
-    return str(arena_root.parent / "web")
+
+    _LOGGER.warning("[Arena] web assets missing: expected web/extensions/arena_autocache.js")
+    return None
+
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
@@ -30,8 +35,6 @@ NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 WEB_DIRECTORY = _resolve_web_directory()
 
 _SUBMODULES: list[ModuleType] = []
-
-_LOGGER = logging.getLogger(__name__)
 
 try:
     from . import legacy as _legacy  # RU: импортирует обязательные ноды
@@ -57,9 +60,7 @@ else:
 
 for _module in _SUBMODULES:
     NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
-    NODE_DISPLAY_NAME_MAPPINGS.update(
-        getattr(_module, "NODE_DISPLAY_NAME_MAPPINGS", {})
-    )
+    NODE_DISPLAY_NAME_MAPPINGS.update(getattr(_module, "NODE_DISPLAY_NAME_MAPPINGS", {}))
 
 __all__ = [
     "NODE_CLASS_MAPPINGS",
