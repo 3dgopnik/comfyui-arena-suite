@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Dashboard/Ops coverage with compatibility table, status-line examples, and benchmarking guidance in the AutoCache README.
 - Document the new dashboard/ops nodes and timing fields in the bilingual node references.
 ### Fixed
+
+- Normalize AutoCache overlay output aliases so localized socket names update the summary, warmup, and trim panels consistently.
 - Ensure `arena_set_cache.bat` leaves `ARENA_CACHE_*` variables available in the parent CMD session for subsequent launches.
 - Trigger the Arena cache folder picker when no path is supplied and quote the PowerShell command so the selection populates `CACHE_ROOT` correctly.
 - Point AutoCache web assets discovery at the repository-level `web` directory so the overlay loads without manual symlinks.

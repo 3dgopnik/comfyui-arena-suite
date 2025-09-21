@@ -29,6 +29,7 @@ The suite ships with the `web/extensions/arena_autocache.js` front-end extension
 - **Progress bars.** Separate gauges represent audit, warmup, trim, and overall cache usage (`Capacity`) based on the JSON counters.
 - **Report details.** Up to four lines from `ui.details` are rendered beneath the status, making it easy to surface short notes.
 - **Warnings.** The `⚠` badge appears when models are missing, warmups fail, trim notes require attention, or JSON parsing fails.
+- **Localization.** Socket titles in any language (`Summary JSON`, `JSON сводки`, `Прогрев JSON`, `Обрезка JSON`, etc.) are normalized to the canonical `summary`/`warmup`/`trim` fields so the overlay refreshes regardless of the UI locale.
 
 The overlay currently covers `ArenaAutoCacheAudit`, `ArenaAutoCacheDashboard`, and `ArenaAutoCacheOps` and requires no additional toggles.
 
