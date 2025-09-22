@@ -19,10 +19,15 @@ RU: Набор узлов Arena: наследие (legacy), SSD‑кэширов
 
 ## Features overview
 - Legacy nodes — утилиты с прежними интерфейсами под `ComfyUI_Arena/legacy`.
-- AutoCache — рантайм‑патч `folder_paths` с SSD‑кэшем + узлы Config/StatsEx/Trim/Manager.
+- AutoCache — рантайм‑патч `folder_paths` с SSD‑кэшем + узлы (Analyze/Ops/Config/StatsEx/Trim/Manager).
 - Audit & Warmup — проверка и прогрев кэша по спискам или workflow JSON.
 - (Отложено) UI‑оверлей был экспериментом и удалён по умолчанию для стабильности в ComfyUI Desktop. Возможное возвращение описано в ROADMAP.
 - Updater scaffolding — заготовки для Hugging Face/CivitAI (WIP) с управлением симлинками `current`.
+
+### AutoCache highlights
+- Zero‑input UX: узлы `Analyze` и `Ops` работают от активного воркфлоу (пустой `workflow_json`).
+- Fallback по `last_path`: если парсер не нашёл элементы в схеме, прогревается последняя использованная модель.
+- Группы нод: `Arena/AutoCache/Basic`, `Advanced`, `Utils`.
 
 ## System requirements
 - ComfyUI (актуальный `master`) с поддержкой кастом‑нодов.
@@ -31,10 +36,12 @@ RU: Набор узлов Arena: наследие (legacy), SSD‑кэширов
 - [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) для legacy‑узлов (добавьте `ComfyUI-Impact-Pack/modules` в `PYTHONPATH`).
 
 ## Quick usage summary
-1. Установите пакет через ComfyUI Manager → "Install from URL" (`https://github.com/<your-org>/comfyui-arena-suite`).
+1. Установите пакет через ComfyUI Manager → "Install from URL" (`https://github.com/3dgopnik/comfyui-arena-suite`).
 2. Обновите список узлов или перезапустите ComfyUI.
-3. Добавьте узел с префиксом "Arena" (например, "Arena AutoCache: Stats" / `ArenaAutoCacheStats`).
-4. Настройте SSD‑кэш и манифесты при необходимости (см. документацию ниже).
+3. Добавьте узел из группы `Arena/AutoCache/Basic`:
+   - для регулярной работы — `ArenaAutoCache Ops` (по умолчанию `audit_then_warmup`),
+   - для оценки — `ArenaAutoCache Analyze` и подключите `Summary JSON` к `Show Any`.
+4. По необходимости настройте SSD‑кэш (`ARENA_CACHE_ROOT`) и лимит (`ARENA_CACHE_MAX_GB`) — см. документацию ниже.
 
 Примечание (ComfyUI Desktop): для перезагрузки фронтенда (JS‑расширений) используйте клавишу `R` в главном окне приложения. Изменения Python‑узлов требуют полного перезапуска Desktop.
 

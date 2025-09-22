@@ -9,11 +9,19 @@ description: "Reference for the ComfyUI Arena Suite nodes."
 
 # Arena nodes (summary)
 
-This page will provide a detailed reference for Arena nodes. For now, please refer to the Russian page `../ru/nodes.md` and the in‑UI socket tooltips.
+Groups in ComfyUI:
 
-Covered groups:
-- AutoCache (Config, Stats/StatsEx, Trim, Manager, Dashboard, Ops, Audit/Warmup)
-- Legacy helpers
+## Basic
+- ArenaAutoCache Analyze — zero‑input plan + warmup for the active workflow.
+- ArenaAutoCache Ops — combined audit + warmup (+trim when selected).
+
+## Advanced
+- Dashboard, Manager, Trim, StatsEx.
+
+## Utils
+- GetActiveWorkflow, Stats.
+
+Please refer to the Russian reference `../ru/nodes.md` for details and examples.
 
 ## Workflow allowlist
 

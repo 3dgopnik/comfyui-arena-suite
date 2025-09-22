@@ -131,11 +131,10 @@ def _normalize_root(value: str | Path) -> Path:
         base = Path(value).expanduser()
     except TypeError as exc:  # pragma: no cover - defensive
         raise ValueError(f"invalid cache root: {value!r}") from exc
+    # Важно: не вызываем resolve(strict=False), чтобы не менять представление
+    # пути (например, короткие 8.3 имена на Windows). Тесты сравнивают путь
+    # байт-в-байт с тем, что было передано через переменные окружения.
     normalized = Path(os.path.normpath(str(base)))
-    try:
-        normalized = normalized.resolve(strict=False)
-    except Exception:
-        pass
     return normalized
 
 

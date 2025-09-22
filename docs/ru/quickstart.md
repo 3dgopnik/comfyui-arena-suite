@@ -22,7 +22,7 @@ description: "Как установить и начать работать с Co
 
 ## 2. Установка через ComfyUI Manager (рекомендуется)
 1. Откройте ComfyUI и вкладку Manager → Install from URL.
-2. Вставьте URL репозитория: `https://github.com/<your-org>/comfyui-arena-suite`.
+2. Вставьте URL репозитория: `https://github.com/3dgopnik/comfyui-arena-suite`.
 3. Нажмите Install, затем выполните Refresh custom nodes или перезапустите ComfyUI.
 
 ## 3. Ручная установка
@@ -31,8 +31,9 @@ description: "Как установить и начать работать с Co
 3. Перезапустите ComfyUI.
 
 ## 4. Проверка установки
-- В Canvas добавьте узел с префиксом "Arena" (например, `ArenaAutoCacheStats`).
-- Убедитесь, что грузится веб‑оверлей из `web/extensions/arena_autocache.js` (проверьте вкладку Network в DevTools).
+- В Canvas добавьте узел из группы `Arena/AutoCache/Basic`:
+  - для регулярной работы — `ArenaAutoCache Ops` (по умолчанию режим `audit_then_warmup`),
+  - для предварительной оценки — `ArenaAutoCache Analyze` и подключите его `Summary JSON` к `Show Any`.
 
 ---
 
