@@ -9,13 +9,21 @@ description: "Справка по узлам ComfyUI Arena Suite."
 
 # Узлы Arena AutoCache
 
-- ArenaAutoCacheConfig — настройка кэша в рантайме.
-- ArenaAutoCacheStats — базовая статистика по кэшу.
-- ArenaAutoCacheStatsEx — расширенная статистика.
-- ArenaAutoCacheTrim — очистка кэша по категории.
-- ArenaAutoCacheManager — операции с категориями и путями.
-- ArenaAutoCache Audit — аудит наличия моделей.
-- ArenaAutoCache Warmup — прогрев кэша по спискам/JSON.
+Разделение по группам в ComfyUI:
+
+## Basic
+- ArenaAutoCache Analyze — автоанализ текущего воркфлоу, план копирования и автопрогрев без ввода.
+- ArenaAutoCache Ops — сводный узел: аудит + прогрев (+trim при выборе режима).
+
+## Advanced
+- ArenaAutoCache Dashboard — сводка и действия (настройки, аудит, trim) в одном месте.
+- ArenaAutoCache Manager — быстрые изменения настроек и (опц.) trim.
+- ArenaAutoCache Trim — принудительная очистка категории по LRU.
+- ArenaAutoCache StatsEx — расширенная статистика с отдельными выходами.
+
+## Utils
+- ArenaGetActiveWorkflow — возвращает текущий активный воркфлоу (JSON) из PromptServer.
+- ArenaAutoCache Stats — базовая статистика по кэшу (JSON).
 
 Примечание: точный состав узлов и выводы зависят от текущей версии. Подсказки по входам/выходам смотрите в интерфейсе ComfyUI или по всплывающим подсказкам.
 
