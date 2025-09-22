@@ -48,3 +48,4 @@
 | 2024-06-15-autocache-allowlist-ui | Surface the workflow allowlist status in Audit/Warmup panels to explain why copies are skipped | AutoCache | 0.3 | proposed |
 | 2024-06-15-autocache-allowlist-cli | Provide a CLI helper that lists the current workflow allowlist for headless warmup scripts | Tooling | 0.2 | proposed |
 | 2024-06-16-copy-worker-metrics | Track background copy queue depth and durations inside StatsEx to surface slow sources | AutoCache | 0.3 | proposed |
+| 2024-06-18-promptserver-indicator | Surface a small indicator in Audit/Warmup/Ops nodes when the PromptServer workflow fallback is active | AutoCache | 0.2 | proposed |
