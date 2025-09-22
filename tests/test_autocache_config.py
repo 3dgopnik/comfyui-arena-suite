@@ -65,6 +65,12 @@ class ArenaAutoCacheConfigRuntimeTest(unittest.TestCase):
             source_file = Path(src_dir) / "model.safetensors"
             source_file.write_text("data", encoding="utf-8")
 
+            module.register_workflow_items(
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+            )
+
             result = module.set_cache_settings(root=new_root, max_gb=5, enable=True, verbose=False)
             self.assertTrue(result["ok"])
             self.assertEqual(result["effective_root"], str(Path(new_root).resolve(strict=False)))
@@ -112,6 +118,12 @@ class ArenaAutoCacheStatsExTest(unittest.TestCase):
 
             source_file = Path(src_dir) / "model.safetensors"
             source_file.write_text("payload", encoding="utf-8")
+
+            module.register_workflow_items(
+                "checkpoints:model.safetensors",
+                "",
+                "checkpoints",
+            )
 
             folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
             folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]

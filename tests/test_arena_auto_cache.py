@@ -59,6 +59,11 @@ class ArenaAutoCacheStaleLockTest(unittest.TestCase):
 
             # Speed up tests by considering locks stale almost immediately.
             arena_auto_cache._STALE_LOCK_SECONDS = 0.1
+            arena_auto_cache.register_workflow_items(
+                f"{category}:{filename}",
+                "",
+                category,
+            )
 
             cache_dir = Path(cache_root) / category
             cache_dir.mkdir(parents=True, exist_ok=True)

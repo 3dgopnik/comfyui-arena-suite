@@ -231,5 +231,94 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
             detail_line = "Warmup warmed: 1/2"
             self.assertIn(detail_line, summary["ui"]["details"])
 
+
+class ArenaAutoCacheWorkflowAllowlistTest(unittest.TestCase):
+    """Ensure cache copies are gated by the workflow allowlist."""
+
+    def setUp(self) -> None:  # noqa: D401 - unittest hook
+        self.addCleanup(sys.modules.pop, MODULE_NAME, None)
+        self.addCleanup(sys.modules.pop, "folder_paths", None)
+        self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ROOT", None))
+        self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ENABLE", None))
+        self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_VERBOSE", None))
+
+    def _prepare_module(self, cache_root: Path, source_dir: Path):
+        folder_paths = types.ModuleType("folder_paths")
+
+        def _get_folder_paths(category: str):
+            return [str(source_dir)] if category == "checkpoints" else []
+
+        def _get_full_path(category: str, name: str):
+            candidate = Path(source_dir) / name
+            return str(candidate) if candidate.exists() else None
+
+        folder_paths.get_folder_paths = _get_folder_paths  # type: ignore[attr-defined]
+        folder_paths.get_full_path = _get_full_path  # type: ignore[attr-defined]
+        sys.modules["folder_paths"] = folder_paths
+
+        os.environ["ARENA_CACHE_ROOT"] = str(cache_root)
+        os.environ["ARENA_CACHE_ENABLE"] = "1"
+        os.environ["ARENA_CACHE_VERBOSE"] = "0"
+
+        sys.modules.pop(MODULE_NAME, None)
+        module = importlib.import_module(MODULE_NAME)
+        module._STALE_LOCK_SECONDS = 0.01
+        return module
+
+    def test_get_full_path_uses_allowlist(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            source_dir = Path(src_dir)
+            cache_root = Path(cache_dir)
+
+            primary_source = source_dir / "model.safetensors"
+            secondary_source = source_dir / "secondary.safetensors"
+            primary_source.write_text("payload", encoding="utf-8")
+            secondary_source.write_text("payload", encoding="utf-8")
+
+            module = self._prepare_module(cache_root, source_dir)
+            module.reset_workflow_allowlist()
+            module.apply_folder_paths_patch()
+
+            calls: list[tuple[Path, Path, str]] = []
+            original_copy = module._copy_into_cache_lru
+
+            def _fake_copy(src: Path, dst: Path, category: str) -> None:
+                calls.append((Path(src), Path(dst), category))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text("cached", encoding="utf-8")
+
+            self.addCleanup(lambda: setattr(module, "_copy_into_cache_lru", original_copy))
+            module._copy_into_cache_lru = _fake_copy
+
+            folder_paths = sys.modules["folder_paths"]
+            before = folder_paths.get_full_path("checkpoints", "model.safetensors")
+            self.assertEqual(before, str(primary_source))
+            self.assertFalse(calls)
+
+            workflow_json = json.dumps(
+                {
+                    "nodes": [
+                        {
+                            "class_type": "CheckpointLoaderSimple",
+                            "inputs": {"ckpt_name": "model.safetensors"},
+                        }
+                    ]
+                }
+            )
+
+            module.register_workflow_items("", workflow_json, "checkpoints")
+
+            after = folder_paths.get_full_path("checkpoints", "model.safetensors")
+            self.assertEqual(len(calls), 1)
+            copy_src, copy_dst, copy_category = calls[0]
+            self.assertEqual(copy_src, primary_source)
+            self.assertEqual(copy_dst, cache_root / "checkpoints" / "model.safetensors")
+            self.assertEqual(copy_category, "checkpoints")
+            self.assertEqual(after, str(copy_dst))
+
+            another = folder_paths.get_full_path("checkpoints", "secondary.safetensors")
+            self.assertEqual(another, str(secondary_source))
+            self.assertEqual(len(calls), 1)
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

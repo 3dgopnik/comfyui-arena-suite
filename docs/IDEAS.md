@@ -45,3 +45,5 @@
 | 2024-06-09-autocache-locale-addon | Explore optional community-driven language packs for Arena AutoCache nodes with external maintenance | AutoCache | 0.2 | proposed |
 | 2024-06-11-ops-mode-config-hints | Add inline docs explaining how to extend Arena Ops mode choices via config stubs for custom workflows | AutoCache | 0.3 | proposed |
 | 2024-06-12-preview-bridge-stats | Track preview bridge cache hits and reuse metrics for debugging duplication issues | Reliability | 0.2 | proposed |
+| 2024-06-15-autocache-allowlist-ui | Surface the workflow allowlist status in Audit/Warmup panels to explain why copies are skipped | AutoCache | 0.3 | proposed |
+| 2024-06-15-autocache-allowlist-cli | Provide a CLI helper that lists the current workflow allowlist for headless warmup scripts | Tooling | 0.2 | proposed |
