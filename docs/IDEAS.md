@@ -47,3 +47,4 @@
 | 2024-06-12-preview-bridge-stats | Track preview bridge cache hits and reuse metrics for debugging duplication issues | Reliability | 0.2 | proposed |
 | 2024-06-15-autocache-allowlist-ui | Surface the workflow allowlist status in Audit/Warmup panels to explain why copies are skipped | AutoCache | 0.3 | proposed |
 | 2024-06-15-autocache-allowlist-cli | Provide a CLI helper that lists the current workflow allowlist for headless warmup scripts | Tooling | 0.2 | proposed |
+| 2024-06-16-copy-worker-metrics | Track background copy queue depth and durations inside StatsEx to surface slow sources | AutoCache | 0.3 | proposed |

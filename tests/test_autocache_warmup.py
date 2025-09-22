@@ -309,12 +309,17 @@ class ArenaAutoCacheWorkflowAllowlistTest(unittest.TestCase):
             module.register_workflow_items("", workflow_json, "checkpoints")
 
             after = folder_paths.get_full_path("checkpoints", "model.safetensors")
+            self.assertEqual(after, str(primary_source))
+
+            self.assertTrue(module.wait_for_copy_queue(timeout=5.0))
             self.assertEqual(len(calls), 1)
             copy_src, copy_dst, copy_category = calls[0]
             self.assertEqual(copy_src, primary_source)
             self.assertEqual(copy_dst, cache_root / "checkpoints" / "model.safetensors")
             self.assertEqual(copy_category, "checkpoints")
-            self.assertEqual(after, str(copy_dst))
+
+            cached = folder_paths.get_full_path("checkpoints", "model.safetensors")
+            self.assertEqual(cached, str(copy_dst))
 
             another = folder_paths.get_full_path("checkpoints", "secondary.safetensors")
             self.assertEqual(another, str(secondary_source))
