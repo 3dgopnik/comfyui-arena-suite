@@ -7,7 +7,7 @@ import threading
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 LABELS: dict[str, str] = {
     "node.config": "🅰️ Arena AutoCache: Config",
@@ -147,6 +147,8 @@ _folder_paths_patched = False
 _session_hits = 0
 _session_misses = 0
 _session_trims = 0
+
+_workflow_allowlist: set[tuple[str, str]] = set()
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
@@ -346,6 +348,47 @@ def parse_items_spec(
     walk_workflow(workflow_obj)
 
     return result
+
+
+def _set_workflow_allowlist(parsed: Sequence[dict[str, str]]) -> None:
+    """Refresh the in-memory allowlist with the provided parsed items."""
+
+    with _lock:
+        _workflow_allowlist.clear()
+        for entry in parsed:
+            category = _normalize_category_name(entry.get("category"), "checkpoints")
+            name = _normalize_item_name(entry.get("name", ""))
+            if not category or not name:
+                continue
+            _workflow_allowlist.add((category, name))
+
+
+def reset_workflow_allowlist() -> None:
+    """Clear the workflow allowlist (primarily for tests)."""
+
+    with _lock:
+        _workflow_allowlist.clear()
+
+
+def register_workflow_items(
+    items: object, workflow_json: object, default_category: str
+) -> list[dict[str, str]]:
+    """Parse the workflow inputs and refresh the allowlist."""
+
+    parsed = parse_items_spec(items, workflow_json, default_category)
+    _set_workflow_allowlist(parsed)
+    return parsed
+
+
+def _is_item_allowlisted(category: str, filename: str) -> bool:
+    """Return ``True`` when the tuple is currently allowlisted."""
+
+    normalized_category = _normalize_category_name(category, "checkpoints")
+    normalized_name = _normalize_item_name(filename)
+    if not normalized_category or not normalized_name:
+        return False
+    with _lock:
+        return (normalized_category, normalized_name) in _workflow_allowlist
 
 
 def get_settings() -> ArenaCacheSettings:
@@ -835,6 +878,10 @@ def _apply_folder_paths_patch_locked() -> None:
                     _v(f"using original path due to cache lock: {src}")
                     _update_index_meta(cache_root, "MISS", src)
                     return str(src)
+                if not _is_item_allowlisted(category, filename):
+                    _v(f"skip cache copy (allowlist): {category}:{filename}")
+                    _update_index_meta(cache_root, "MISS", str(src))
+                    return str(src)
                 with _lock:
                     if force_recopy and dst.exists():
                         try:
@@ -964,7 +1011,13 @@ def trim_category(category: str) -> dict[str, object]:
     return {"payload": data, "json": json.dumps(data, ensure_ascii=False, indent=2)}
 
 
-def audit_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
+def audit_items(
+    items: str,
+    workflow_json: str,
+    default_category: str,
+    *,
+    parsed_items: Optional[Sequence[dict[str, str]]] = None,
+) -> dict[str, object]:
     """Check source/cache availability for the provided items."""
 
     started_at = _now()
@@ -1017,7 +1070,11 @@ def audit_items(items: str, workflow_json: str, default_category: str) -> dict[s
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
         return _finalize(payload, total=0, cached=0, missing=0)
 
-    parsed = parse_items_spec(items, workflow_json, default_category)
+    if parsed_items is None:
+        parsed = register_workflow_items(items, workflow_json, default_category)
+    else:
+        parsed = list(parsed_items)
+        _set_workflow_allowlist(parsed)
     if not parsed:
         payload = {"ok": True, "items": [], "note": "no items"}
         return _finalize(payload, total=0, cached=0, missing=0)
@@ -1109,7 +1166,13 @@ def audit_items(items: str, workflow_json: str, default_category: str) -> dict[s
     )
 
 
-def warmup_items(items: str, workflow_json: str, default_category: str) -> dict[str, object]:
+def warmup_items(
+    items: str,
+    workflow_json: str,
+    default_category: str,
+    *,
+    parsed_items: Optional[Sequence[dict[str, str]]] = None,
+) -> dict[str, object]:
     """Prepare the selected cache entries by copying missing files."""
 
     started_at = _now()
@@ -1174,7 +1237,11 @@ def warmup_items(items: str, workflow_json: str, default_category: str) -> dict[
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
         return _finalize(payload, total=0, warmed=0, copied=0, missing=0, errors=0)
 
-    parsed = parse_items_spec(items, workflow_json, default_category)
+    if parsed_items is None:
+        parsed = register_workflow_items(items, workflow_json, default_category)
+    else:
+        parsed = list(parsed_items)
+        _set_workflow_allowlist(parsed)
     if not parsed:
         payload = {"ok": True, "items": [], "note": "no items"}
         return _finalize(payload, total=0, warmed=0, copied=0, missing=0, errors=0)
@@ -1724,7 +1791,7 @@ class ArenaAutoCacheAudit:
         do_trim_now: bool = False,
         settings_json: str = "",
     ):
-        parsed_items = parse_items_spec(items, workflow_json, default_category)
+        parsed_items = register_workflow_items(items, workflow_json, default_category)
         categories = sorted({entry.get("category", "") for entry in parsed_items if isinstance(entry, dict)})
         if not categories:
             categories = [_normalize_category_name(default_category, "checkpoints")]
@@ -1796,7 +1863,12 @@ class ArenaAutoCacheAudit:
                 if len(categories) > 1:
                     stats_result["cache_root"] = str(get_settings().root)
 
-        audit_result = audit_items(items, workflow_json, default_category)
+        audit_result = audit_items(
+            items,
+            workflow_json,
+            default_category,
+            parsed_items=parsed_items,
+        )
 
         trim_result: dict[str, object] | None = None
         trim_duration_total = 0.0
@@ -1981,7 +2053,13 @@ class ArenaAutoCacheWarmup:
     DESCRIPTION = t("node.warmup")
 
     def run(self, items: str, workflow_json: str, default_category: str):
-        result = warmup_items(items, workflow_json, default_category)
+        parsed_items = register_workflow_items(items, workflow_json, default_category)
+        result = warmup_items(
+            items,
+            workflow_json,
+            default_category,
+            parsed_items=parsed_items,
+        )
         return (
             result["json"],
             result["total"],
@@ -2462,9 +2540,18 @@ class ArenaAutoCacheOps:
         trim_result: dict[str, object] | None = None
         summary_timings: dict[str, dict[str, object]] = {}
 
+        parsed_items: list[dict[str, str]] | None = None
+        if run_audit or run_warmup:
+            parsed_items = register_workflow_items(items, workflow_json, default_category)
+
         if run_audit:
             audit_started = _now()
-            audit_result = audit_items(items, workflow_json, default_category)
+            audit_result = audit_items(
+                items,
+                workflow_json,
+                default_category,
+                parsed_items=parsed_items,
+            )
             audit_duration = _duration_since(audit_started)
             audit_timings = audit_result.get("timings") if isinstance(audit_result.get("timings"), dict) else {}
             if not audit_timings:
@@ -2475,7 +2562,12 @@ class ArenaAutoCacheOps:
 
         if run_warmup:
             warmup_started = _now()
-            warmup_result = warmup_items(items, workflow_json, default_category)
+            warmup_result = warmup_items(
+                items,
+                workflow_json,
+                default_category,
+                parsed_items=parsed_items,
+            )
             warmup_duration = _duration_since(warmup_started)
             warmup_timings = warmup_result.get("timings") if isinstance(warmup_result.get("timings"), dict) else {}
             if not warmup_timings:

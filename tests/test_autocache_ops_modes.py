@@ -51,8 +51,8 @@ class ArenaAutoCacheOpsModeSelectionTest(unittest.TestCase):
         stack = contextlib.ExitStack()
         cache_root = module._settings.root.as_posix()
 
-        def audit_stub(items, workflow_json, default_category):
-            log.append(("audit", items, workflow_json, default_category))
+        def audit_stub(items, workflow_json, default_category, **kwargs):
+            log.append(("audit", items, workflow_json, default_category, kwargs.get("parsed_items")))
             payload = {
                 "ok": True,
                 "items": [],
@@ -68,8 +68,8 @@ class ArenaAutoCacheOpsModeSelectionTest(unittest.TestCase):
                 "timings": {"duration_seconds": 0.1},
             }
 
-        def warmup_stub(items, workflow_json, default_category):
-            log.append(("warmup", items, workflow_json, default_category))
+        def warmup_stub(items, workflow_json, default_category, **kwargs):
+            log.append(("warmup", items, workflow_json, default_category, kwargs.get("parsed_items")))
             payload = {
                 "ok": True,
                 "note": "warmup-ok",

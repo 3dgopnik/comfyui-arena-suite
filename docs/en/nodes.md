@@ -15,3 +15,7 @@ Covered groups:
 - AutoCache (Config, Stats/StatsEx, Trim, Manager, Dashboard, Ops, Audit/Warmup)
 - Legacy helpers
 
+## Workflow allowlist
+
+Audit/Warmup/Ops nodes refresh a workflow allowlist from the `items` and `workflow_json` inputs before they run. Only the enumerated category/name pairs trigger LRU copies; direct `folder_paths.get_full_path` calls without registration return source paths without priming the cache.
+
