@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy preview bridge now reuses cached identifiers for repeated node/file pairs so duplicate entries no longer accumulate.
 
 ### Added
+- Emit AutoCache copy lifecycle events (start/complete/skip/fail) to the console and PromptServer so overlays receive updates even with verbose logging disabled. / **RU:** Добавлены события копирования (start/complete/skip/fail) в консоль и PromptServer, теперь они доступны даже при отключённом `ARENA_CACHE_VERBOSE`.
 - Declare setuptools metadata with explicit package listings and bundle docs/web assets into distributions so wheels ship the Arena overlay.
 - Add a CI smoke test that runs `python -m build` on Python 3.10 and 3.11 to guard packaging regressions.
 - Add Arena AutoCache web overlay extension that parses `summary_json`/`warmup_json`/`trim_json` sockets and surfaces live node status, progress bars, and warnings inside the ComfyUI graph.
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce `arena_bootstrap_cache.bat` to persist Arena AutoCache variables on Windows and prime the current session.
 - Add a WinForms bootstrap helper (`scripts/arena_bootstrap_cache.ps1`) for selecting the cache folder and limit on Windows.
 ### Changed
+- ArenaAutoCache Warmup/Ops nodes expose an optional `log_context` input that forwards node identifiers into copy events for overlay synchronisation. / **RU:** Узлы Warmup/Ops получили необязательный вход `log_context`, передающий ID узла в события копирования для синхронизации с оверлеем.
 - Offload Arena AutoCache LRU copies to a background queue so `get_full_path` returns immediately while the worker syncs files. / **RU:** Перенесено LRU-копирование Arena AutoCache в фоновую очередь, теперь `get_full_path` мгновенно отдаёт исходный путь, а воркер копирует файл параллельно.
 - Gate AutoCache LRU copies behind workflow allowlists so only registered category/name pairs trigger cache sync. / **RU:** Ограничено LRU-копирование AutoCache allowlist-списком из workflow, теперь синхронизация выполняется только для зарегистрированных пар категория/файл.
 - Mark ArenaAutoCache Dashboard/Ops/Audit as OUTPUT_NODE so they execute as graph targets by default (improves Desktop/queue behaviour and overlay updates).
@@ -50,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prefill Arena AutoCache overlay state on node creation so idle nodes render their headline and palette without waiting for outputs.
 - Reorder Arena Ops mode constant declarations ahead of the node class definition to clarify initialization ordering.
 ### Docs
+- Document the new copy notification channel and `log_context` behaviour in the RU/EN node references. / **RU:** Описан канал уведомлений и вход `log_context` в справочниках узлов (RU/EN).
 - Document the auto-discovery path and DevTools verification flow for the Arena web overlay in the README, RU/EN guides, and node reference. / **RU:** Задокументирован путь автообнаружения и проверка через DevTools для веб-оверлея Arena в README, русских/английских гайдах и справочнике узлов.
 - Document the AutoCache web overlay behaviour and coverage in the bilingual node reference.
 - Add step-by-step AutoCache web overlay enablement instructions with UI indicator summaries across the README and RU/EN docs.

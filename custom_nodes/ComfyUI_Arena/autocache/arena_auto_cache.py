@@ -7,7 +7,7 @@ import threading
 from dataclasses import dataclass, replace, field
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence
 from queue import Queue
 
 LABELS: dict[str, str] = {
@@ -38,6 +38,7 @@ LABELS: dict[str, str] = {
     "input.items": "Items list (one per line)",
     "input.workflow_json": "Workflow JSON",
     "input.default_category": "Fallback category",
+    "input.log_context": "Copy log context (JSON or text)",
     "output.json": "JSON",
     "output.items": "Items",
     "output.total_gb": "Total size (GB)",
@@ -68,6 +69,13 @@ _STALE_LOCK_SECONDS = 60
 _lock = threading.RLock()
 
 
+COPY_EVENT_CHANNEL = "arena/autocache/copy_event"
+COPY_EVENT_STARTED = "copy_started"
+COPY_EVENT_COMPLETED = "copy_completed"
+COPY_EVENT_SKIPPED = "copy_skipped"
+COPY_EVENT_FAILED = "copy_failed"
+
+
 @dataclass
 class _CopyJob:
     """Background copy request scheduled for the copy worker."""
@@ -77,6 +85,7 @@ class _CopyJob:
     src: Path
     dst: Path
     enqueued_at: float
+    context: dict[str, object] | None = None
     done: threading.Event = field(default_factory=threading.Event)
     success: bool | None = None
     error: Exception | None = None
@@ -587,6 +596,78 @@ def _v(msg: str) -> None:
         print(f"[ArenaAutoCache] {msg}")
 
 
+def _sanitize_metadata(context: Mapping[str, object] | None) -> dict[str, object] | None:
+    """Normalize metadata dictionaries for logging/output transports."""
+
+    if not context:
+        return None
+    sanitized: dict[str, object] = {}
+    for key, value in context.items():
+        key_str = str(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            sanitized[key_str] = value
+        else:
+            sanitized[key_str] = str(value)
+    return sanitized
+
+
+def _format_context_for_message(context: Mapping[str, object] | None) -> str:
+    """Format context mapping for human-readable logging output."""
+
+    if not context:
+        return ""
+    parts = [f"{key}={value}" for key, value in context.items()]
+    return f" ({', '.join(parts)})"
+
+
+def _notify_copy_event(
+    event: str,
+    *,
+    category: str | None = None,
+    src: Path | None = None,
+    dst: Path | None = None,
+    context: Mapping[str, object] | None = None,
+    note: str | None = None,
+) -> None:
+    """Emit copy lifecycle notifications regardless of verbose mode."""
+
+    context_payload = _sanitize_metadata(context)
+    payload: dict[str, object] = {
+        "event": event,
+        "category": category,
+        "src": str(src) if src is not None else None,
+        "dst": str(dst) if dst is not None else None,
+        "filename": dst.name if dst is not None else (src.name if src is not None else None),
+        "timestamp": time.time(),
+        "context": context_payload,
+    }
+    if note:
+        payload["note"] = note
+
+    identifier = payload.get("filename") or payload.get("dst") or payload.get("src") or category or "unknown"
+    message = f"{event.replace('_', ' ')}: {identifier}"
+    if context_payload:
+        message += _format_context_for_message(context_payload)
+    if note:
+        message += f" ({note})"
+    print(f"[ArenaAutoCache] {message}")
+
+    try:
+        from server import PromptServer  # type: ignore
+    except Exception:
+        prompt_server = None
+    else:
+        prompt_server = getattr(PromptServer, "instance", None)
+
+    if prompt_server is not None:
+        send_sync = getattr(prompt_server, "send_sync", None)
+        if callable(send_sync):
+            try:
+                send_sync(COPY_EVENT_CHANNEL, payload)
+            except Exception:
+                pass
+
+
 def set_cache_settings(
     *,
     root: str | Path | None = None,
@@ -815,7 +896,13 @@ def _update_index_touch(
     _record_session_event(op)
 
 
-def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
+def _copy_into_cache_lru(
+    src: Path,
+    dst: Path,
+    category: str,
+    *,
+    context: Mapping[str, object] | None = None,
+) -> None:
     """RU: Копирует файл в кеш с учётом LRU."""
 
     settings = get_settings()
@@ -859,12 +946,28 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
                     _v(f"failed to remove stale lock {lock_path}: {lock_err}")
         else:
             _v(f"skip copy (exists): {dst}")
+            _notify_copy_event(
+                COPY_EVENT_SKIPPED,
+                category=category,
+                src=src,
+                dst=dst,
+                context=context,
+                note="exists",
+            )
             return
 
     _lru_ensure_room(cache_root, size)
 
+    copy_successful = False
     try:
         lock_path.touch(exist_ok=True)
+        _notify_copy_event(
+            COPY_EVENT_STARTED,
+            category=category,
+            src=src,
+            dst=dst,
+            context=context,
+        )
         _v(f"copy {src} -> {dst}")
         try:
             shutil.copy2(src, dst)
@@ -876,7 +979,17 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
                     _v(f"failed to clean partial cache file {dst}: {cleanup_err}")
             msg = f"copy failed for {src} -> {dst}: {copy_err}"
             print(f"[ArenaAutoCache] {msg}")
+            _notify_copy_event(
+                COPY_EVENT_FAILED,
+                category=category,
+                src=src,
+                dst=dst,
+                context=context,
+                note=str(copy_err),
+            )
             raise
+        else:
+            copy_successful = True
     finally:
         if lock_path.exists():
             try:
@@ -891,6 +1004,15 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
 
     _update_index_touch(cache_root, dst, op="COPY")
 
+    if copy_successful:
+        _notify_copy_event(
+            COPY_EVENT_COMPLETED,
+            category=category,
+            src=src,
+            dst=dst,
+            context=context,
+        )
+
 
 def _copy_worker() -> None:
     """Process queued copy jobs sequentially in the background."""
@@ -898,7 +1020,7 @@ def _copy_worker() -> None:
     while True:
         job = _copy_queue.get()
         try:
-            _copy_into_cache_lru(job.src, job.dst, job.category)
+            _copy_into_cache_lru(job.src, job.dst, job.category, context=job.context)
         except Exception as exc:  # pragma: no cover - error path
             job.success = False
             job.error = exc
@@ -936,6 +1058,7 @@ def _enqueue_copy_job(
     dst: Path,
     *,
     force_recopy: bool,
+    context: Mapping[str, object] | None = None,
 ) -> bool:
     """Schedule a copy job unless one is already running."""
 
@@ -957,6 +1080,7 @@ def _enqueue_copy_job(
             src=Path(src),
             dst=Path(dst),
             enqueued_at=_now(),
+            context=_sanitize_metadata(context),
         )
         _copy_jobs[job_key] = job
 
@@ -1417,12 +1541,29 @@ def audit_items(
     )
 
 
+def _parse_log_context(raw: str) -> dict[str, object] | None:
+    """Convert optional JSON/text payload into a metadata mapping."""
+
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return {"text": text}
+    if isinstance(parsed, dict):
+        sanitized = _sanitize_metadata(parsed)
+        return sanitized or {}
+    return {"text": text}
+
+
 def warmup_items(
     items: str,
     workflow_json: str,
     default_category: str,
     *,
     parsed_items: Optional[Sequence[dict[str, str]]] = None,
+    copy_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Prepare the selected cache entries by copying missing files."""
 
@@ -1511,6 +1652,7 @@ def warmup_items(
         "errors": 0,
     }
     category_roots: dict[str, Path] = {}
+    copy_context_payload = _sanitize_metadata(copy_context)
 
     for entry in parsed:
         category = entry["category"]
@@ -1551,7 +1693,12 @@ def warmup_items(
 
         if not cache_path.exists():
             try:
-                _copy_into_cache_lru(source_path, cache_path, category)
+                _copy_into_cache_lru(
+                    source_path,
+                    cache_path,
+                    category,
+                    context=copy_context_payload,
+                )
             except Exception as copy_err:
                 counts["errors"] += 1
                 entry_info["status"] = "copy_failed"
@@ -2280,7 +2427,18 @@ class ArenaAutoCacheWarmup:
                         "tooltip": t("input.default_category"),
                     },
                 ),
-            }
+            },
+            "optional": {
+                "log_context": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "description": t("input.log_context"),
+                        "tooltip": t("input.log_context"),
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("STRING", "INT", "INT", "INT", "INT", "INT")
@@ -2305,14 +2463,19 @@ class ArenaAutoCacheWarmup:
     CATEGORY = "Arena/AutoCache"
     DESCRIPTION = t("node.warmup")
 
-    def run(self, items: str, workflow_json: str, default_category: str):
+    def run(self, items: str, workflow_json: str, default_category: str, log_context: str = ""):
         effective_workflow = _resolve_workflow_json(workflow_json)
         parsed_items = register_workflow_items(items, effective_workflow, default_category)
+        context: dict[str, object] = {"node": "ArenaAutoCacheWarmup"}
+        parsed_context = _parse_log_context(log_context)
+        if parsed_context:
+            context.update(parsed_context)
         result = warmup_items(
             items,
             effective_workflow,
             default_category,
             parsed_items=parsed_items,
+            copy_context=context,
         )
         return (
             result["json"],
@@ -2756,6 +2919,15 @@ class ArenaAutoCacheOps:
                         "tooltip": t("input.benchmark_read_mb"),
                     },
                 ),
+                "log_context": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "description": t("input.log_context"),
+                        "tooltip": t("input.log_context"),
+                    },
+                ),
             },
         }
 
@@ -2781,6 +2953,7 @@ class ArenaAutoCacheOps:
         mode: str,
         benchmark_samples: int = 0,
         benchmark_read_mb: float = 0.0,
+        log_context: str = "",
     ):
         normalized_mode = str(mode or ARENA_OPS_MODES[0]).strip().lower()
         if normalized_mode not in ARENA_OPS_MODE_SET:
@@ -2794,6 +2967,7 @@ class ArenaAutoCacheOps:
         warmup_result: dict[str, object] | None = None
         trim_result: dict[str, object] | None = None
         summary_timings: dict[str, dict[str, object]] = {}
+        warmup_context: dict[str, object] | None = None
 
         parsed_items: list[dict[str, str]] | None = None
         if run_audit or run_warmup:
@@ -2816,12 +2990,17 @@ class ArenaAutoCacheOps:
             summary_timings["audit"] = audit_timings
 
         if run_warmup:
+            warmup_context = {"node": "ArenaAutoCacheOps", "mode": normalized_mode}
+            parsed_context = _parse_log_context(log_context)
+            if parsed_context:
+                warmup_context.update(parsed_context)
             warmup_started = _now()
             warmup_result = warmup_items(
                 items,
                 effective_workflow,
                 default_category,
                 parsed_items=parsed_items,
+                copy_context=warmup_context,
             )
             warmup_duration = _duration_since(warmup_started)
             warmup_timings = warmup_result.get("timings") if isinstance(warmup_result.get("timings"), dict) else {}
