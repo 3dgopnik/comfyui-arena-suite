@@ -20,6 +20,8 @@ LABELS: dict[str, str] = {
     "node.manager": "🅰️ Arena AutoCache: Manager",
     "node.dashboard": "🅰️ Arena AutoCache: Dashboard",
     "node.ops": "🅰️ Arena AutoCache: Ops",
+    "node.analyze": "🅰️ Arena AutoCache: Analyze",
+    "node.get_workflow": "🅰️ Arena AutoCache: Get Active Workflow",
     "input.cache_root": "Cache root directory",
     "input.max_size_gb": "Maximum cache size (GB)",
     "input.enable": "Enable AutoCache",
@@ -520,6 +522,22 @@ def register_workflow_items(
 
     effective_workflow = _resolve_workflow_json(workflow_json)
     parsed = parse_items_spec(items, effective_workflow, default_category)
+    # Fallback: если ничего не распознано из воркфлоу, попробуем взять
+    # последний использованный путь из индекса категории, чтобы не требовать
+    # ручного ввода даже при несовместимом формате воркфлоу.
+    if not parsed:
+        try:
+            stats = collect_stats(default_category)
+            payload = stats.get("payload", {}) if isinstance(stats, dict) else {}
+            last_path = None
+            if isinstance(payload, dict):
+                last_path = payload.get("last_path")
+            if isinstance(last_path, str) and last_path.strip():
+                name = _normalize_item_name(Path(last_path).name)
+                if name:
+                    parsed = [{"category": _normalize_category_name(default_category, "checkpoints"), "name": name}]
+        except Exception:
+            pass
     _set_workflow_allowlist(parsed)
     return parsed
 
@@ -1983,7 +2001,7 @@ class ArenaAutoCacheConfig:
     RETURN_DESCRIPTIONS = (t("output.json"),)
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "apply"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Basic"
     DESCRIPTION = t("node.config")
 
     def apply(self, cache_root: str, max_size_gb: int, enable: bool, verbose: bool):
@@ -2024,7 +2042,7 @@ class ArenaAutoCacheStats:
     RETURN_DESCRIPTIONS = (t("output.json"),)
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Basic"
     DESCRIPTION = t("node.stats")
 
     def run(self, category: str):
@@ -2071,7 +2089,7 @@ class ArenaAutoCacheStatsEx:
     )
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Utils"
     DESCRIPTION = t("node.statsex")
 
     def run(self, category: str):
@@ -2176,7 +2194,7 @@ class ArenaAutoCacheAudit:
     )
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Advanced"
     OUTPUT_NODE = True
     DESCRIPTION = t("node.audit")
 
@@ -2460,7 +2478,7 @@ class ArenaAutoCacheWarmup:
     )
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Advanced"
     DESCRIPTION = t("node.warmup")
 
     def run(self, items: str, workflow_json: str, default_category: str, log_context: str = ""):
@@ -2509,7 +2527,7 @@ class ArenaAutoCacheTrim:
     RETURN_DESCRIPTIONS = (t("output.json"),)
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Advanced"
     DESCRIPTION = t("node.trim")
 
     def run(self, category: str):
@@ -2584,7 +2602,7 @@ class ArenaAutoCacheManager:
     RETURN_DESCRIPTIONS = (t("output.stats_json"), t("output.action_json"))
     OUTPUT_TOOLTIPS = RETURN_DESCRIPTIONS
     FUNCTION = "manage"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "Arena/AutoCache/Advanced"
     DESCRIPTION = t("node.manager")
 
     def manage(
@@ -3132,9 +3150,149 @@ class ArenaAutoCacheOps:
         )
 
 
+class ArenaAutoCacheAnalyze:
+    """RU: Анализ активного воркфлоу и построение плана копирования без ввода.
+
+    По умолчанию использует текущий воркфлоу (PromptServer), категорию
+    "checkpoints", small-first стратегию для оценки плана и сразу запускает
+    прогрев (auto_start). Выводит человекочитаемый отчет (summary_json) и
+    план в JSON (plan_json), пригодный для Show Any.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {
+                "workflow_json": (
+                    "STRING",
+                    {"default": "", "multiline": True, "description": t("input.workflow_json"), "tooltip": t("input.workflow_json")},
+                ),
+                "auto_start": (
+                    "BOOLEAN",
+                    {"default": True, "description": "Auto start warmup", "tooltip": "Auto start warmup"},
+                ),
+                "default_category": (
+                    "STRING",
+                    {"default": "checkpoints", "description": t("input.default_category"), "tooltip": t("input.default_category")},
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = (t("output.summary_json"), t("output.warmup_json"))
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = t("node.analyze")
+    OUTPUT_NODE = True
+
+    def run(self, workflow_json: str = "", auto_start: bool = True, default_category: str = "checkpoints"):
+        provided = (workflow_json or "").strip()
+        effective_workflow = _resolve_workflow_json(provided)
+        parsed = register_workflow_items("", effective_workflow, default_category)
+
+        # Сформируем краткий план small-first: оценка размеров, где возможно
+        plan_items: list[dict[str, object]] = []
+        total_size = 0
+        cached = 0
+        missing = 0
+        for entry in parsed:
+            category = entry.get("category", default_category)
+            name = entry.get("name", "")
+            src_path = None
+            size = None
+            try:
+                from folder_paths import get_full_path  # type: ignore
+                src_path = get_full_path(category, name)  # type: ignore[arg-type]
+            except Exception:
+                src_path = None
+            if src_path:
+                try:
+                    stat = Path(src_path).stat()
+                    size = int(stat.st_size)
+                except Exception:
+                    size = None
+            dst_path = _ensure_category_root(category) / name
+            is_cached = dst_path.exists()
+            if is_cached:
+                cached += 1
+            else:
+                missing += 1
+            if size is not None:
+                total_size += size
+            plan_items.append({
+                "category": category,
+                "name": name,
+                "source": src_path,
+                "dest": str(dst_path),
+                "cached": is_cached,
+                "size": size,
+            })
+
+        # Small-first
+        plan_items.sort(key=lambda x: (0 if x.get("size") is None else 1, x.get("size") or 0))
+
+        # Прогрев по желанию (auto_start)
+        warmup_json = "{}"
+        if auto_start:
+            warm = warmup_items("", effective_workflow, default_category, parsed_items=parsed)
+            warmup_json = warm.get("json", "{}")
+
+        source = "provided" if provided else ("active" if effective_workflow else "none")
+        summary = {
+            "ok": True,
+            "ui": {
+                "headline": "Analyze plan",
+                "details": [
+                    f"Items: {len(parsed)}",
+                    f"Cached/Missing: {cached}/{missing}",
+                    f"Estimated size: {total_size/ (1024*1024):.2f} MiB",
+                    f"Source: {source}",
+                ],
+            },
+            "plan": plan_items,
+        }
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+        return (summary_json, warmup_json)
+
+
+class ArenaGetActiveWorkflow:
+    """RU: Возвращает текущий активный воркфлоу из PromptServer, если доступен."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {"required": {}}
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"))
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = t("node.get_workflow")
+    OUTPUT_NODE = True
+
+    def run(self):
+        data = _load_active_workflow()
+        ok = data is not None
+        text = json.dumps(data if data is not None else {}, ensure_ascii=False, indent=2)
+        summary = {
+            "ok": ok,
+            "ui": {
+                "headline": "Active workflow",
+                "details": ["Found" if ok else "Not found"],
+            },
+        }
+        return (text, json.dumps(summary, ensure_ascii=False, indent=2))
+
+
 NODE_CLASS_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
+        "ArenaAutoCacheAnalyze": ArenaAutoCacheAnalyze,
+        "ArenaGetActiveWorkflow": ArenaGetActiveWorkflow,
         "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
         "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
         "ArenaAutoCacheOps": ArenaAutoCacheOps,
@@ -3149,6 +3307,8 @@ NODE_CLASS_MAPPINGS.update(
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": t("node.audit"),
+        "ArenaAutoCacheAnalyze": t("node.analyze"),
+        "ArenaGetActiveWorkflow": t("node.get_workflow"),
         "ArenaAutoCacheConfig": t("node.config"),
         "ArenaAutoCacheDashboard": t("node.dashboard"),
         "ArenaAutoCacheOps": t("node.ops"),
