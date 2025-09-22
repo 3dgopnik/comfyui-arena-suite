@@ -332,8 +332,25 @@ def _guess_category_from_hints(
         hints.append(class_hint)
     if key_hint:
         hints.append(key_hint)
+    processed: list[tuple[str, str]] = []
     for hint in hints:
         lowered = hint.lower()
+        normalized = lowered.replace("-", "_").replace(" ", "_")
+        processed.append((lowered, normalized))
+
+    for lowered, normalized in processed:
+        if "clip_vision" in normalized or "clipvision" in normalized:
+            return "clip_vision"
+        if "ipadapter" in normalized or "ip_adapter" in normalized:
+            return "ipadapter"
+        if "insightface" in normalized or "insight_face" in normalized:
+            return "insightface"
+        if "clip_g" in normalized:
+            return "clip_g"
+        if "clip_l" in normalized:
+            return "clip_l"
+
+    for lowered, _normalized in processed:
         if "lora" in lowered or "lyco" in lowered or "lycoris" in lowered:
             return "loras"
         if "hyper" in lowered:
