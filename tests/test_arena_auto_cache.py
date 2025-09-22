@@ -12,6 +12,7 @@ import time
 import types
 import unittest
 from pathlib import Path
+from typing import Mapping
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -244,10 +245,16 @@ class ArenaAutoCacheAsyncCopyTest(unittest.TestCase):
             original_copy = arena_auto_cache._copy_into_cache_lru
             worker_started = threading.Event()
 
-            def _slow_copy(src: Path, dst: Path, cat: str) -> None:
+            def _slow_copy(
+                src: Path,
+                dst: Path,
+                cat: str,
+                *,
+                context: Mapping[str, object] | None = None,
+            ) -> None:
                 worker_started.set()
                 time.sleep(0.2)
-                original_copy(src, dst, cat)
+                original_copy(src, dst, cat, context=context)
 
             arena_auto_cache._copy_into_cache_lru = _slow_copy
             self.addCleanup(lambda: setattr(arena_auto_cache, "_copy_into_cache_lru", original_copy))
@@ -268,6 +275,87 @@ class ArenaAutoCacheAsyncCopyTest(unittest.TestCase):
 
             cached_resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
             self.assertEqual(Path(cached_resolved).resolve(strict=False), cache_path.resolve(strict=False))
+
+
+class ArenaAutoCacheCopyNotificationTest(unittest.TestCase):
+    """Ensure copy lifecycle notifications fire even when verbose logging is disabled."""
+
+    def test_copy_events_emitted_without_verbose(self) -> None:
+        module_name = "custom_nodes.ComfyUI_Arena.autocache.arena_auto_cache"
+        category = "checkpoints"
+        filename = "model.safetensors"
+
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_dir:
+            src_path = Path(src_dir) / filename
+            src_path.write_text("payload", encoding="utf-8")
+
+            os.environ["ARENA_CACHE_ENABLE"] = "1"
+            os.environ["ARENA_CACHE_ROOT"] = cache_dir
+            os.environ["ARENA_CACHE_VERBOSE"] = "0"
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ENABLE", None))
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ROOT", None))
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_VERBOSE", None))
+
+            sys.modules.pop(module_name, None)
+            self.addCleanup(sys.modules.pop, module_name, None)
+            module = importlib.import_module(module_name)
+
+            settings = module.get_settings()
+            if isinstance(settings, dict):
+                self.assertFalse(settings.get("verbose"))
+            else:
+                self.assertFalse(settings.verbose)
+
+            original_notify = module._notify_copy_event
+            events: list[tuple[str, dict[str, object]]] = []
+
+            def _fake_notify(
+                event: str,
+                *,
+                category: str | None = None,
+                src: Path | None = None,
+                dst: Path | None = None,
+                context: Mapping[str, object] | None = None,
+                note: str | None = None,
+            ) -> None:
+                events.append(
+                    (
+                        event,
+                        {
+                            "category": category,
+                            "src": src,
+                            "dst": dst,
+                            "context": context,
+                            "note": note,
+                        },
+                    )
+                )
+
+            module._notify_copy_event = _fake_notify
+            self.addCleanup(lambda: setattr(module, "_notify_copy_event", original_notify))
+
+            cache_path = Path(cache_dir) / category / filename
+            context_payload = {"node_id": "warmup-1"}
+
+            module._copy_into_cache_lru(src_path, cache_path, category, context=context_payload)
+            self.assertTrue(cache_path.exists())
+
+            module._copy_into_cache_lru(src_path, cache_path, category, context=context_payload)
+
+            event_names = [event for event, _ in events]
+            self.assertEqual(
+                event_names,
+                [
+                    module.COPY_EVENT_STARTED,
+                    module.COPY_EVENT_COMPLETED,
+                    module.COPY_EVENT_SKIPPED,
+                ],
+            )
+
+            for _, details in events:
+                self.assertEqual(details["context"], context_payload)
+
+            self.assertEqual(events[-1][1]["note"], "exists")
 
 
 if __name__ == "__main__":  # pragma: no cover - unittest main hook

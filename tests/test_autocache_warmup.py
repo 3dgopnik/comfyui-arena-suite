@@ -8,6 +8,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from typing import Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -385,7 +386,13 @@ class ArenaAutoCacheWorkflowAllowlistTest(unittest.TestCase):
             calls: list[tuple[Path, Path, str]] = []
             original_copy = module._copy_into_cache_lru
 
-            def _fake_copy(src: Path, dst: Path, category: str) -> None:
+            def _fake_copy(
+                src: Path,
+                dst: Path,
+                category: str,
+                *,
+                context: Mapping[str, object] | None = None,
+            ) -> None:
                 calls.append((Path(src), Path(dst), category))
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_text("cached", encoding="utf-8")
