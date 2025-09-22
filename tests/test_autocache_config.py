@@ -76,9 +76,14 @@ class ArenaAutoCacheConfigRuntimeTest(unittest.TestCase):
             self.assertEqual(result["effective_root"], str(Path(new_root).resolve(strict=False)))
 
             resolved = folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
+            self.assertEqual(resolved, str(source_file))
+
             expected_path = Path(new_root) / "checkpoints" / "model.safetensors"
-            self.assertEqual(Path(resolved).resolve(strict=False), expected_path.resolve(strict=False))
+            self.assertTrue(module.wait_for_copy_queue(timeout=5.0))
             self.assertTrue(expected_path.exists())
+
+            cached_resolved = folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
+            self.assertEqual(Path(cached_resolved).resolve(strict=False), expected_path.resolve(strict=False))
 
             paths_list = folder_paths.get_folder_paths("checkpoints")  # type: ignore[attr-defined]
             first_path = Path(paths_list[0]).resolve(strict=False)
@@ -125,8 +130,12 @@ class ArenaAutoCacheStatsExTest(unittest.TestCase):
                 "checkpoints",
             )
 
-            folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
-            folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
+            first_resolved = folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
+            self.assertEqual(first_resolved, str(source_file))
+            self.assertTrue(module.wait_for_copy_queue(timeout=5.0))
+            second_resolved = folder_paths.get_full_path("checkpoints", "model.safetensors")  # type: ignore[attr-defined]
+            expected_cache = Path(cache_root) / "checkpoints" / "model.safetensors"
+            self.assertEqual(Path(second_resolved).resolve(strict=False), expected_cache.resolve(strict=False))
 
             stats_node = module.ArenaAutoCacheStatsEx()
             stats_json, items, total_gb, cache_root_str, session_hits, session_misses, session_trims = stats_node.run("checkpoints")

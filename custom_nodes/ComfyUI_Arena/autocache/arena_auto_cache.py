@@ -4,10 +4,11 @@ import json
 import time
 import shutil
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from pathlib import Path
 from types import ModuleType
 from typing import Callable, Optional, Sequence
+from queue import Queue
 
 LABELS: dict[str, str] = {
     "node.config": "🅰️ Arena AutoCache: Config",
@@ -65,6 +66,29 @@ def t(key: str) -> str:
 _STALE_LOCK_SECONDS = 60
 
 _lock = threading.RLock()
+
+
+@dataclass
+class _CopyJob:
+    """Background copy request scheduled for the copy worker."""
+
+    category: str
+    filename: str
+    src: Path
+    dst: Path
+    enqueued_at: float
+    done: threading.Event = field(default_factory=threading.Event)
+    success: bool | None = None
+    error: Exception | None = None
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.category, self.filename)
+
+
+_copy_queue: "Queue[_CopyJob]" = Queue()
+_copy_jobs: dict[tuple[str, str], _CopyJob] = {}
+_copy_worker_thread: threading.Thread | None = None
 
 
 def _now() -> float:
@@ -757,6 +781,105 @@ def _copy_into_cache_lru(src: Path, dst: Path, category: str) -> None:
     _update_index_touch(cache_root, dst, op="COPY")
 
 
+def _copy_worker() -> None:
+    """Process queued copy jobs sequentially in the background."""
+
+    while True:
+        job = _copy_queue.get()
+        try:
+            _copy_into_cache_lru(job.src, job.dst, job.category)
+        except Exception as exc:  # pragma: no cover - error path
+            job.success = False
+            job.error = exc
+        else:
+            job.success = True
+        finally:
+            job.done.set()
+            with _lock:
+                current = _copy_jobs.get(job.key)
+                if current is job:
+                    _copy_jobs.pop(job.key, None)
+            _copy_queue.task_done()
+
+
+def _ensure_copy_worker_started() -> None:
+    """Start the background copy worker if it isn't running."""
+
+    global _copy_worker_thread
+    thread = _copy_worker_thread
+    if thread is not None and thread.is_alive():
+        return
+    worker = threading.Thread(
+        target=_copy_worker,
+        name="ArenaAutoCacheCopyWorker",
+        daemon=True,
+    )
+    _copy_worker_thread = worker
+    worker.start()
+
+
+def _enqueue_copy_job(
+    category: str,
+    filename: str,
+    src: Path,
+    dst: Path,
+    *,
+    force_recopy: bool,
+) -> bool:
+    """Schedule a copy job unless one is already running."""
+
+    job_key = (category, filename)
+    with _lock:
+        existing = _copy_jobs.get(job_key)
+        if existing is not None and not existing.done.is_set():
+            return False
+        if existing is not None and existing.done.is_set():
+            _copy_jobs.pop(job_key, None)
+        if force_recopy and dst.exists():
+            try:
+                dst.unlink()
+            except Exception as cleanup_err:  # pragma: no cover - logging only
+                _v(f"failed to remove stale cache file before recopy {dst}: {cleanup_err}")
+        job = _CopyJob(
+            category=category,
+            filename=filename,
+            src=Path(src),
+            dst=Path(dst),
+            enqueued_at=_now(),
+        )
+        _copy_jobs[job_key] = job
+
+    _ensure_copy_worker_started()
+    _copy_queue.put(job)
+    _v(f"queued cache copy {src} -> {dst}")
+    return True
+
+
+def wait_for_copy_queue(timeout: float = 5.0) -> bool:
+    """Wait until all queued copy jobs are processed (primarily for tests)."""
+
+    join_event = threading.Event()
+
+    def _joiner() -> None:
+        _copy_queue.join()
+        join_event.set()
+
+    waiter = threading.Thread(
+        target=_joiner,
+        name="ArenaAutoCacheQueueJoin",
+        daemon=True,
+    )
+    waiter.start()
+    finished = join_event.wait(max(0.0, timeout))
+    if not finished:
+        return False
+    with _lock:
+        return not _copy_jobs
+
+
+_ensure_copy_worker_started()
+
+
 def _ensure_folder_paths_module() -> Optional[ModuleType]:
     """RU: Подгружает ComfyUI.folder_paths с мемоизацией."""
 
@@ -823,9 +946,18 @@ def _apply_folder_paths_patch_locked() -> None:
         lock_path = dst.with_suffix(dst.suffix + ".copying")
         prefer_source = False
         force_recopy = False
+        job_key = (category, filename)
+
+        job_in_progress = False
+        with _lock:
+            active_job = _copy_jobs.get(job_key)
+            if active_job is not None and not active_job.done.is_set():
+                job_in_progress = True
 
         if dst.exists():
-            if lock_path.exists():
+            if job_in_progress:
+                prefer_source = True
+            elif lock_path.exists():
                 lock_age = None
                 try:
                     lock_age = time.time() - lock_path.stat().st_mtime
@@ -836,29 +968,31 @@ def _apply_folder_paths_patch_locked() -> None:
                     try:
                         lock_path.unlink()
                         force_recopy = True
+                        with _lock:
+                            existing = _copy_jobs.get(job_key)
+                            if existing is not None and not existing.done.is_set():
+                                _copy_jobs.pop(job_key, None)
+                                job_in_progress = False
+                                prefer_source = False
                     except Exception as lock_err:
                         _v(f"failed to remove stale lock {lock_path}: {lock_err}")
                         prefer_source = True
-                if lock_path.exists() and not prefer_source:
-                    wait_deadline = time.monotonic() + 5.0
-                    while lock_path.exists() and time.monotonic() < wait_deadline:
-                        time.sleep(0.05)
-                    if lock_path.exists():
-                        _v(f"lock active for {dst}, will prefer source")
+                if lock_path.exists():
+                    _v(f"lock active for {dst}, using source")
+                    prefer_source = True
+                else:
+                    if not dst.exists():
+                        _v(f"cache target missing after lock release, prefer source: {dst}")
                         prefer_source = True
-                    else:
-                        if not dst.exists():
-                            _v(f"cache target missing after lock release, prefer source: {dst}")
-                            prefer_source = True
-                            force_recopy = True
-                        else:
-                            try:
-                                os.utime(dst, None)
-                            except Exception:
-                                pass
-                            _update_index_touch(cache_root, dst, op="HIT")
-                            return str(dst)
-            elif not prefer_source:
+                        force_recopy = True
+                    elif not force_recopy:
+                        try:
+                            os.utime(dst, None)
+                        except Exception:
+                            pass
+                        _update_index_touch(cache_root, dst, op="HIT")
+                        return str(dst)
+            elif not force_recopy:
                 try:
                     os.utime(dst, None)
                 except Exception:
@@ -873,23 +1007,28 @@ def _apply_folder_paths_patch_locked() -> None:
 
         for base in source_paths:
             src = Path(base) / filename
-            if src.exists():
-                if prefer_source:
-                    _v(f"using original path due to cache lock: {src}")
-                    _update_index_meta(cache_root, "MISS", src)
-                    return str(src)
-                if not _is_item_allowlisted(category, filename):
-                    _v(f"skip cache copy (allowlist): {category}:{filename}")
-                    _update_index_meta(cache_root, "MISS", str(src))
-                    return str(src)
-                with _lock:
-                    if force_recopy and dst.exists():
-                        try:
-                            dst.unlink()
-                        except Exception as cleanup_err:
-                            _v(f"failed to remove stale cache file before recopy {dst}: {cleanup_err}")
-                    _copy_into_cache_lru(src, dst, category)
-                return str(dst)
+            if not src.exists():
+                continue
+
+            if not settings_snapshot.enable:
+                prefer_source = True
+
+            if prefer_source or job_in_progress:
+                _update_index_meta(cache_root, "MISS", str(src))
+                return str(src)
+
+            if not _is_item_allowlisted(category, filename):
+                _v(f"skip cache copy (allowlist): {category}:{filename}")
+                _update_index_meta(cache_root, "MISS", str(src))
+                return str(src)
+
+            scheduled = _enqueue_copy_job(category, filename, src, dst, force_recopy=force_recopy)
+            if not scheduled:
+                _v(f"copy already in progress for {category}:{filename}, using source")
+
+            _update_index_meta(cache_root, "MISS", str(src))
+            return str(src)
+
         return None
 
     module.get_folder_paths = get_folder_paths_patched  # type: ignore[attr-defined]

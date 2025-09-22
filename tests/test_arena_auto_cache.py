@@ -74,9 +74,10 @@ class ArenaAutoCacheStaleLockTest(unittest.TestCase):
             old_timestamp = time.time() - 10
             os.utime(lock_path, (old_timestamp, old_timestamp))
 
-            # First request after crash: stale lock should be removed and cache recopied.
+            # First request after crash: returns source while copy job runs in background.
             resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
-            self.assertEqual(Path(resolved).resolve(strict=False), dst_path.resolve(strict=False))
+            self.assertEqual(resolved, str(src_path))
+            self.assertTrue(arena_auto_cache.wait_for_copy_queue(timeout=5.0))
             self.assertFalse(lock_path.exists())
             self.assertEqual(dst_path.read_text(encoding="utf-8"), "fresh-data")
 
@@ -86,7 +87,7 @@ class ArenaAutoCacheStaleLockTest(unittest.TestCase):
             index = json.loads(index_path.read_text("utf-8"))
             self.assertIn(filename, index.get("items", {}))
 
-            # Subsequent requests should keep returning the cache path without recreating locks.
+            # Subsequent requests should return the cache path without recreating locks.
             second_resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
             self.assertEqual(Path(second_resolved).resolve(strict=False), dst_path.resolve(strict=False))
             self.assertFalse(dst_path.with_suffix(dst_path.suffix + ".copying").exists())
@@ -196,6 +197,77 @@ class ArenaAutoCacheLocalizationFallbackTest(unittest.TestCase):
             arena_auto_cache.t("input.cache_root"),
             "Cache root directory",
         )
+
+
+class ArenaAutoCacheAsyncCopyTest(unittest.TestCase):
+    """Verify that copy requests return immediately while the worker performs the sync."""
+
+    def test_background_worker_copies_without_blocking(self) -> None:
+        category = "checkpoints"
+        filename = "model.safetensors"
+
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
+            src_path = Path(src_dir) / filename
+            src_path.write_text("async-data", encoding="utf-8")
+
+            folder_paths = types.ModuleType("folder_paths")
+
+            def _get_folder_paths(cat: str):
+                return [src_dir] if cat == category else []
+
+            def _get_full_path(cat: str, name: str):
+                return str(Path(src_dir) / name)
+
+            folder_paths.get_folder_paths = _get_folder_paths  # type: ignore[attr-defined]
+            folder_paths.get_full_path = _get_full_path  # type: ignore[attr-defined]
+            sys.modules["folder_paths"] = folder_paths
+            self.addCleanup(sys.modules.pop, "folder_paths", None)
+
+            os.environ["ARENA_CACHE_ENABLE"] = "1"
+            os.environ["ARENA_CACHE_ROOT"] = cache_root
+            os.environ["ARENA_CACHE_VERBOSE"] = "0"
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ENABLE", None))
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ROOT", None))
+            self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_VERBOSE", None))
+
+            module_name = "custom_nodes.ComfyUI_Arena.autocache.arena_auto_cache"
+            sys.modules.pop(module_name, None)
+            self.addCleanup(sys.modules.pop, module_name, None)
+            arena_auto_cache = importlib.import_module(module_name)
+
+            arena_auto_cache.register_workflow_items(
+                f"{category}:{filename}",
+                "",
+                category,
+            )
+
+            original_copy = arena_auto_cache._copy_into_cache_lru
+            worker_started = threading.Event()
+
+            def _slow_copy(src: Path, dst: Path, cat: str) -> None:
+                worker_started.set()
+                time.sleep(0.2)
+                original_copy(src, dst, cat)
+
+            arena_auto_cache._copy_into_cache_lru = _slow_copy
+            self.addCleanup(lambda: setattr(arena_auto_cache, "_copy_into_cache_lru", original_copy))
+
+            folder_paths = sys.modules["folder_paths"]
+            start = time.perf_counter()
+            resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
+            duration = time.perf_counter() - start
+
+            self.assertEqual(resolved, str(src_path))
+            self.assertLess(duration, 0.15)
+            self.assertTrue(worker_started.wait(timeout=1.0))
+            self.assertTrue(arena_auto_cache.wait_for_copy_queue(timeout=5.0))
+
+            cache_path = Path(cache_root) / category / filename
+            self.assertTrue(cache_path.exists())
+            self.assertEqual(cache_path.read_text(encoding="utf-8"), "async-data")
+
+            cached_resolved = folder_paths.get_full_path(category, filename)  # type: ignore[attr-defined]
+            self.assertEqual(Path(cached_resolved).resolve(strict=False), cache_path.resolve(strict=False))
 
 
 if __name__ == "__main__":  # pragma: no cover - unittest main hook
