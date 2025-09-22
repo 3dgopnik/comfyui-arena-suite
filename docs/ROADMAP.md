@@ -13,16 +13,34 @@ Acceptance Criteria
 - Existing workflows continue to work.
 - README/install docs reflect final package boundaries.
 
-### v0.2.0 — ArenaAutoCache MVP
+### v0.2.0 — ArenaAutoCache MVP ✅ **COMPLETED**
 Deliverables
-- Ship “Arena AutoCache: Stats” (`ArenaAutoCacheStats`) and “Arena AutoCache: Trim” (`ArenaAutoCacheTrim`).
-- Expose toggles (e.g., `ARENA_CACHE_ENABLE`) and document them.
-- Provide example cache workflows and troubleshooting notes.
+- ✅ Ship "Arena AutoCache: Stats" (`ArenaAutoCacheStats`) and "Arena AutoCache: Trim" (`ArenaAutoCacheTrim`).
+- ✅ Expose toggles (e.g., `ARENA_CACHE_ENABLE`) and document them.
+- ✅ Provide example cache workflows and troubleshooting notes.
+- ✅ **NEW**: Visual copy status indicator with real-time progress
+- ✅ **NEW**: Smart model filtering (size and hardcoded paths)
 
 Acceptance Criteria
-- Hit/miss statistics and trimming work end‑to‑end.
-- Config variables toggle as documented.
-- Troubleshooting covers top failure scenarios.
+- ✅ Hit/miss statistics and trimming work end‑to‑end.
+- ✅ Config variables toggle as documented.
+- ✅ Troubleshooting covers top failure scenarios.
+- ✅ **NEW**: Visual feedback for copy operations
+- ✅ **NEW**: Intelligent model selection for cache optimization
+
+### v0.2.1 — Enhanced UX & Smart Filtering ✅ **COMPLETED**
+Deliverables
+- ✅ Visual copy status indicator with real-time progress display
+- ✅ Model size filtering (skip < 1GB models)
+- ✅ Hardcoded path filtering (skip fixed-location models)
+- ✅ Enhanced configuration with filter settings
+- ✅ Updated documentation and examples
+
+Acceptance Criteria
+- ✅ Copy operations show real-time progress
+- ✅ Small models remain on NAS automatically
+- ✅ Fixed-path models are skipped intelligently
+- ✅ All features documented with examples
 
 ### v0.3.0 — ArenaUpdater MVP
 Deliverables

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **Visual Copy Status Indicator**: New `ArenaAutoCache Copy Status` node displays real-time copy progress with speed, ETA, and filter settings. / **RU:** Новый узел `ArenaAutoCache Copy Status` показывает прогресс копирования в реальном времени со скоростью, оставшимся временем и настройками фильтров.
+- **Model Size Filter**: Skip caching models smaller than 1GB (configurable via `ARENA_CACHE_MIN_SIZE_GB`). Small auxiliary models remain on NAS to save cache space. / **RU:** Фильтр размера моделей: пропускать модели меньше 1 ГБ (настраивается через `ARENA_CACHE_MIN_SIZE_GB`). Маленькие вспомогательные модели остаются на NAS для экономии места в кеше.
+- **Hardcoded Path Filter**: Skip caching models with fixed paths (ControlNet, InsightFace, etc.) that only work in their specific directories. / **RU:** Фильтр жестко прописанных путей: пропускать модели с фиксированными путями (ControlNet, InsightFace и др.), которые работают только в своих папках.
+- **Enhanced Config Node**: `ArenaAutoCache Config` now supports size and path filter settings with environment variable overrides. / **RU:** Улучшенный узел конфигурации: `ArenaAutoCache Config` теперь поддерживает настройки фильтров размера и путей с переопределением через переменные окружения.
+
 ### Removed
 - Arena AutoCache web overlay (experimental) has been removed from the package by default to prioritize stability across ComfyUI Desktop builds. The feature is tracked for a future iteration in the roadmap.
 ### Fixed

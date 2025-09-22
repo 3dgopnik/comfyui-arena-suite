@@ -52,3 +52,12 @@
 | 2024-06-19-autocache-category-guide | Publish a concise reference chart mapping workflow hints to AutoCache categories so operators can troubleshoot mismatches | Docs | 0.3 | proposed |
 | 2024-06-20-copy-overlay-history | Surface a rolling timeline of `copy_started`/`copy_completed` events in the overlay for long warmup runs | UX | 0.3 | proposed |
 | 2024-06-20-copy-event-cli | Provide a CLI subscriber that streams `arena/autocache/copy_event` payloads for automation pipelines | Tooling | 0.4 | proposed |
+| 2025-01-25-copy-status-ui | Visual copy status indicator with real-time progress display | AutoCache | 0.8 | done |
+| 2025-01-25-size-filter | Model size filtering to skip small models (< 1GB) | AutoCache | 0.7 | done |
+| 2025-01-25-path-filter | Hardcoded path filtering for fixed-location models | AutoCache | 0.7 | done |
+| 2025-01-25-copy-progress-bar | Add progress bar widget to copy status node | UX | 0.6 | proposed |
+| 2025-01-25-filter-presets | Predefined filter presets for common scenarios | AutoCache | 0.5 | proposed |
+| 2025-01-25-copy-speed-optimization | Optimize copy speed with parallel transfers | Performance | 0.6 | proposed |
+| 2025-01-25-cache-health-monitor | Real-time cache health monitoring with alerts | Monitoring | 0.5 | proposed |
+| 2025-01-25-smart-cache-prediction | ML-based cache prediction for frequently used models | AI | 0.4 | proposed |
+| 2025-01-25-cache-analytics | Detailed analytics and usage patterns for cache optimization | Analytics | 0.5 | proposed |
