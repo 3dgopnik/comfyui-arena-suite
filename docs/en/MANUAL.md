@@ -266,6 +266,29 @@ Arena AutoCache is a comprehensive caching system for ComfyUI that automatically
 
 ---
 
+### 🅰️ ArenaAutoCache Refresh Workflow
+
+**Purpose**: Force refresh active workflow
+
+**Inputs**: None
+
+**Outputs**:
+- `workflow_json` (string): Updated workflow JSON
+- `show_any` (string): Refresh status
+
+**Functions**:
+- Clears internal workflow cache
+- Resets allowed models list
+- Forces loading of current workflow
+- Shows refresh result
+
+**Use Cases**:
+- Fixing stale data issues
+- Force refresh after workflow changes
+- Diagnosing workflow detection problems
+
+---
+
 ## Common Workflows
 
 ### 1. Initial Setup
@@ -305,6 +328,15 @@ ArenaAutoCache Stats → ArenaAutoCache Trim
 1. Check cache usage
 2. Trim if needed
 
+### 5. Fixing Workflow Issues
+
+```
+ArenaAutoCache Refresh Workflow → ArenaAutoCache Analyze
+```
+
+1. Force refresh workflow
+2. Analyze updated workflow
+
 ## Environment Variables
 
 - `ARENA_CACHE_ENABLE`: Enable/disable caching (default: 1)
@@ -330,6 +362,8 @@ ArenaAutoCache Stats → ArenaAutoCache Trim
 2. **Cache Not Working**: Verify `ARENA_CACHE_ENABLE=1`
 3. **Slow Copy Speed**: Check network/storage performance
 4. **Models Not Found**: Verify source paths are accessible
+5. **Nodes Show Stale Information**: Use `ArenaAutoCache Refresh Workflow`
+6. **New Workflow Not Detected**: Run Refresh Workflow before Analyze
 
 ### Debug Steps
 

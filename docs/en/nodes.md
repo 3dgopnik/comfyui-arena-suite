@@ -20,7 +20,7 @@ Groups in ComfyUI:
 - Dashboard, Manager, Trim, StatsEx.
 
 ## Utils
-- GetActiveWorkflow, Stats, Config (with size and path filters).
+- GetActiveWorkflow, Stats, Config (with size and path filters), Refresh Workflow.
 
 Please refer to the Russian reference `../ru/nodes.md` for details and examples.
 
@@ -45,6 +45,13 @@ AutoCache now includes two types of filters to optimize copying:
 - Filter settings
 - Current copying file name
 - Overall operation statistics
+
+### Workflow refresh
+**ArenaAutoCache Refresh Workflow** forces refresh of active workflow:
+- Clears internal workflow cache
+- Resets allowed models list (allowlist)
+- Forces nodes to re-read current workflow
+- Shows refresh status and found workflow
 
 ## Workflow allowlist
 

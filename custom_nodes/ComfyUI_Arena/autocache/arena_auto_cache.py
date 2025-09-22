@@ -206,7 +206,7 @@ NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
 
-def _load_active_workflow() -> object | None:
+def _load_active_workflow(force_refresh: bool = False) -> object | None:
     """Return the current workflow payload exposed by ComfyUI, if available."""
 
     try:
@@ -246,6 +246,12 @@ def _load_active_workflow() -> object | None:
 
     candidates: list[object] = []
 
+    # Принудительное обновление: очищаем кеш если запрошено
+    if force_refresh:
+        # Очищаем внутренний кеш workflow
+        if hasattr(prompt_server, '_arena_workflow_cache'):
+            delattr(prompt_server, '_arena_workflow_cache')
+
     prompt_queue = getattr(prompt_server, "prompt_queue", None)
     if prompt_queue is not None:
         for attr in ("workflow", "current_prompt", "current_workflow", "last_prompt", "last_workflow"):
@@ -267,16 +273,28 @@ def _load_active_workflow() -> object | None:
         if isinstance(queue_data, list):
             candidates.extend(reversed(queue_data))
 
-    for attr in ("workflow", "last_prompt", "last_workflow"):
+    for attr in ("workflow", "last_prompt", "last_workflow", "current_workflow", "current_prompt"):
         if hasattr(prompt_server, attr):
             candidates.append(getattr(prompt_server, attr))
-    for method_name in ("get_current_prompt", "get_last_prompt"):
+    for method_name in ("get_current_prompt", "get_last_prompt", "get_current_workflow", "get_last_workflow"):
         method = getattr(prompt_server, method_name, None)
         if callable(method):
             try:
                 candidates.append(method())
             except Exception:
                 pass
+    
+    # Дополнительный поиск в execution context
+    if hasattr(prompt_server, 'execution_context'):
+        exec_context = getattr(prompt_server, 'execution_context')
+        if exec_context and hasattr(exec_context, 'workflow'):
+            candidates.append(getattr(exec_context, 'workflow'))
+    
+    # Поиск в graph context
+    if hasattr(prompt_server, 'graph'):
+        graph = getattr(prompt_server, 'graph')
+        if graph and hasattr(graph, 'workflow'):
+            candidates.append(getattr(graph, 'workflow'))
 
     for candidate in candidates:
         extracted = _extract(candidate)
@@ -512,7 +530,7 @@ def _set_workflow_allowlist(parsed: Sequence[dict[str, str]]) -> None:
             _workflow_allowlist.add((category, name))
 
 
-def _resolve_workflow_json(workflow_json: object) -> object:
+def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -> object:
     """Return the provided workflow JSON or fall back to the active workflow."""
 
     if isinstance(workflow_json, str):
@@ -521,7 +539,7 @@ def _resolve_workflow_json(workflow_json: object) -> object:
     elif workflow_json:
         return workflow_json
 
-    fallback = _load_active_workflow()
+    fallback = _load_active_workflow(force_refresh=force_refresh)
     return fallback if fallback is not None else workflow_json
 
 
@@ -3137,7 +3155,10 @@ class ArenaAutoCacheOps:
         run_warmup = normalized_mode in {"warmup", "audit_then_warmup"}
         run_trim = normalized_mode == "trim"
 
-        effective_workflow = _resolve_workflow_json(workflow_json)
+        # Принудительно обновляем workflow если не предоставлен явно
+        provided = (workflow_json or "").strip()
+        force_refresh = not provided
+        effective_workflow = _resolve_workflow_json(workflow_json, force_refresh=force_refresh)
         audit_result: dict[str, object] | None = None
         warmup_result: dict[str, object] | None = None
         trim_result: dict[str, object] | None = None
@@ -3347,7 +3368,9 @@ class ArenaAutoCacheAnalyze:
 
     def run(self, workflow_json: str = "", auto_start: bool = True, default_category: str = "checkpoints"):
         provided = (workflow_json or "").strip()
-        effective_workflow = _resolve_workflow_json(provided)
+        # Принудительно обновляем workflow если не предоставлен явно
+        force_refresh = not provided
+        effective_workflow = _resolve_workflow_json(provided, force_refresh=force_refresh)
         parsed = register_workflow_items("", effective_workflow, default_category)
 
         # Сформируем краткий план small-first: оценка размеров, где возможно
@@ -3535,6 +3558,59 @@ class ArenaAutoCacheCopyStatus:
         return (detailed_json, summary_json)
 
 
+class ArenaAutoCacheRefreshWorkflow:
+    """RU: Принудительное обновление активного workflow.
+
+    Очищает кеш workflow и заставляет ноды перечитать текущий активный workflow.
+    Полезно когда ноды показывают старую информацию после смены workflow.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {},
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"))
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache/Utils"
+    DESCRIPTION = "Force refresh active workflow"
+    OUTPUT_NODE = True
+
+    def run(self):
+        """Force refresh and return current workflow."""
+        # Очищаем allowlist
+        reset_workflow_allowlist()
+        
+        # Принудительно загружаем новый workflow
+        workflow = _load_active_workflow(force_refresh=True)
+        
+        if workflow:
+            workflow_str = json.dumps(workflow, indent=2) if isinstance(workflow, dict) else str(workflow)
+            show_text = "✅ Workflow refreshed successfully"
+        else:
+            workflow_str = "{}"
+            show_text = "⚠️ No active workflow found"
+        
+        summary = {
+            "ok": True,
+            "ui": {
+                "headline": "Workflow Refresh",
+                "details": [
+                    "Status: Refreshed",
+                    "Allowlist: Cleared",
+                    "Workflow: " + ("Found" if workflow else "Not found"),
+                ],
+            },
+        }
+        
+        return (workflow_str, json.dumps(summary, ensure_ascii=False, indent=2))
+
+
 NODE_CLASS_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
@@ -3544,6 +3620,7 @@ NODE_CLASS_MAPPINGS.update(
         "ArenaAutoCacheCopyStatus": ArenaAutoCacheCopyStatus,
         "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
         "ArenaAutoCacheOps": ArenaAutoCacheOps,
+        "ArenaAutoCacheRefreshWorkflow": ArenaAutoCacheRefreshWorkflow,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
         "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
         "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
@@ -3561,6 +3638,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(
         "ArenaAutoCacheCopyStatus": t("node.copy_status"),
         "ArenaAutoCacheDashboard": t("node.dashboard"),
         "ArenaAutoCacheOps": t("node.ops"),
+        "ArenaAutoCacheRefreshWorkflow": "🅰️ Arena AutoCache: Refresh Workflow",
         "ArenaAutoCacheStats": t("node.stats"),
         "ArenaAutoCacheStatsEx": t("node.statsex"),
         "ArenaAutoCacheTrim": t("node.trim"),
