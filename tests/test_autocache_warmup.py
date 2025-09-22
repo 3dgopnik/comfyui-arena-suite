@@ -59,6 +59,7 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.addCleanup(sys.modules.pop, MODULE_NAME, None)
         self.addCleanup(sys.modules.pop, "folder_paths", None)
+        self.addCleanup(sys.modules.pop, "server", None)
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ROOT", None))
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ENABLE", None))
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_VERBOSE", None))
@@ -156,6 +157,65 @@ class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
             self.assertIn("timings", payload)
             self.assertGreaterEqual(payload["timings"]["duration_seconds"], 0.0)
 
+    def test_warmup_uses_prompt_server_workflow_when_input_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
+            source_dir = Path(src_dir)
+            cache_root_path = Path(cache_root)
+            (source_dir / "model.safetensors").write_text("payload", encoding="utf-8")
+
+            workflow_payload = {
+                "nodes": [
+                    {
+                        "class_type": "CheckpointLoaderSimple",
+                        "inputs": {"ckpt_name": "model.safetensors"},
+                    },
+                    {
+                        "class_type": "LoraLoader",
+                        "inputs": {"lora_name": "style.safetensors"},
+                    },
+                ]
+            }
+
+            server_module = types.ModuleType("server")
+
+            class DummyPromptQueue:
+                def __init__(self, workflow):
+                    self.workflow = workflow
+                    self.queue = [("task", {"prompt": workflow})]
+
+                def get_current_prompt(self):
+                    return {"prompt": self.workflow}
+
+            class DummyPromptServer:
+                instance = None
+
+                def __init__(self, workflow):
+                    self.prompt_queue = DummyPromptQueue(workflow)
+                    DummyPromptServer.instance = self
+
+            server_module.PromptServer = DummyPromptServer  # type: ignore[attr-defined]
+            sys.modules["server"] = server_module
+            self.addCleanup(lambda: setattr(server_module.PromptServer, "instance", None))
+            server_module.PromptServer(workflow_payload)
+
+            module = self._prepare_module(cache_root_path, source_dir)
+
+            warmup_node = module.ArenaAutoCacheWarmup()
+            report_json, total, warmed, copied, missing, errors = warmup_node.run(
+                "",
+                "",
+                "checkpoints",
+            )
+
+            payload = json.loads(report_json)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(total, 2)
+            self.assertEqual(warmed, 1)
+            self.assertEqual(copied, 1)
+            self.assertEqual(missing, 1)
+            self.assertEqual(errors, 0)
+            self.assertTrue(module._is_item_allowlisted("checkpoints", "model.safetensors"))
+
     def test_ops_warmup_mode_with_benchmark_respects_limits(self) -> None:
         with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as cache_root:
             source_dir = Path(src_dir)
@@ -238,6 +298,7 @@ class ArenaAutoCacheWorkflowAllowlistTest(unittest.TestCase):
     def setUp(self) -> None:  # noqa: D401 - unittest hook
         self.addCleanup(sys.modules.pop, MODULE_NAME, None)
         self.addCleanup(sys.modules.pop, "folder_paths", None)
+        self.addCleanup(sys.modules.pop, "server", None)
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ROOT", None))
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_ENABLE", None))
         self.addCleanup(lambda: os.environ.pop("ARENA_CACHE_VERBOSE", None))

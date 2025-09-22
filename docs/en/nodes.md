@@ -17,5 +17,5 @@ Covered groups:
 
 ## Workflow allowlist
 
-Audit/Warmup/Ops nodes refresh a workflow allowlist from the `items` and `workflow_json` inputs before they run. Only the enumerated category/name pairs trigger LRU copies; direct `folder_paths.get_full_path` calls without registration return source paths without priming the cache.
+Audit/Warmup/Ops nodes refresh a workflow allowlist from the `items` and `workflow_json` inputs before they run. When `workflow_json` is empty the nodes try to read the active graph via `server.PromptServer` and continue with the current workflow. Only the enumerated category/name pairs trigger LRU copies; direct `folder_paths.get_full_path` calls without registration return source paths without priming the cache.
 

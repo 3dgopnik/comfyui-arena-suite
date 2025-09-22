@@ -178,6 +178,86 @@ NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
 
+def _load_active_workflow() -> object | None:
+    """Return the current workflow payload exposed by ComfyUI, if available."""
+
+    try:
+        from server import PromptServer  # type: ignore
+    except Exception:
+        return None
+
+    prompt_server = getattr(PromptServer, "instance", None)
+    if prompt_server is None:
+        return None
+
+    def _extract(candidate: object) -> object | None:
+        if candidate is None:
+            return None
+        if isinstance(candidate, tuple) and len(candidate) >= 2:
+            return _extract(candidate[1])
+        if isinstance(candidate, dict):
+            for key in ("workflow", "prompt"):
+                nested = candidate.get(key)
+                extracted = _extract(nested)
+                if extracted is not None:
+                    return extracted
+            if "nodes" in candidate:
+                return candidate
+            return None
+        if isinstance(candidate, list):
+            for item in candidate:
+                extracted = _extract(item)
+                if extracted is not None:
+                    return extracted
+            return None
+        if isinstance(candidate, str):
+            if candidate.strip():
+                return candidate
+            return None
+        return None
+
+    candidates: list[object] = []
+
+    prompt_queue = getattr(prompt_server, "prompt_queue", None)
+    if prompt_queue is not None:
+        for attr in ("workflow", "current_prompt", "current_workflow", "last_prompt", "last_workflow"):
+            if hasattr(prompt_queue, attr):
+                candidates.append(getattr(prompt_queue, attr))
+        for method_name in ("get_current_prompt", "get_current_workflow", "get_last_prompt", "peek"):
+            method = getattr(prompt_queue, method_name, None)
+            if callable(method):
+                try:
+                    candidates.append(method())
+                except TypeError:
+                    try:
+                        candidates.append(method(None))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+        queue_data = getattr(prompt_queue, "queue", None)
+        if isinstance(queue_data, list):
+            candidates.extend(reversed(queue_data))
+
+    for attr in ("workflow", "last_prompt", "last_workflow"):
+        if hasattr(prompt_server, attr):
+            candidates.append(getattr(prompt_server, attr))
+    for method_name in ("get_current_prompt", "get_last_prompt"):
+        method = getattr(prompt_server, method_name, None)
+        if callable(method):
+            try:
+                candidates.append(method())
+            except Exception:
+                pass
+
+    for candidate in candidates:
+        extracted = _extract(candidate)
+        if extracted is not None:
+            return extracted
+
+    return None
+
+
 _ALLOWED_ITEM_SUFFIXES = {
     ".bin",
     ".ckpt",
@@ -387,6 +467,19 @@ def _set_workflow_allowlist(parsed: Sequence[dict[str, str]]) -> None:
             _workflow_allowlist.add((category, name))
 
 
+def _resolve_workflow_json(workflow_json: object) -> object:
+    """Return the provided workflow JSON or fall back to the active workflow."""
+
+    if isinstance(workflow_json, str):
+        if workflow_json.strip():
+            return workflow_json
+    elif workflow_json:
+        return workflow_json
+
+    fallback = _load_active_workflow()
+    return fallback if fallback is not None else workflow_json
+
+
 def reset_workflow_allowlist() -> None:
     """Clear the workflow allowlist (primarily for tests)."""
 
@@ -399,7 +492,8 @@ def register_workflow_items(
 ) -> list[dict[str, str]]:
     """Parse the workflow inputs and refresh the allowlist."""
 
-    parsed = parse_items_spec(items, workflow_json, default_category)
+    effective_workflow = _resolve_workflow_json(workflow_json)
+    parsed = parse_items_spec(items, effective_workflow, default_category)
     _set_workflow_allowlist(parsed)
     return parsed
 
@@ -1209,8 +1303,9 @@ def audit_items(
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
         return _finalize(payload, total=0, cached=0, missing=0)
 
+    effective_workflow = _resolve_workflow_json(workflow_json)
     if parsed_items is None:
-        parsed = register_workflow_items(items, workflow_json, default_category)
+        parsed = register_workflow_items(items, effective_workflow, default_category)
     else:
         parsed = list(parsed_items)
         _set_workflow_allowlist(parsed)
@@ -1376,8 +1471,9 @@ def warmup_items(
         payload = {"ok": False, "error": "folder_paths unavailable", "items": []}
         return _finalize(payload, total=0, warmed=0, copied=0, missing=0, errors=0)
 
+    effective_workflow = _resolve_workflow_json(workflow_json)
     if parsed_items is None:
-        parsed = register_workflow_items(items, workflow_json, default_category)
+        parsed = register_workflow_items(items, effective_workflow, default_category)
     else:
         parsed = list(parsed_items)
         _set_workflow_allowlist(parsed)
@@ -1930,7 +2026,8 @@ class ArenaAutoCacheAudit:
         do_trim_now: bool = False,
         settings_json: str = "",
     ):
-        parsed_items = register_workflow_items(items, workflow_json, default_category)
+        effective_workflow = _resolve_workflow_json(workflow_json)
+        parsed_items = register_workflow_items(items, effective_workflow, default_category)
         categories = sorted({entry.get("category", "") for entry in parsed_items if isinstance(entry, dict)})
         if not categories:
             categories = [_normalize_category_name(default_category, "checkpoints")]
@@ -2004,7 +2101,7 @@ class ArenaAutoCacheAudit:
 
         audit_result = audit_items(
             items,
-            workflow_json,
+            effective_workflow,
             default_category,
             parsed_items=parsed_items,
         )
@@ -2192,10 +2289,11 @@ class ArenaAutoCacheWarmup:
     DESCRIPTION = t("node.warmup")
 
     def run(self, items: str, workflow_json: str, default_category: str):
-        parsed_items = register_workflow_items(items, workflow_json, default_category)
+        effective_workflow = _resolve_workflow_json(workflow_json)
+        parsed_items = register_workflow_items(items, effective_workflow, default_category)
         result = warmup_items(
             items,
-            workflow_json,
+            effective_workflow,
             default_category,
             parsed_items=parsed_items,
         )
@@ -2674,6 +2772,7 @@ class ArenaAutoCacheOps:
         run_warmup = normalized_mode in {"warmup", "audit_then_warmup"}
         run_trim = normalized_mode == "trim"
 
+        effective_workflow = _resolve_workflow_json(workflow_json)
         audit_result: dict[str, object] | None = None
         warmup_result: dict[str, object] | None = None
         trim_result: dict[str, object] | None = None
@@ -2681,13 +2780,13 @@ class ArenaAutoCacheOps:
 
         parsed_items: list[dict[str, str]] | None = None
         if run_audit or run_warmup:
-            parsed_items = register_workflow_items(items, workflow_json, default_category)
+            parsed_items = register_workflow_items(items, effective_workflow, default_category)
 
         if run_audit:
             audit_started = _now()
             audit_result = audit_items(
                 items,
-                workflow_json,
+                effective_workflow,
                 default_category,
                 parsed_items=parsed_items,
             )
@@ -2703,7 +2802,7 @@ class ArenaAutoCacheOps:
             warmup_started = _now()
             warmup_result = warmup_items(
                 items,
-                workflow_json,
+                effective_workflow,
                 default_category,
                 parsed_items=parsed_items,
             )
