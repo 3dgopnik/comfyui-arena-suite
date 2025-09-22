@@ -22,10 +22,13 @@ LABELS: dict[str, str] = {
     "node.ops": "🅰️ Arena AutoCache: Ops",
     "node.analyze": "🅰️ Arena AutoCache: Analyze",
     "node.get_workflow": "🅰️ Arena AutoCache: Get Active Workflow",
+    "node.copy_status": "🅰️ Arena AutoCache: Copy Status",
     "input.cache_root": "Cache root directory",
     "input.max_size_gb": "Maximum cache size (GB)",
     "input.enable": "Enable AutoCache",
     "input.verbose": "Verbose logging",
+    "input.min_size_gb": "Minimum size for caching (GB)",
+    "input.skip_hardcoded_paths": "Skip hardcoded paths",
     "input.category": "Model category",
     "input.do_trim": "Trim category after applying config",
     "input.do_warmup": "Warmup cache for listed items",
@@ -122,6 +125,8 @@ class ArenaCacheSettings:
     max_gb: int
     enable: bool
     verbose: bool
+    min_size_gb: float = 1.0  # RU: Минимальный размер для кеширования (ГБ)
+    skip_hardcoded_paths: bool = True  # RU: Пропускать модели с жёстко прописанными путями
 
 
 def _normalize_root(value: str | Path) -> Path:
@@ -165,6 +170,8 @@ _settings = ArenaCacheSettings(
     max_gb=max(0, _initial_int("ARENA_CACHE_MAX_GB", 300)),
     enable=_initial_bool("ARENA_CACHE_ENABLE", True),
     verbose=_initial_bool("ARENA_CACHE_VERBOSE", False),
+    min_size_gb=float(os.environ.get("ARENA_CACHE_MIN_SIZE_GB", "1.0")),
+    skip_hardcoded_paths=_initial_bool("ARENA_CACHE_SKIP_HARDCODED", True),
 )
 
 if _settings.enable:
@@ -183,6 +190,17 @@ _session_misses = 0
 _session_trims = 0
 
 _workflow_allowlist: set[tuple[str, str]] = set()
+
+# RU: Глобальное состояние копирования для визуального индикатора
+_copy_status: dict[str, object] = {
+    "active_jobs": 0,
+    "completed_jobs": 0,
+    "failed_jobs": 0,
+    "current_file": None,
+    "progress_bytes": 0,
+    "total_bytes": 0,
+    "last_update": 0.0,
+}
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
@@ -552,6 +570,87 @@ def _is_item_allowlisted(category: str, filename: str) -> bool:
         return (normalized_category, normalized_name) in _workflow_allowlist
 
 
+def _should_skip_by_size(src_path: Path, settings: ArenaCacheSettings) -> bool:
+    """RU: Проверяет, нужно ли пропустить модель по размеру."""
+    
+    if settings.min_size_gb <= 0:
+        return False
+    
+    try:
+        size_bytes = src_path.stat().st_size
+        size_gb = size_bytes / (1024 ** 3)
+        return size_gb < settings.min_size_gb
+    except Exception:
+        return False
+
+
+def _should_skip_hardcoded_path(src_path: Path, settings: ArenaCacheSettings) -> bool:
+    """RU: Проверяет, нужно ли пропустить модель с жёстко прописанным путём."""
+    
+    if not settings.skip_hardcoded_paths:
+        return False
+    
+    # RU: Список паттернов путей, которые обычно жёстко привязаны к своим папкам
+    hardcoded_patterns = [
+        # ControlNet модели часто привязаны к своим папкам
+        "controlnet",
+        "control_net", 
+        # Некоторые специализированные модели
+        "insightface",
+        "ipadapter",
+        "clip_vision",
+        # Модели с абсолютными путями в названии
+    ]
+    
+    path_str = str(src_path).lower()
+    name_str = src_path.name.lower()
+    
+    # Проверяем паттерны в пути
+    for pattern in hardcoded_patterns:
+        if pattern in path_str or pattern in name_str:
+            return True
+    
+    # Проверяем, содержит ли путь специфичные для ComfyUI папки
+    comfy_specific = ["custom_nodes", "models", "checkpoints", "loras", "vae"]
+    for folder in comfy_specific:
+        if f"/{folder}/" in path_str or f"\\{folder}\\" in path_str:
+            # Если модель в стандартной папке ComfyUI, не пропускаем
+            continue
+        if folder in path_str and len(Path(path_str).parts) > 3:
+            # Если модель глубоко вложена в нестандартную структуру, пропускаем
+            return True
+    
+    return False
+
+
+def _update_copy_status(event: str, **kwargs) -> None:
+    """RU: Обновляет глобальный статус копирования для визуального индикатора."""
+    
+    global _copy_status
+    with _lock:
+        if event == COPY_EVENT_STARTED:
+            _copy_status["active_jobs"] += 1
+            _copy_status["current_file"] = kwargs.get("filename", "unknown")
+            _copy_status["last_update"] = _now()
+        elif event == COPY_EVENT_COMPLETED:
+            _copy_status["active_jobs"] = max(0, _copy_status["active_jobs"] - 1)
+            _copy_status["completed_jobs"] += 1
+            _copy_status["current_file"] = None
+            _copy_status["last_update"] = _now()
+        elif event == COPY_EVENT_FAILED:
+            _copy_status["active_jobs"] = max(0, _copy_status["active_jobs"] - 1)
+            _copy_status["failed_jobs"] += 1
+            _copy_status["current_file"] = None
+            _copy_status["last_update"] = _now()
+
+
+def get_copy_status() -> dict[str, object]:
+    """RU: Возвращает текущий статус копирования."""
+    
+    with _lock:
+        return _copy_status.copy()
+
+
 def get_settings() -> ArenaCacheSettings:
     """RU: Возвращает копию настроек кеша."""
 
@@ -649,12 +748,17 @@ def _notify_copy_event(
     """Emit copy lifecycle notifications regardless of verbose mode."""
 
     context_payload = _sanitize_metadata(context)
+    filename = dst.name if dst is not None else (src.name if src is not None else None)
+    
+    # RU: Обновляем глобальный статус копирования
+    _update_copy_status(event, filename=filename)
+    
     payload: dict[str, object] = {
         "event": event,
         "category": category,
         "src": str(src) if src is not None else None,
         "dst": str(dst) if dst is not None else None,
-        "filename": dst.name if dst is not None else (src.name if src is not None else None),
+        "filename": filename,
         "timestamp": time.time(),
         "context": context_payload,
     }
@@ -691,6 +795,8 @@ def set_cache_settings(
     max_gb: int | None = None,
     enable: bool | None = None,
     verbose: bool | None = None,
+    min_size_gb: float | None = None,
+    skip_hardcoded_paths: bool | None = None,
 ) -> dict:
     """RU: Обновляет настройки кеша и перепатчивает folder_paths в рантайме."""
 
@@ -730,12 +836,17 @@ def set_cache_settings(
 
         new_enable = current.enable if enable is None else bool(enable)
         new_verbose = current.verbose if verbose is None else bool(verbose)
+        
+        new_min_size_gb = current.min_size_gb if min_size_gb is None else max(0.0, float(min_size_gb))
+        new_skip_hardcoded = current.skip_hardcoded_paths if skip_hardcoded_paths is None else bool(skip_hardcoded_paths)
 
         tentative = ArenaCacheSettings(
             root=new_root,
             max_gb=new_max,
             enable=new_enable,
             verbose=new_verbose,
+            min_size_gb=new_min_size_gb,
+            skip_hardcoded_paths=new_skip_hardcoded,
         )
 
         if tentative.enable:
@@ -761,6 +872,8 @@ def set_cache_settings(
         "max_size_gb": snapshot.max_gb,
         "enable": snapshot.enable,
         "verbose": snapshot.verbose,
+        "min_size_gb": snapshot.min_size_gb,
+        "skip_hardcoded_paths": snapshot.skip_hardcoded_paths,
     }
 
 
@@ -923,6 +1036,30 @@ def _copy_into_cache_lru(
     """RU: Копирует файл в кеш с учётом LRU."""
 
     settings = get_settings()
+    
+    # RU: Применяем фильтры перед копированием
+    if _should_skip_by_size(src, settings):
+        _notify_copy_event(
+            COPY_EVENT_SKIPPED,
+            category=category,
+            src=src,
+            dst=dst,
+            context=context,
+            note=f"size < {settings.min_size_gb} GB",
+        )
+        return
+    
+    if _should_skip_hardcoded_path(src, settings):
+        _notify_copy_event(
+            COPY_EVENT_SKIPPED,
+            category=category,
+            src=src,
+            dst=dst,
+            context=context,
+            note="hardcoded path detected",
+        )
+        return
+    
     cache_root = _ensure_category_root(category, settings=settings)
     dst.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1992,6 +2129,25 @@ class ArenaAutoCacheConfig:
                         "tooltip": t("input.verbose"),
                     },
                 ),
+                "min_size_gb": (
+                    "FLOAT",
+                    {
+                        "default": settings.min_size_gb,
+                        "min": 0.0,
+                        "max": 100.0,
+                        "step": 0.1,
+                        "description": t("input.min_size_gb"),
+                        "tooltip": t("input.min_size_gb"),
+                    },
+                ),
+                "skip_hardcoded_paths": (
+                    "BOOLEAN",
+                    {
+                        "default": settings.skip_hardcoded_paths,
+                        "description": t("input.skip_hardcoded_paths"),
+                        "tooltip": t("input.skip_hardcoded_paths"),
+                    },
+                ),
             }
         }
 
@@ -2003,13 +2159,15 @@ class ArenaAutoCacheConfig:
     CATEGORY = "Arena/AutoCache/Basic"
     DESCRIPTION = t("node.config")
 
-    def apply(self, cache_root: str, max_size_gb: int, enable: bool, verbose: bool):
+    def apply(self, cache_root: str, max_size_gb: int, enable: bool, verbose: bool, min_size_gb: float, skip_hardcoded_paths: bool):
         root_value = cache_root.strip()
         result = set_cache_settings(
             root=root_value or None,
             max_gb=max_size_gb,
             enable=enable,
             verbose=verbose,
+            min_size_gb=min_size_gb,
+            skip_hardcoded_paths=skip_hardcoded_paths,
         )
         if result.get("ok"):
             result.setdefault("note", "settings applied")
@@ -3287,12 +3445,103 @@ class ArenaGetActiveWorkflow:
         return (text, json.dumps(summary, ensure_ascii=False, indent=2))
 
 
+class ArenaAutoCacheCopyStatus:
+    """RU: Отображает текущий статус копирования моделей в кеш."""
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {
+                "refresh_interval": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": 0.1,
+                        "max": 10.0,
+                        "step": 0.1,
+                        "description": "Refresh interval (seconds)",
+                        "tooltip": "How often to refresh the status display",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"))
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache/Basic"
+    DESCRIPTION = t("node.copy_status")
+    OUTPUT_NODE = True
+
+    def run(self, refresh_interval: float = 1.0):
+        status = get_copy_status()
+        settings = get_settings()
+        
+        # RU: Формируем детальный JSON статуса
+        detailed_status = {
+            "timestamp": _now(),
+            "refresh_interval": refresh_interval,
+            "copy_status": status,
+            "settings": {
+                "min_size_gb": settings.min_size_gb,
+                "skip_hardcoded_paths": settings.skip_hardcoded_paths,
+                "enable": settings.enable,
+            },
+            "filters": {
+                "size_filter_enabled": settings.min_size_gb > 0,
+                "size_threshold_gb": settings.min_size_gb,
+                "hardcoded_filter_enabled": settings.skip_hardcoded_paths,
+            },
+        }
+        
+        # RU: Формируем краткий UI-отчет
+        active_jobs = status.get("active_jobs", 0)
+        completed_jobs = status.get("completed_jobs", 0)
+        failed_jobs = status.get("failed_jobs", 0)
+        current_file = status.get("current_file")
+        
+        if active_jobs > 0:
+            headline = f"Copying: {current_file or 'unknown'}"
+            details = [
+                f"Active jobs: {active_jobs}",
+                f"Completed: {completed_jobs}",
+                f"Failed: {failed_jobs}",
+                f"Size filter: {settings.min_size_gb} GB",
+                f"Skip hardcoded: {settings.skip_hardcoded_paths}",
+            ]
+        else:
+            headline = "Copy status: Idle"
+            details = [
+                f"Completed: {completed_jobs}",
+                f"Failed: {failed_jobs}",
+                f"Size filter: {settings.min_size_gb} GB",
+                f"Skip hardcoded: {settings.skip_hardcoded_paths}",
+            ]
+        
+        summary = {
+            "ok": True,
+            "ui": {
+                "headline": headline,
+                "details": details,
+            },
+        }
+        
+        detailed_json = json.dumps(detailed_status, ensure_ascii=False, indent=2)
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+        
+        return (detailed_json, summary_json)
+
+
 NODE_CLASS_MAPPINGS.update(
     {
         "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
         "ArenaAutoCacheAnalyze": ArenaAutoCacheAnalyze,
         "ArenaGetActiveWorkflow": ArenaGetActiveWorkflow,
         "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
+        "ArenaAutoCacheCopyStatus": ArenaAutoCacheCopyStatus,
         "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
         "ArenaAutoCacheOps": ArenaAutoCacheOps,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
@@ -3309,6 +3558,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(
         "ArenaAutoCacheAnalyze": t("node.analyze"),
         "ArenaGetActiveWorkflow": t("node.get_workflow"),
         "ArenaAutoCacheConfig": t("node.config"),
+        "ArenaAutoCacheCopyStatus": t("node.copy_status"),
         "ArenaAutoCacheDashboard": t("node.dashboard"),
         "ArenaAutoCacheOps": t("node.ops"),
         "ArenaAutoCacheStats": t("node.stats"),

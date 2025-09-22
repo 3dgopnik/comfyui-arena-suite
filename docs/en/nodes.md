@@ -14,14 +14,37 @@ Groups in ComfyUI:
 ## Basic
 - ArenaAutoCache Analyze — zero‑input plan + warmup for the active workflow.
 - ArenaAutoCache Ops — combined audit + warmup (+trim when selected).
+- ArenaAutoCache Copy Status — real‑time visual indicator of model copying progress.
 
 ## Advanced
 - Dashboard, Manager, Trim, StatsEx.
 
 ## Utils
-- GetActiveWorkflow, Stats.
+- GetActiveWorkflow, Stats, Config (with size and path filters).
 
 Please refer to the Russian reference `../ru/nodes.md` for details and examples.
+
+## Copy filters
+
+AutoCache now includes two types of filters to optimize copying:
+
+### Size filter
+- **Parameter**: `min_size_gb` (default: 1.0 GB)
+- **Action**: Models smaller than the threshold are skipped and remain on source storage (e.g., NAS)
+- **Purpose**: Save SSD cache space for large models that benefit most from fast access
+
+### Hardcoded paths filter
+- **Parameter**: `skip_hardcoded_paths` (default: enabled)
+- **Action**: Skips models that are hardcoded to their specific folders and won't work elsewhere
+- **Patterns**: ControlNet, InsightFace, IP-Adapter, CLIP Vision, and models in deeply nested non-standard structures
+- **Purpose**: Avoid copying models that won't work from cache anyway
+
+### Visual indicator
+**ArenaAutoCache Copy Status** displays:
+- Current copy status (active jobs, completed, failed)
+- Filter settings
+- Current copying file name
+- Overall operation statistics
 
 ## Workflow allowlist
 
