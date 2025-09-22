@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Arena AutoCache web overlay (experimental) has been removed from the package by default to prioritize stability across ComfyUI Desktop builds. The feature is tracked for a future iteration in the roadmap.
 ### Fixed
+- Ensure AutoCache workflow parsing assigns CLIP Vision, IPAdapter, InsightFace, CLIP-G, and CLIP-L hints to their dedicated ComfyUI categories before falling back to the generic CLIP bucket.
 - Overlay now also listens to execution events (`onAfterExecute`/`onExecuted`) in addition to `onNodeOutputsUpdated` to support ComfyUI Desktop builds that don't emit the outputs-updated callback consistently.
 - Overlay polling fallback: periodically reads node outputs (~500 ms) for Dashboard/Ops/Audit nodes to keep the UI in sync even when no frontend events are fired (Desktop compatibility).
 - Desktop execution store fallback: when `getOutputData()` returns nothing, the overlay now attempts to read outputs from the Desktop `executionStore` (supports Map/object containers and locator ids like `subgraph:localId`).

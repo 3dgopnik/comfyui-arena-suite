@@ -52,6 +52,48 @@ class ArenaAutoCacheParseItemsSpecTest(unittest.TestCase):
             ],
         )
 
+    def test_parse_items_spec_detects_specialized_clip_categories(self) -> None:
+        module = importlib.import_module(MODULE_NAME)
+        workflow = json.dumps(
+            {
+                "nodes": [
+                    {
+                        "class_type": "CLIPVisionLoader",
+                        "widgets_values": ["clip_vision_model.safetensors"],
+                        "inputs": {"clip_name": "clip_vision_model.safetensors"},
+                    },
+                    {
+                        "class_type": "IPAdapterModelLoader",
+                        "inputs": {"ipadapter": "ipadapter_model.safetensors"},
+                    },
+                    {
+                        "class_type": "InsightFaceLoader",
+                        "inputs": {"insightface": "insightface_detector.onnx"},
+                    },
+                    {
+                        "class_type": "CLIPTextEncode",
+                        "inputs": {
+                            "clip_g": "clip_g_text_encoder.pth",
+                            "clip_l": "clip_l_text_encoder.pth",
+                        },
+                    },
+                ]
+            }
+        )
+
+        parsed = module.parse_items_spec("", workflow, "checkpoints")
+
+        self.assertEqual(
+            {(entry["category"], entry["name"]) for entry in parsed},
+            {
+                ("clip_vision", "clip_vision_model.safetensors"),
+                ("ipadapter", "ipadapter_model.safetensors"),
+                ("insightface", "insightface_detector.onnx"),
+                ("clip_g", "clip_g_text_encoder.pth"),
+                ("clip_l", "clip_l_text_encoder.pth"),
+            },
+        )
+
 
 class ArenaAutoCacheWarmupAuditIntegrationTest(unittest.TestCase):
     """Integration tests for warmup/audit helpers operating on real files."""
