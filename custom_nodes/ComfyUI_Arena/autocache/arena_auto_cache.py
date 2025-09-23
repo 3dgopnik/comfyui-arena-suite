@@ -812,6 +812,46 @@ def _set_workflow_allowlist(parsed: Sequence[dict[str, str]]) -> None:
             _workflow_allowlist.add((category, name))
 
 
+def _load_workflow_from_files() -> object | None:
+    """Load the latest workflow from saved files."""
+    try:
+        import json
+        from pathlib import Path
+        
+        # Поиск в различных местах
+        search_paths = [
+            Path("C:/ComfyUI/user/default/workflows"),
+            Path("C:/ComfyUI/workflows"),
+            Path.home() / "Documents" / "ComfyUI" / "workflows",
+            Path.home() / "Desktop" / "ComfyUI" / "workflows",
+        ]
+        
+        print(f"[ArenaAutoCacheSmart] Searching for workflow files in multiple locations...")
+        json_files = []
+        
+        for search_path in search_paths:
+            print(f"[ArenaAutoCacheSmart] Checking: {search_path}")
+            if search_path.exists():
+                json_files.extend(search_path.glob("*.json"))
+        
+        if json_files:
+            # Сортируем по времени модификации (новые первыми)
+            json_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            latest_file = json_files[0]
+            print(f"[ArenaAutoCacheSmart] Using latest file: {latest_file}")
+            with open(latest_file, 'r', encoding='utf-8') as f:
+                workflow_data = json.load(f)
+            print(f"[ArenaAutoCacheSmart] Loaded workflow from file: {type(workflow_data)}")
+            return workflow_data
+        else:
+            print("[ArenaAutoCacheSmart] No workflow files found")
+            return None
+            
+    except Exception as e:
+        print(f"[ArenaAutoCacheSmart] Error loading workflow from files: {e}")
+        return None
+
+
 def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -> object:
     """Return the provided workflow JSON or fall back to the active workflow, then to history."""
 
@@ -824,16 +864,24 @@ def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -
     # Сначала пробуем активный workflow
     fallback = _load_active_workflow(force_refresh=force_refresh)
     if fallback is not None:
+        print("[ArenaAutoCacheSmart] Found active workflow from canvas")
         return fallback
     
-    # Если активный workflow не найден, пробуем последний выполненный из истории
-    print("[ArenaAutoCacheSmart] No active workflow found, trying last executed workflow from history")
+    # Если активный workflow не найден, пробуем загрузить из файлов workflow
+    print("[ArenaAutoCacheSmart] No active workflow found, trying to load from workflow files")
+    file_workflow = _load_workflow_from_files()
+    if file_workflow is not None:
+        print("[ArenaAutoCacheSmart] Found workflow from files")
+        return file_workflow
+    
+    # В последнюю очередь пробуем последний выполненный из истории
+    print("[ArenaAutoCacheSmart] No workflow found in canvas or files, trying last executed workflow from history")
     history_workflow = _load_last_executed_workflow()
     if history_workflow is not None:
         print("[ArenaAutoCacheSmart] Found workflow from history API")
         return history_workflow
     
-    print("[ArenaAutoCacheSmart] No workflow found in active canvas or history")
+    print("[ArenaAutoCacheSmart] No workflow found in active canvas, files, or history")
     return workflow_json
 
 
@@ -5646,7 +5694,7 @@ class ArenaAutoCacheSmart:
 #        Добавлена подробная отладочная информация для WebSocket и модулей ComfyUI
 #        Основные узлы теперь имеют версии в названиях для удобства тестирования
 #        Обратная совместимость: старые названия узлов остаются для существующих workflow
-ARENA_NODES_VERSION = "v2.17"
+ARENA_NODES_VERSION = "v2.18"
 
 NODE_CLASS_MAPPINGS.update(
     {
