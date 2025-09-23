@@ -126,6 +126,7 @@ class ArenaCacheSettings:
     enable: bool
     verbose: bool
     min_size_gb: float = 1.0  # RU: Минимальный размер для кеширования (ГБ)
+    min_size_mb: float = 1024.0  # RU: Минимальный размер для кеширования (МБ)
     skip_hardcoded_paths: bool = True  # RU: Пропускать модели с жёстко прописанными путями
 
 
@@ -171,6 +172,7 @@ _settings = ArenaCacheSettings(
     enable=_initial_bool("ARENA_CACHE_ENABLE", True),
     verbose=_initial_bool("ARENA_CACHE_VERBOSE", False),
     min_size_gb=float(os.environ.get("ARENA_CACHE_MIN_SIZE_GB", "1.0")),
+    min_size_mb=float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "1024.0")),
     skip_hardcoded_paths=_initial_bool("ARENA_CACHE_SKIP_HARDCODED", True),
 )
 
@@ -204,6 +206,146 @@ _copy_status: dict[str, object] = {
 
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
+
+
+def _extract_models_from_workflow_json(workflow: dict) -> list[dict]:
+    """Extract model information from workflow JSON structure."""
+    models = []
+    
+    if not isinstance(workflow, dict) or 'nodes' not in workflow:
+        return models
+    
+    nodes = workflow.get('nodes', [])
+    print(f"[ArenaAutoCacheSmart] Processing {len(nodes)} nodes for model extraction")
+    
+    # Node types that contain model information
+    model_node_types = [
+        'CheckpointLoaderSimple', 'CheckpointLoader', 'VAELoader', 'CLIPLoader', 
+        'LoraLoader', 'LoraLoaderModelOnly', 'ControlNetLoader', 'UpscaleModelLoader',
+        'StyleModelLoader', 'CLIPVisionLoader', 'UNETLoader', 'UnetLoaderGGUF',
+        'IPAdapterModelLoader', 'InsightFaceLoader', 'DiffControlNetLoader'
+    ]
+    
+    for i, node in enumerate(workflow.get('nodes', [])):
+        if not isinstance(node, dict):
+            continue
+            
+        # Проверяем и class_type и type (разные форматы workflow)
+        class_type = node.get('class_type', '') or node.get('type', '')
+        
+        if class_type not in model_node_types:
+            continue
+            
+        # Extract model information from inputs or widgets_values (разные форматы workflow)
+        inputs = node.get('inputs', {})
+        widgets_values = node.get('widgets_values', [])
+        
+        # Extract model name from common input keys
+        model_name = None
+        for key in ['ckpt_name', 'lora_name', 'control_net_name', 'model_name', 'vae_name', 'clip_name']:
+            if key in inputs and inputs[key]:
+                model_name = inputs[key]
+                break
+        
+        # Если не нашли в inputs, пробуем widgets_values (первый элемент обычно модель)
+        if not model_name and widgets_values and len(widgets_values) > 0:
+            if isinstance(widgets_values[0], str):
+                model_name = widgets_values[0]
+                
+        if not model_name or not isinstance(model_name, str):
+            continue
+            
+        # Extract additional information from properties
+        properties = node.get('properties', {})
+        directory = properties.get('directory', '')
+        url = properties.get('url', '')
+        
+        # Determine category based on class_type
+        category = _get_model_category(class_type)
+        
+        model_info = {
+            'name': model_name,
+            'class_type': class_type,
+            'category': category,
+            'directory': directory,
+            'url': url,
+            'node_id': node.get('id', '')
+        }
+        
+        models.append(model_info)
+        print(f"[ArenaAutoCacheSmart] Found model: {model_name} ({category})")
+    
+    print(f"[ArenaAutoCacheSmart] Total unique models found: {len(models)}")
+    return models
+
+
+def _get_model_category(class_type: str) -> str:
+    """Map ComfyUI node class types to model categories."""
+    category_mapping = {
+        'CheckpointLoaderSimple': 'checkpoints',
+        'CheckpointLoader': 'checkpoints',
+        'UNETLoader': 'checkpoints',
+        'UnetLoaderGGUF': 'checkpoints',
+        'VAELoader': 'vae',
+        'CLIPLoader': 'clip',
+        'LoraLoader': 'loras',
+        'LoraLoaderModelOnly': 'loras',
+        'ControlNetLoader': 'controlnet',
+        'UpscaleModelLoader': 'upscale_models',
+        'StyleModelLoader': 'style_models',
+        'CLIPVisionLoader': 'clip_vision',
+        'IPAdapterModelLoader': 'ipadapter',
+        'InsightFaceLoader': 'insightface',
+        'DiffControlNetLoader': 'controlnet'
+    }
+    return category_mapping.get(class_type, 'unknown')
+
+
+def _load_last_executed_workflow() -> object | None:
+    """Return the last executed workflow from ComfyUI history API."""
+    try:
+        import requests
+        import json
+        
+        # Get history from ComfyUI API
+        base_url = "http://127.0.0.1:8188"
+        history_url = f"{base_url}/history"
+        
+        print(f"[ArenaAutoCache] Fetching history from {history_url}")
+        
+        response = requests.get(history_url, timeout=5)
+        response.raise_for_status()
+        history = response.json()
+        
+        if not history:
+            print("[ArenaAutoCache] No history found")
+            return None
+        
+        # Get the latest executed workflow
+        latest_id = max(history.keys(), key=lambda k: history[k]["timestamp"])
+        latest_item = history[latest_id]
+        
+        print(f"[ArenaAutoCache] Latest executed workflow: {latest_id}")
+        
+        # Get detailed workflow data
+        detail_url = f"{base_url}/history/{latest_id}"
+        detail_response = requests.get(detail_url, timeout=5)
+        detail_response.raise_for_status()
+        detail_data = detail_response.json()
+        
+        # Extract workflow (some builds store under 'prompt', some under 'workflow')
+        workflow = detail_data.get("workflow") or detail_data.get("prompt")
+        
+        if workflow:
+            print(f"[ArenaAutoCache] Found last executed workflow: {type(workflow)}")
+            return workflow
+        else:
+            print("[ArenaAutoCache] No workflow found in history detail")
+            return None
+            
+    except Exception as e:
+        print(f"[ArenaAutoCache] Error fetching last executed workflow: {e}")
+        return None
 
 
 def _load_active_workflow(force_refresh: bool = False) -> object | None:
@@ -245,6 +387,7 @@ def _load_active_workflow(force_refresh: bool = False) -> object | None:
         return None
 
     candidates: list[object] = []
+    print(f"[ArenaAutoCache] _load_active_workflow called with force_refresh={force_refresh}")
 
     # Принудительное обновление: очищаем кеш если запрошено
     if force_refresh:
@@ -252,55 +395,194 @@ def _load_active_workflow(force_refresh: bool = False) -> object | None:
         if hasattr(prompt_server, '_arena_workflow_cache'):
             delattr(prompt_server, '_arena_workflow_cache')
 
+    # Метод 1: Попытка получить текущий canvas workflow через WebSocket или API
+    try:
+        # Проверяем, есть ли метод для получения текущего canvas
+        if hasattr(prompt_server, 'get_current_workflow'):
+            current_workflow = prompt_server.get_current_workflow()
+            if current_workflow:
+                candidates.append(current_workflow)
+                print(f"[ArenaAutoCache] Found current workflow via get_current_workflow: {type(current_workflow)}")
+        
+        # Проверяем, есть ли атрибут с текущим workflow
+        if hasattr(prompt_server, 'current_workflow'):
+            current_workflow = getattr(prompt_server, 'current_workflow')
+            if current_workflow:
+                candidates.append(current_workflow)
+                print(f"[ArenaAutoCache] Found current workflow via current_workflow attribute: {type(current_workflow)}")
+        
+        # Проверяем WebSocket соединения для получения canvas
+        if hasattr(prompt_server, 'sockets'):
+            sockets = getattr(prompt_server, 'sockets')
+            if sockets:
+                print(f"[ArenaAutoCache] Found {len(sockets)} WebSocket connections")
+                # Можем попробовать получить workflow через WebSocket API
+                for i, socket in enumerate(sockets):
+                    print(f"[ArenaAutoCache] WebSocket {i}: {type(socket)}")
+                    print(f"[ArenaAutoCache] WebSocket {i} attributes: {dir(socket)}")
+                    
+                    if hasattr(socket, 'current_workflow'):
+                        current_workflow = getattr(socket, 'current_workflow')
+                        if current_workflow:
+                            candidates.append(current_workflow)
+                            print(f"[ArenaAutoCache] Found workflow in WebSocket: {type(current_workflow)}")
+                    
+                    # Проверяем, есть ли в WebSocket данные о canvas
+                    if hasattr(socket, 'canvas_data'):
+                        canvas_data = getattr(socket, 'canvas_data')
+                        if canvas_data:
+                            candidates.append(canvas_data)
+                            print(f"[ArenaAutoCache] Found canvas data in WebSocket: {type(canvas_data)}")
+                    
+                    # Проверяем, есть ли в WebSocket данные о текущем состоянии
+                    if hasattr(socket, 'current_state'):
+                        current_state = getattr(socket, 'current_state')
+                        if current_state:
+                            candidates.append(current_state)
+                            print(f"[ArenaAutoCache] Found current state in WebSocket: {type(current_state)}")
+                    
+                    # Проверяем, есть ли в WebSocket данные о текущем графе
+                    if hasattr(socket, 'current_graph'):
+                        current_graph = getattr(socket, 'current_graph')
+                        if current_graph:
+                            candidates.append(current_graph)
+                            print(f"[ArenaAutoCache] Found current graph in WebSocket: {type(current_graph)}")
+        
+        # Метод 2: Попытка получить через внутренние структуры ComfyUI
+        if hasattr(prompt_server, 'client_id'):
+            client_id = getattr(prompt_server, 'client_id')
+            print(f"[ArenaAutoCache] PromptServer client_id: {client_id}")
+        
+        # Метод 3: Попытка получить через глобальные переменные ComfyUI
+        try:
+            import sys
+            print(f"[ArenaAutoCache] Searching {len(sys.modules)} modules for ComfyUI data...")
+            # Ищем модули ComfyUI в sys.modules
+            for module_name, module in sys.modules.items():
+                if 'comfy' in module_name.lower():
+                    print(f"[ArenaAutoCache] Found ComfyUI module: {module_name}")
+                    if hasattr(module, 'current_workflow'):
+                        current_workflow = getattr(module, 'current_workflow')
+                        if current_workflow:
+                            candidates.append(current_workflow)
+                            print(f"[ArenaAutoCache] Found workflow in module {module_name}: {type(current_workflow)}")
+                    
+                    # Проверяем, есть ли в модуле данные о canvas
+                    if hasattr(module, 'canvas_data'):
+                        canvas_data = getattr(module, 'canvas_data')
+                        if canvas_data:
+                            candidates.append(canvas_data)
+                            print(f"[ArenaAutoCache] Found canvas data in module {module_name}: {type(canvas_data)}")
+                    
+                    # Проверяем, есть ли в модуле данные о текущем состоянии
+                    if hasattr(module, 'current_state'):
+                        current_state = getattr(module, 'current_state')
+                        if current_state:
+                            candidates.append(current_state)
+                            print(f"[ArenaAutoCache] Found current state in module {module_name}: {type(current_state)}")
+                    
+                    # Проверяем, есть ли в модуле данные о текущем графе
+                    if hasattr(module, 'current_graph'):
+                        current_graph = getattr(module, 'current_graph')
+                        if current_graph:
+                            candidates.append(current_graph)
+                            print(f"[ArenaAutoCache] Found current graph in module {module_name}: {type(current_graph)}")
+        except Exception as e:
+            print(f"[ArenaAutoCache] Error searching ComfyUI modules: {e}")
+        
+        # Проверяем, есть ли кэшированный workflow
+        if hasattr(prompt_server, '_arena_workflow_cache'):
+            cached_workflow = getattr(prompt_server, '_arena_workflow_cache')
+            if cached_workflow:
+                candidates.append(cached_workflow)
+                print(f"[ArenaAutoCache] Found cached workflow: {type(cached_workflow)}")
+                
+    except Exception as e:
+        print(f"[ArenaAutoCache] Error getting current canvas workflow: {e}")
+
     prompt_queue = getattr(prompt_server, "prompt_queue", None)
     if prompt_queue is not None:
-        for attr in ("workflow", "current_prompt", "current_workflow", "last_prompt", "last_workflow"):
-            if hasattr(prompt_queue, attr):
-                candidates.append(getattr(prompt_queue, attr))
+        # Правильный способ получения текущего workflow в ComfyUI Desktop
+        if hasattr(prompt_queue, "get_current_queue"):
+            try:
+                running, queued = prompt_queue.get_current_queue()
+                print(f"[ArenaAutoCache] get_current_queue: running={len(running)}, queued={len(queued)}")
+                # Проверяем выполняющиеся задачи
+                for item in running:
+                    if isinstance(item, dict) and "prompt" in item:
+                        candidates.append(item["prompt"])
+                        print(f"[ArenaAutoCache] Found running prompt: {type(item['prompt'])}")
+                # Проверяем очередь
+                for item in queued:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        prompt_data = item[1]
+                        if isinstance(prompt_data, dict) and "prompt" in prompt_data:
+                            candidates.append(prompt_data["prompt"])
+                            print(f"[ArenaAutoCache] Found queued prompt: {type(prompt_data['prompt'])}")
+            except Exception as e:
+                print(f"[ArenaAutoCache] Error in get_current_queue: {e}")
+                pass
+        
+        # Дополнительные методы (если есть)
         for method_name in ("get_current_prompt", "get_current_workflow", "get_last_prompt", "peek"):
             method = getattr(prompt_queue, method_name, None)
             if callable(method):
                 try:
-                    candidates.append(method())
-                except TypeError:
-                    try:
-                        candidates.append(method(None))
-                    except Exception:
-                        pass
+                    result = method()
+                    if isinstance(result, dict) and "prompt" in result:
+                        candidates.append(result["prompt"])
+                    else:
+                        candidates.append(result)
                 except Exception:
                     pass
+        
+        # Поиск в очереди напрямую
         queue_data = getattr(prompt_queue, "queue", None)
         if isinstance(queue_data, list):
-            candidates.extend(reversed(queue_data))
+            for item in reversed(queue_data):
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    prompt_data = item[1]
+                    if isinstance(prompt_data, dict) and "prompt" in prompt_data:
+                        candidates.append(prompt_data["prompt"])
+        
+        # Поиск в выполняющихся задачах
+        currently_running = getattr(prompt_queue, "currently_running", None)
+        if isinstance(currently_running, dict):
+            for item in currently_running.values():
+                if isinstance(item, dict) and "prompt" in item:
+                    candidates.append(item["prompt"])
 
-    for attr in ("workflow", "last_prompt", "last_workflow", "current_workflow", "current_prompt"):
+    # Дополнительный поиск в PromptServer
+    for attr in ("workflow", "current_workflow", "current_prompt"):
         if hasattr(prompt_server, attr):
             candidates.append(getattr(prompt_server, attr))
-    for method_name in ("get_current_prompt", "get_last_prompt", "get_current_workflow", "get_last_workflow"):
+    
+    # Попытка получить через методы PromptServer
+    for method_name in ("get_current_prompt", "get_current_workflow"):
         method = getattr(prompt_server, method_name, None)
         if callable(method):
             try:
-                candidates.append(method())
+                result = method()
+                if isinstance(result, dict) and "prompt" in result:
+                    candidates.append(result["prompt"])
+                else:
+                    candidates.append(result)
             except Exception:
                 pass
-    
-    # Дополнительный поиск в execution context
-    if hasattr(prompt_server, 'execution_context'):
-        exec_context = getattr(prompt_server, 'execution_context')
-        if exec_context and hasattr(exec_context, 'workflow'):
-            candidates.append(getattr(exec_context, 'workflow'))
-    
-    # Поиск в graph context
-    if hasattr(prompt_server, 'graph'):
-        graph = getattr(prompt_server, 'graph')
-        if graph and hasattr(graph, 'workflow'):
-            candidates.append(getattr(graph, 'workflow'))
 
-    for candidate in candidates:
+    print(f"[ArenaAutoCache] Total candidates found: {len(candidates)}")
+    for i, candidate in enumerate(candidates):
+        print(f"[ArenaAutoCache] Candidate {i}: {type(candidate)}")
         extracted = _extract(candidate)
         if extracted is not None:
+            print(f"[ArenaAutoCache] Successfully extracted workflow: {type(extracted)}")
             return extracted
+        else:
+            print(f"[ArenaAutoCache] Failed to extract from candidate {i}")
 
+    # Fallback: если workflow не найден, возвращаем None
+    # Это означает, что нет активного workflow
+    print("[ArenaAutoCache] No workflow found, returning None")
     return None
 
 
@@ -531,7 +813,7 @@ def _set_workflow_allowlist(parsed: Sequence[dict[str, str]]) -> None:
 
 
 def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -> object:
-    """Return the provided workflow JSON or fall back to the active workflow."""
+    """Return the provided workflow JSON or fall back to the active workflow, then to history."""
 
     if isinstance(workflow_json, str):
         if workflow_json.strip():
@@ -539,8 +821,20 @@ def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -
     elif workflow_json:
         return workflow_json
 
+    # Сначала пробуем активный workflow
     fallback = _load_active_workflow(force_refresh=force_refresh)
-    return fallback if fallback is not None else workflow_json
+    if fallback is not None:
+        return fallback
+    
+    # Если активный workflow не найден, пробуем последний выполненный из истории
+    print("[ArenaAutoCacheSmart] No active workflow found, trying last executed workflow from history")
+    history_workflow = _load_last_executed_workflow()
+    if history_workflow is not None:
+        print("[ArenaAutoCacheSmart] Found workflow from history API")
+        return history_workflow
+    
+    print("[ArenaAutoCacheSmart] No workflow found in active canvas or history")
+    return workflow_json
 
 
 def reset_workflow_allowlist() -> None:
@@ -557,6 +851,7 @@ def register_workflow_items(
 
     effective_workflow = _resolve_workflow_json(workflow_json)
     parsed = parse_items_spec(items, effective_workflow, default_category)
+    
     # Fallback: если ничего не распознано из воркфлоу, попробуем взять
     # последний использованный путь из индекса категории, чтобы не требовать
     # ручного ввода даже при несовместимом формате воркфлоу.
@@ -573,6 +868,9 @@ def register_workflow_items(
                     parsed = [{"category": _normalize_category_name(default_category, "checkpoints"), "name": name}]
         except Exception:
             pass
+    
+    # Если ничего не найдено, возвращаем пустой список
+    # Это означает, что в workflow нет моделей для кеширования
     _set_workflow_allowlist(parsed)
     return parsed
 
@@ -591,13 +889,21 @@ def _is_item_allowlisted(category: str, filename: str) -> bool:
 def _should_skip_by_size(src_path: Path, settings: ArenaCacheSettings) -> bool:
     """RU: Проверяет, нужно ли пропустить модель по размеру."""
     
-    if settings.min_size_gb <= 0:
+    if settings.min_size_gb <= 0 and settings.min_size_mb <= 0:
         return False
     
     try:
         size_bytes = src_path.stat().st_size
         size_gb = size_bytes / (1024 ** 3)
-        return size_gb < settings.min_size_gb
+        size_mb = size_bytes / (1024 ** 2)
+        
+        # Проверяем оба порога (ГБ и МБ)
+        if settings.min_size_gb > 0 and size_gb < settings.min_size_gb:
+            return True
+        if settings.min_size_mb > 0 and size_mb < settings.min_size_mb:
+            return True
+            
+        return False
     except Exception:
         return False
 
@@ -3589,12 +3895,15 @@ class ArenaAutoCacheRefreshWorkflow:
         # Принудительно загружаем новый workflow
         workflow = _load_active_workflow(force_refresh=True)
         
+        # Пробуем зарегистрировать элементы для тестирования
+        test_parsed = register_workflow_items("", workflow, "checkpoints")
+        
         if workflow:
             workflow_str = json.dumps(workflow, indent=2) if isinstance(workflow, dict) else str(workflow)
-            show_text = "✅ Workflow refreshed successfully"
+            workflow_status = "Found"
         else:
             workflow_str = "{}"
-            show_text = "⚠️ No active workflow found"
+            workflow_status = "Not found"
         
         summary = {
             "ok": True,
@@ -3603,7 +3912,9 @@ class ArenaAutoCacheRefreshWorkflow:
                 "details": [
                     "Status: Refreshed",
                     "Allowlist: Cleared",
-                    "Workflow: " + ("Found" if workflow else "Not found"),
+                    f"Workflow: {workflow_status}",
+                    f"Parsed items: {len(test_parsed)}",
+                    f"Items: {[item.get('name', 'unknown') for item in test_parsed[:3]]}",
                 ],
             },
         }
@@ -3611,16 +3922,1754 @@ class ArenaAutoCacheRefreshWorkflow:
         return (workflow_str, json.dumps(summary, ensure_ascii=False, indent=2))
 
 
+class ArenaAutoCachePrewarm:
+    """RU: Предварительное кеширование моделей из workflow до запуска.
+
+    Анализирует workflow и кеширует все необходимые модели заранее,
+    чтобы ускорить выполнение. Работает с любым workflow JSON.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": "Workflow JSON (auto-detected if empty)",
+                        "tooltip": "Leave empty to auto-detect current workflow",
+                    },
+                ),
+                "auto_start": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "description": "Auto start prewarming",
+                        "tooltip": "Automatically start prewarming models",
+                    },
+                ),
+                "categories": (
+                    "STRING",
+                    {
+                        "default": "checkpoints,loras",
+                        "description": "Categories to prewarm (comma-separated)",
+                        "tooltip": "List of model categories to include in prewarming",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"), "workflow_json")
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache/Utils"
+    DESCRIPTION = "Prewarm models from workflow before execution"
+    OUTPUT_NODE = True
+
+    def run(self, workflow_json: str = "", auto_start: bool = True, categories: str = "checkpoints,loras,controlnet,upscale_models,clip_vision,ipadapter,insightface,vae,clip"):
+        """Analyze workflow and prewarm models."""
+        # Если workflow не предоставлен, пытаемся получить текущий
+        if not workflow_json.strip():
+            workflow_json = _resolve_workflow_json("", force_refresh=True)
+            if not workflow_json:
+                # Пытаемся найти последний сохраненный workflow
+                try:
+                    comfyui_path = Path("C:/ComfyUI")
+                    if comfyui_path.exists():
+                        # Ищем в папке workflows
+                        workflows_path = comfyui_path / "workflows"
+                        if workflows_path.exists():
+                            # Находим самый новый .json файл
+                            json_files = list(workflows_path.glob("*.json"))
+                            if json_files:
+                                latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
+                                with open(latest_file, 'r', encoding='utf-8') as f:
+                                    workflow_json = json.load(f)
+                                
+                                summary = {
+                                    "ok": True,
+                                    "ui": {
+                                        "headline": f"Prewarm: Using latest workflow",
+                                        "details": [
+                                            f"File: {latest_file.name}",
+                                            "Found saved workflow file",
+                                            "Analyzing models...",
+                                        ],
+                                    },
+                                }
+                            else:
+                                summary = {
+                                    "ok": False,
+                                    "ui": {
+                                        "headline": "Prewarm: No workflow found",
+                                        "details": [
+                                            "No active workflow detected",
+                                            "No saved workflow files found",
+                                            "Create a workflow with models first",
+                                        ],
+                                    },
+                                }
+                                return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+                        else:
+                            summary = {
+                                "ok": False,
+                                "ui": {
+                                    "headline": "Prewarm: No workflow found",
+                                    "details": [
+                                        "No active workflow detected",
+                                        "No workflows folder found",
+                                        "Create a workflow with models first",
+                                    ],
+                                },
+                            }
+                            return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+                    else:
+                        summary = {
+                            "ok": False,
+                            "ui": {
+                                "headline": "Prewarm: No workflow found",
+                                "details": [
+                                    "No active workflow detected",
+                                    "ComfyUI path not found",
+                                    "Create a workflow with models first",
+                                ],
+                            },
+                        }
+                        return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+                except Exception as e:
+                    summary = {
+                        "ok": False,
+                        "ui": {
+                            "headline": "Prewarm: No workflow found",
+                            "details": [
+                                "No active workflow detected",
+                                f"Error searching files: {str(e)}",
+                                "Create a workflow with models first",
+                            ],
+                        },
+                    }
+                    return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+        
+        try:
+            # Парсим workflow
+            if isinstance(workflow_json, str):
+                workflow_data = json.loads(workflow_json)
+            else:
+                workflow_data = workflow_json
+            
+            if isinstance(workflow_data, list):
+                # Если это список, создаем словарь с nodes
+                workflow_data = {"nodes": workflow_data}
+            elif not isinstance(workflow_data, dict):
+                raise ValueError("Invalid workflow format")
+            elif "nodes" not in workflow_data:
+                raise ValueError("Invalid workflow format")
+            
+            # Извлекаем модели из workflow
+            category_list = [cat.strip() for cat in categories.split(",")]
+            found_models = []
+            
+            for node in workflow_data.get("nodes", []):
+                if not isinstance(node, dict):
+                    continue
+                
+                inputs = node.get("inputs", {})
+                class_type = node.get("class_type", "")
+                
+                # Ищем модели в inputs
+                for key, value in inputs.items():
+                    if isinstance(value, str) and value.strip():
+                        # Проверяем расширение файла
+                        if any(value.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                            # Определяем категорию по class_type и key
+                            category = self._guess_category(class_type, key, category_list)
+                            if category:
+                                found_models.append({
+                                    "category": category,
+                                    "name": value,
+                                    "node_type": class_type,
+                                    "input_key": key
+                                })
+            
+            # Удаляем дубликаты
+            unique_models = []
+            seen = set()
+            for model in found_models:
+                key = (model["category"], model["name"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_models.append(model)
+            
+            # Кешируем модели если auto_start
+            prewarm_results = []
+            if auto_start and unique_models:
+                for model in unique_models:
+                    try:
+                        from folder_paths import get_full_path
+                        src_path = get_full_path(model["category"], model["name"])
+                        if src_path and Path(src_path).exists():
+                            # Проверяем фильтры
+                            settings = get_settings()
+                            if _should_skip_by_size(Path(src_path), settings):
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "skipped_size",
+                                    "reason": f"Size < {settings.min_size_gb}GB"
+                                })
+                                continue
+                            
+                            if _should_skip_hardcoded_path(Path(src_path), settings):
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "skipped_hardcoded",
+                                    "reason": "Hardcoded path"
+                                })
+                                continue
+                            
+                            # Копируем в кеш
+                            cache_path = _ensure_category_root(model["category"]) / model["name"]
+                            if not cache_path.exists():
+                                src_path = get_full_path(model["category"], model["name"])
+                                _copy_into_cache_lru(Path(src_path), cache_path, model["category"])
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "cached",
+                                    "category": model["category"]
+                                })
+                            else:
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "already_cached",
+                                    "category": model["category"]
+                                })
+                        else:
+                            prewarm_results.append({
+                                "model": model["name"],
+                                "status": "not_found",
+                                "reason": "File not found"
+                            })
+                    except Exception as e:
+                        prewarm_results.append({
+                            "model": model["name"],
+                            "status": "error",
+                            "reason": str(e)
+                        })
+            
+            # Формируем результат
+            result = {
+                "ok": True,
+                "workflow_analysis": {
+                    "total_nodes": len(workflow_data.get("nodes", [])),
+                    "models_found": len(unique_models),
+                    "categories_checked": category_list,
+                },
+                "models": unique_models,
+                "prewarm_results": prewarm_results if auto_start else [],
+            }
+            
+            # UI отчет
+            cached_count = len([r for r in prewarm_results if r["status"] == "cached"])
+            skipped_count = len([r for r in prewarm_results if r["status"].startswith("skipped")])
+            error_count = len([r for r in prewarm_results if r["status"] in ["error", "not_found"]])
+            
+            summary = {
+                "ok": True,
+                "ui": {
+                    "headline": f"Prewarm: {len(unique_models)} models analyzed",
+                    "details": [
+                        f"Models found: {len(unique_models)}",
+                        f"Cached: {cached_count}",
+                        f"Skipped: {skipped_count}",
+                        f"Errors: {error_count}",
+                        f"Categories: {', '.join(category_list)}",
+                    ],
+                },
+            }
+            
+            # Преобразуем workflow в строку для возврата
+            workflow_str = json.dumps(workflow_data, ensure_ascii=False, indent=2) if isinstance(workflow_data, dict) else str(workflow_json)
+            
+            return (
+                json.dumps(result, ensure_ascii=False, indent=2),
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                workflow_str
+            )
+            
+        except Exception as e:
+            summary = {
+                "ok": False,
+                "ui": {
+                    "headline": "Prewarm: Error",
+                    "details": [
+                        f"Error: {str(e)}",
+                        "Check workflow JSON format",
+                    ],
+                },
+            }
+            workflow_str = str(workflow_json) if workflow_json else "{}"
+            return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), workflow_str)
+    
+    def _guess_category(self, class_type: str, input_key: str, categories: list) -> str | None:
+        """Guess model category from node class and input key."""
+        class_type_lower = class_type.lower()
+        input_key_lower = input_key.lower()
+        
+        # Checkpoint models
+        if any(keyword in class_type_lower for keyword in ["checkpoint", "model"]):
+            if any(keyword in input_key_lower for keyword in ["ckpt", "model", "checkpoint"]):
+                return "checkpoints" if "checkpoints" in categories else None
+        
+        # LoRA models
+        if "lora" in class_type_lower or "lora" in input_key_lower:
+            return "loras" if "loras" in categories else None
+        
+        # ControlNet models
+        if "controlnet" in class_type_lower or "controlnet" in input_key_lower:
+            return "controlnet" if "controlnet" in categories else None
+        
+        # Upscale models
+        if any(keyword in class_type_lower for keyword in ["upscale", "upscaler"]):
+            return "upscale_models" if "upscale_models" in categories else None
+        
+        # CLIP Vision models
+        if "clip" in class_type_lower and "vision" in class_type_lower:
+            return "clip_vision" if "clip_vision" in categories else None
+        
+        # IP-Adapter models
+        if "ipadapter" in class_type_lower:
+            return "ipadapter" if "ipadapter" in categories else None
+        
+        # InsightFace models
+        if "insightface" in class_type_lower:
+            return "insightface" if "insightface" in categories else None
+        
+        # Generic fallback
+        if any(keyword in input_key_lower for keyword in ["model", "ckpt", "lora", "controlnet"]):
+            for category in categories:
+                if category in input_key_lower:
+                    return category
+        
+        return None
+
+
+class ArenaAutoCachePrewarmFromFile:
+    """RU: Предварительное кеширование моделей из сохраненного workflow файла.
+
+    Загружает workflow из файла и кеширует все необходимые модели.
+    Полезно для работы с пресетами и сохраненными workflow.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
+                "workflow_file": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "description": "Path to workflow file (.json)",
+                        "tooltip": "Path to saved workflow file, e.g., 'workflows/my_workflow.json'",
+                    },
+                ),
+            },
+            "optional": {
+                "auto_start": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "description": "Auto start prewarming",
+                        "tooltip": "Automatically start prewarming models",
+                    },
+                ),
+                "categories": (
+                    "STRING",
+                    {
+                        "default": "checkpoints,loras",
+                        "description": "Categories to prewarm (comma-separated)",
+                        "tooltip": "List of model categories to include in prewarming",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"), "workflow_json")
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache/Utils"
+    DESCRIPTION = "Prewarm models from saved workflow file"
+    OUTPUT_NODE = True
+
+    def run(self, workflow_file: str = "", auto_start: bool = True, categories: str = "checkpoints,loras,controlnet,upscale_models,clip_vision,ipadapter,insightface,vae,clip"):
+        """Load workflow from file and prewarm models."""
+        if not workflow_file.strip():
+            summary = {
+                "ok": False,
+                "ui": {
+                    "headline": "Prewarm From File: No file specified",
+                    "details": [
+                        "Please specify workflow file path",
+                        "Example: 'workflows/my_workflow.json'",
+                    ],
+                },
+            }
+            return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+        
+        try:
+            # Определяем путь к файлу
+            if not Path(workflow_file).is_absolute():
+                # Относительный путь - ищем в папке ComfyUI
+                comfyui_path = Path("C:/ComfyUI")  # Можно сделать более умный поиск
+                full_path = comfyui_path / workflow_file
+            else:
+                full_path = Path(workflow_file)
+            
+            # Проверяем существование файла
+            if not full_path.exists():
+                summary = {
+                    "ok": False,
+                    "ui": {
+                        "headline": "Prewarm From File: File not found",
+                        "details": [
+                            f"File not found: {full_path}",
+                            "Check the file path",
+                        ],
+                    },
+                }
+                return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+            
+            # Читаем файл
+            with open(full_path, 'r', encoding='utf-8') as f:
+                workflow_data = json.load(f)
+            
+            if isinstance(workflow_data, list):
+                # Если это список, создаем словарь с nodes
+                workflow_data = {"nodes": workflow_data}
+            elif not isinstance(workflow_data, dict):
+                raise ValueError("Invalid workflow file format")
+            elif "nodes" not in workflow_data:
+                raise ValueError("Invalid workflow file format")
+            
+            # Используем ту же логику анализа что и в ArenaAutoCachePrewarm
+            category_list = [cat.strip() for cat in categories.split(",")]
+            found_models = []
+            
+            for node in workflow_data.get("nodes", []):
+                if not isinstance(node, dict):
+                    continue
+                
+                inputs = node.get("inputs", {})
+                class_type = node.get("class_type", "")
+                
+                # Ищем модели в inputs
+                for key, value in inputs.items():
+                    if isinstance(value, str) and value.strip():
+                        # Проверяем расширение файла
+                        if any(value.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                            # Определяем категорию по class_type и key
+                            category = self._guess_category(class_type, key, category_list)
+                            if category:
+                                found_models.append({
+                                    "category": category,
+                                    "name": value,
+                                    "node_type": class_type,
+                                    "input_key": key
+                                })
+            
+            # Удаляем дубликаты
+            unique_models = []
+            seen = set()
+            for model in found_models:
+                key = (model["category"], model["name"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_models.append(model)
+            
+            # Кешируем модели если auto_start
+            prewarm_results = []
+            if auto_start and unique_models:
+                for model in unique_models:
+                    try:
+                        from folder_paths import get_full_path
+                        src_path = get_full_path(model["category"], model["name"])
+                        if src_path and Path(src_path).exists():
+                            # Проверяем фильтры
+                            settings = get_settings()
+                            if _should_skip_by_size(Path(src_path), settings):
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "skipped_size",
+                                    "reason": f"Size < {settings.min_size_gb}GB"
+                                })
+                                continue
+                            
+                            if _should_skip_hardcoded_path(Path(src_path), settings):
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "skipped_hardcoded",
+                                    "reason": "Hardcoded path"
+                                })
+                                continue
+                            
+                            # Копируем в кеш
+                            cache_path = _ensure_category_root(model["category"]) / model["name"]
+                            if not cache_path.exists():
+                                src_path = get_full_path(model["category"], model["name"])
+                                _copy_into_cache_lru(Path(src_path), cache_path, model["category"])
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "cached",
+                                    "category": model["category"]
+                                })
+                            else:
+                                prewarm_results.append({
+                                    "model": model["name"],
+                                    "status": "already_cached",
+                                    "category": model["category"]
+                                })
+                        else:
+                            prewarm_results.append({
+                                "model": model["name"],
+                                "status": "not_found",
+                                "reason": "File not found"
+                            })
+                    except Exception as e:
+                        prewarm_results.append({
+                            "model": model["name"],
+                            "status": "error",
+                            "reason": str(e)
+                        })
+            
+            # Формируем результат
+            result = {
+                "ok": True,
+                "file_info": {
+                    "file_path": str(full_path),
+                    "file_size": full_path.stat().st_size,
+                },
+                "workflow_analysis": {
+                    "total_nodes": len(workflow_data.get("nodes", [])),
+                    "models_found": len(unique_models),
+                    "categories_checked": category_list,
+                },
+                "models": unique_models,
+                "prewarm_results": prewarm_results if auto_start else [],
+            }
+            
+            # UI отчет
+            cached_count = len([r for r in prewarm_results if r["status"] == "cached"])
+            skipped_count = len([r for r in prewarm_results if r["status"].startswith("skipped")])
+            error_count = len([r for r in prewarm_results if r["status"] in ["error", "not_found"]])
+            
+            summary = {
+                "ok": True,
+                "ui": {
+                    "headline": f"Prewarm From File: {len(unique_models)} models analyzed",
+                    "details": [
+                        f"File: {full_path.name}",
+                        f"Models found: {len(unique_models)}",
+                        f"Cached: {cached_count}",
+                        f"Skipped: {skipped_count}",
+                        f"Errors: {error_count}",
+                    ],
+                },
+            }
+            
+            return (
+                json.dumps(result, ensure_ascii=False, indent=2),
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                json.dumps(workflow_data, ensure_ascii=False, indent=2)
+            )
+            
+        except Exception as e:
+            summary = {
+                "ok": False,
+                "ui": {
+                    "headline": "Prewarm From File: Error",
+                    "details": [
+                        f"Error: {str(e)}",
+                        "Check file path and format",
+                    ],
+                },
+            }
+            return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+    
+    def _guess_category(self, class_type: str, input_key: str, categories: list) -> str | None:
+        """Guess model category from node class and input key."""
+        class_type_lower = class_type.lower()
+        input_key_lower = input_key.lower()
+        
+        # Checkpoint models
+        if any(keyword in class_type_lower for keyword in ["checkpoint", "model"]):
+            if any(keyword in input_key_lower for keyword in ["ckpt", "model", "checkpoint"]):
+                return "checkpoints" if "checkpoints" in categories else None
+        
+        # LoRA models
+        if "lora" in class_type_lower or "lora" in input_key_lower:
+            return "loras" if "loras" in categories else None
+        
+        # ControlNet models
+        if "controlnet" in class_type_lower or "controlnet" in input_key_lower:
+            return "controlnet" if "controlnet" in categories else None
+        
+        # Upscale models
+        if any(keyword in class_type_lower for keyword in ["upscale", "upscaler"]):
+            return "upscale_models" if "upscale_models" in categories else None
+        
+        # CLIP Vision models
+        if "clip" in class_type_lower and "vision" in class_type_lower:
+            return "clip_vision" if "clip_vision" in categories else None
+        
+        # IP-Adapter models
+        if "ipadapter" in class_type_lower:
+            return "ipadapter" if "ipadapter" in categories else None
+        
+        # InsightFace models
+        if "insightface" in class_type_lower:
+            return "insightface" if "insightface" in categories else None
+        
+        # Generic fallback
+        if any(keyword in input_key_lower for keyword in ["model", "ckpt", "lora", "controlnet"]):
+            for category in categories:
+                if category in input_key_lower:
+                    return category
+        
+        return None
+
+
+class ArenaAutoCacheSmart:
+    """RU: Умная нода для кеширования моделей.
+
+    Автоматически определяет workflow (активный или из файла),
+    анализирует модели, применяет фильтры и кеширует.
+    Одна нода для всех задач кеширования.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {
+                "workflow_source": (
+                    ["auto", "file", "json"],
+                    {
+                        "default": "auto",
+                        "description": "Workflow source",
+                        "tooltip": "auto = find active/file, file = load from file, json = paste JSON",
+                    },
+                ),
+                "workflow_file": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "description": "Workflow file path (if source=file)",
+                        "tooltip": "Path to workflow file, e.g., 'workflows/default.json'",
+                    },
+                ),
+                "workflow_json": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "description": "Workflow JSON (if source=json)",
+                        "tooltip": "Paste workflow JSON here",
+                    },
+                ),
+                "auto_cache": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "description": "Auto cache models",
+                        "tooltip": "Automatically cache found models",
+                    },
+                ),
+                "show_analysis": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "description": "Show analysis",
+                        "tooltip": "Show detailed analysis of found models",
+                    },
+                ),
+                "categories": (
+                    "STRING",
+                    {
+                        "default": "checkpoints,loras",
+                        "description": "Categories to process",
+                        "tooltip": "Comma-separated list of model categories",
+                    },
+                ),
+                "workflow_path_display": (
+                    "STRING",
+                    {
+                        "default": "No workflow loaded",
+                        "description": "Current workflow path",
+                        "tooltip": "Shows the path to the currently loaded workflow",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = (t("output.json"), t("output.summary_json"), "workflow_json")
+    RETURN_DESCRIPTIONS = RETURN_NAMES
+    OUTPUT_TOOLTIPS = RETURN_NAMES
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = "Smart model caching - one node for all tasks"
+    OUTPUT_NODE = True
+
+    def run(
+        self,
+        workflow_source: str = "auto",
+        workflow_file: str = "",
+        workflow_json: str = "",
+        auto_cache: bool = True,
+        show_analysis: bool = True,
+        categories: str = "checkpoints,loras",
+        workflow_path_display: str = "No workflow loaded"
+    ):
+        """Smart workflow analysis and caching."""
+        # print(f"[ArenaAutoCacheSmart] Starting with source={workflow_source}, auto_cache={auto_cache}")
+        
+        # Проверяем, не получили ли мы данные от ArenaAutoCacheAnalyze
+        if workflow_json and workflow_json.strip():
+            try:
+                # Пытаемся парсить как JSON
+                parsed_json = json.loads(workflow_json)
+                if isinstance(parsed_json, list) and len(parsed_json) > 0 and isinstance(parsed_json[0], dict):
+                    # Это список моделей от ArenaAutoCacheAnalyze
+                    # print(f"[ArenaAutoCacheSmart] Detected models list from ArenaAutoCacheAnalyze: {len(parsed_json)} models")
+                    
+                    # Конвертируем в формат ArenaAutoCacheSmart
+                    found_models = []
+                    for model_data in parsed_json:
+                        if isinstance(model_data, dict) and "name" in model_data and "category" in model_data:
+                            found_models.append({
+                                "name": model_data["name"],
+                                "category": model_data["category"],
+                                "path": model_data.get("path", "N/A")
+                            })
+                    
+                    if found_models:
+                        # print(f"[ArenaAutoCacheSmart] Converted {len(found_models)} models from ArenaAutoCacheAnalyze")
+                        
+                        # Кешируем модели если нужно
+                        cache_results = []
+                        if auto_cache:
+                            # print(f"[ArenaAutoCacheSmart] Starting cache process for {len(found_models)} models")
+                            cache_results = self._cache_models_with_progress(found_models)
+                            # print(f"[ArenaAutoCacheSmart] Cache process completed. Results: {len(cache_results)}")
+                        
+                        # Формируем результат
+                        cached_count = len([r for r in cache_results if r["status"] == "cached"])
+                        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+                        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+                        
+                        details = [
+                            f"Source: ArenaAutoCacheAnalyze",
+                            f"Models found: {len(found_models)}",
+                            f"Cached: {cached_count}",
+                            f"Skipped: {skipped_count}",
+                            f"Errors: {error_count}",
+                        ]
+                        
+                        summary = {
+                            "ok": True,
+                            "ui": {
+                                "headline": f"Smart Cache: {len(found_models)} models processed",
+                                "details": details,
+                            },
+                            "workflow_path": "From ArenaAutoCacheAnalyze"
+                        }
+                        
+                        # Обновляем workflow_path_display
+                        current_workflow_path = "From ArenaAutoCacheAnalyze"
+                        
+                        return (json.dumps(summary, ensure_ascii=False, indent=2), summary, workflow_json)
+            except json.JSONDecodeError:
+                # Не JSON, продолжаем обычную обработку
+                pass
+        
+        workflow_data = None
+        source_info = ""
+        current_workflow_path = "No workflow loaded"
+        
+        try:
+            # Получаем workflow в зависимости от источника
+            if workflow_source == "auto":
+                print("[ArenaAutoCacheSmart] Auto mode: analyzing last executed workflow for model nodes")
+                
+                # Используем улучшенную функцию _resolve_workflow_json с фоллбэком к истории
+                workflow_data = _resolve_workflow_json("", force_refresh=True)
+                if workflow_data:
+                    print(f"[ArenaAutoCacheSmart] Found workflow: {type(workflow_data)}")
+                    current_workflow_path = "Resolved workflow (active or history)"
+                    
+                    # Регистрируем элементы workflow для заполнения allowlist
+                    default_category = "checkpoints"  # Основная категория по умолчанию
+                    registered_items = register_workflow_items("", workflow_data, default_category)
+                    print(f"[ArenaAutoCacheSmart] Registered {len(registered_items)} items from workflow")
+                    
+                    # Пробуем новый метод анализа JSON workflow
+                    if isinstance(workflow_data, dict):
+                        json_models = _extract_models_from_workflow_json(workflow_data)
+                        if json_models:
+                            print(f"[ArenaAutoCacheSmart] Extracted {len(json_models)} models from JSON workflow")
+                            # Конвертируем в формат, ожидаемый ArenaAutoCacheSmart
+                            found_models = self._convert_json_models_to_arena_format(json_models)
+                        else:
+                            # Fallback на старый метод
+                            found_models = self._extract_models_from_workflow(workflow_data)
+                    else:
+                        # Fallback на старый метод
+                        found_models = self._extract_models_from_workflow(workflow_data)
+                    
+                    print(f"[ArenaAutoCacheSmart] Final extracted {len(found_models)} models from last executed workflow")
+                else:
+                    # Fallback на старые методы
+                    workflow_data = _load_active_workflow()
+                    if workflow_data:
+                        found_models = self._extract_models_from_workflow(workflow_data)
+                    else:
+                        found_models = self._analyze_current_canvas()
+                
+                if found_models:
+                    source_info = "Last executed workflow"
+                    # print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models in last executed workflow")
+                    
+                    # Если workflow_data не был получен из _load_active_workflow, создаем фиктивный
+                    if not workflow_data:
+                        workflow_data = {"nodes": []}
+                    
+                    # Кешируем найденные модели
+                    if auto_cache and found_models:
+                        # Убеждаемся, что патч путей активен
+                        _apply_folder_paths_patch_locked()
+                        print(f"[ArenaAutoCacheSmart] Starting cache process for {len(found_models)} models")
+                        cache_results = self._cache_models_with_progress(found_models)
+                        print(f"[ArenaAutoCacheSmart] Cache process completed. Results: {len(cache_results)}")
+                        
+                        # Формируем результат
+                        result = {
+                            "ok": True,
+                            "source": source_info,
+                            "canvas_analysis": {
+                                "models_found": len(found_models),
+                                "categories_checked": [cat.strip() for cat in categories.split(",")],
+                            },
+                            "models": found_models,
+                            "cache_results": cache_results,
+                        }
+                        
+                        # UI отчет
+                        cached_count = len([r for r in cache_results if r["status"] == "cached"])
+                        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+                        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+                        
+                        details = [
+                            f"Source: {source_info}",
+                            f"Models found: {len(found_models)}",
+                            f"Cached: {cached_count}",
+                            f"Skipped: {skipped_count}",
+                            f"Errors: {error_count}",
+                        ]
+                        
+                        summary = {
+                            "ok": True,
+                            "ui": {
+                                "headline": f"Smart Cache: {len(found_models)} models processed",
+                                "details": details,
+                            },
+                        }
+                        
+                        return (
+                            json.dumps(result, ensure_ascii=False, indent=2),
+                            json.dumps(summary, ensure_ascii=False, indent=2),
+                            json.dumps(workflow_data, ensure_ascii=False, indent=2)
+                        )
+                else:
+                    print("[ArenaAutoCacheSmart] No models found in current canvas, searching for saved files")
+                    # Ищем последний сохраненный файл в разных местах
+                    search_paths = [
+                        # ComfyUI Desktop user data (основные места)
+                        Path.home() / "AppData" / "Roaming" / "ComfyUI" / "workflows",
+                        Path.home() / "AppData" / "Local" / "ComfyUI" / "workflows",
+                        Path.home() / "AppData" / "Roaming" / "ComfyUI" / "user" / "workflows",
+                        Path.home() / "AppData" / "Local" / "ComfyUI" / "user" / "workflows",
+                        # ComfyUI Desktop installation paths
+                        Path("C:/Users") / Path.home().name / "AppData" / "Local" / "Programs" / "@comfyorgcomfyui-electron" / "resources" / "ComfyUI" / "workflows",
+                        Path("C:/Users") / Path.home().name / "AppData" / "Roaming" / "ComfyUI" / "workflows",
+                        Path("C:/Users") / Path.home().name / "AppData" / "Local" / "ComfyUI" / "workflows",
+                        # ComfyUI installation
+                        Path("C:/ComfyUI/workflows"),
+                        Path("C:/ComfyUI/user/workflows"),
+                        Path("C:/ComfyUI/user/default/workflows"),
+                        # Fallback locations
+                        Path("C:/ComfyUI"),
+                        Path(".") / "workflows",
+                        # Дополнительные места для ComfyUI Desktop
+                        Path.home() / "Documents" / "ComfyUI" / "workflows",
+                        Path.home() / "Desktop" / "ComfyUI" / "workflows",
+                    ]
+                    
+                    print(f"[ArenaAutoCacheSmart] Searching for workflow files in multiple locations...")
+                    json_files = []
+                    
+                    for search_path in search_paths:
+                        print(f"[ArenaAutoCacheSmart] Checking: {search_path}")
+                        if search_path.exists():
+                            if search_path.is_dir():
+                                # Ищем JSON файлы в папке
+                                found_files = list(search_path.glob("*.json"))
+                                print(f"[ArenaAutoCacheSmart] Found {len(found_files)} JSON files in {search_path}")
+                                json_files.extend(found_files)
+                            else:
+                                # Это файл, проверяем расширение
+                                if search_path.suffix.lower() == '.json':
+                                    print(f"[ArenaAutoCacheSmart] Found JSON file: {search_path}")
+                                    json_files.append(search_path)
+                    
+                    if json_files:
+                        # Сортируем по времени изменения и берем самый новый
+                        json_files = sorted(json_files, key=lambda f: f.stat().st_mtime, reverse=True)
+                        latest_file = json_files[0]
+                        print(f"[ArenaAutoCacheSmart] Using latest file: {latest_file}")
+                        with open(latest_file, 'r', encoding='utf-8') as f:
+                            workflow_data = json.load(f)
+                        source_info = f"Latest file: {latest_file.name}"
+                        print(f"[ArenaAutoCacheSmart] Loaded workflow from file: {type(workflow_data)}")
+                    else:
+                        return self._error_result("No workflow found", [
+                            "No active workflow detected",
+                            "No saved workflow files found in any location",
+                            "Create a workflow with models first"
+                        ])
+            
+            elif workflow_source == "file":
+                print(f"[ArenaAutoCacheSmart] File mode: loading from {workflow_file}")
+                current_workflow_path = f"File: {workflow_file}"
+                if not workflow_file.strip():
+                    return self._error_result("No file specified", [
+                        "Please specify workflow file path",
+                        "Example: 'workflows/default.json'"
+                    ])
+                
+                # Определяем путь к файлу
+                if not Path(workflow_file).is_absolute():
+                    comfyui_path = Path("C:/ComfyUI")
+                    full_path = comfyui_path / workflow_file
+                else:
+                    full_path = Path(workflow_file)
+                
+                print(f"[ArenaAutoCacheSmart] Full path: {full_path}")
+                if not full_path.exists():
+                    return self._error_result("File not found", [
+                        f"File not found: {full_path}",
+                        "Check the file path"
+                    ])
+                
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    workflow_data = json.load(f)
+                source_info = f"File: {full_path.name}"
+                print(f"[ArenaAutoCacheSmart] Loaded workflow from file: {type(workflow_data)}")
+            
+            elif workflow_source == "json":
+                print(f"[ArenaAutoCacheSmart] JSON mode: parsing provided JSON")
+                current_workflow_path = "JSON: Pasted workflow data"
+                if not workflow_json.strip():
+                    return self._error_result("No JSON provided", [
+                        "Please provide workflow JSON",
+                        "Paste workflow from ComfyUI interface"
+                    ])
+                
+                # Пытаемся парсить JSON
+                try:
+                    workflow_data = json.loads(workflow_json)
+                    source_info = "Provided JSON"
+                    print(f"[ArenaAutoCacheSmart] Parsed JSON workflow: {type(workflow_data)}")
+                except json.JSONDecodeError as e:
+                    return self._error_result("Invalid JSON format", [
+                        f"JSON parsing error: {str(e)}",
+                        "Check JSON syntax"
+                    ])
+            
+            # Проверяем формат workflow
+            print(f"[ArenaAutoCacheSmart] Validating workflow format: {type(workflow_data)}")
+            if isinstance(workflow_data, list):
+                # Если это список, проверяем, что это за список
+                if len(workflow_data) > 0 and isinstance(workflow_data[0], dict):
+                    # Если это список словарей (возможно, от ArenaAutoCacheAnalyze), 
+                    # создаем фиктивный workflow
+                    print("[ArenaAutoCacheSmart] Detected list of dictionaries, creating dummy workflow")
+                    workflow_data = {"nodes": []}
+                else:
+                    # Если это список узлов, создаем словарь с nodes
+                    print("[ArenaAutoCacheSmart] Converting list to dict with 'nodes' key")
+                    workflow_data = {"nodes": workflow_data}
+            elif not isinstance(workflow_data, dict):
+                return self._error_result("Invalid workflow format", [
+                    "Workflow must be a valid JSON object or array",
+                    "Check workflow format"
+                ])
+            elif "nodes" not in workflow_data:
+                return self._error_result("Invalid workflow format", [
+                    "Workflow must contain 'nodes' array",
+                    "Check workflow format"
+                ])
+            
+            # Исправляем проблему с links (Alert ошибка)
+            if "links" in workflow_data:
+                links = workflow_data["links"]
+                if isinstance(links, list):
+                    # Проверяем и исправляем неправильные links
+                    corrected_links = []
+                    for link in links:
+                        if isinstance(link, list) and len(link) >= 6:
+                            corrected_links.append(link)
+                        elif isinstance(link, dict):
+                            # Конвертируем dict в list если нужно
+                            if all(key in link for key in ["from", "to", "from_slot", "to_slot", "type", "weight"]):
+                                corrected_links.append([
+                                    link["from"], link["to"], link["from_slot"], 
+                                    link["to_slot"], link["type"], link["weight"]
+                                ])
+                    workflow_data["links"] = corrected_links
+                    print(f"[ArenaAutoCacheSmart] Corrected {len(corrected_links)} links in workflow")
+            
+            print(f"[ArenaAutoCacheSmart] Workflow validated. Nodes count: {len(workflow_data.get('nodes', []))}")
+            
+            # Анализируем workflow
+            category_list = [cat.strip() for cat in categories.split(",")]
+            print(f"[ArenaAutoCacheSmart] Analyzing workflow with categories: {category_list}")
+            
+            # Используем новый метод анализа JSON workflow
+            json_models = _extract_models_from_workflow_json(workflow_data)
+            if json_models:
+                print(f"[ArenaAutoCacheSmart] Extracted {len(json_models)} models from JSON workflow")
+                found_models = self._convert_json_models_to_arena_format(json_models)
+            else:
+                # Fallback на старый метод
+                found_models = self._extract_models_from_workflow(workflow_data)
+            
+            print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models before deduplication")
+            
+            # Удаляем дубликаты
+            unique_models = []
+            seen = set()
+            for model in found_models:
+                key = (model["category"], model["name"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_models.append(model)
+            
+            print(f"[ArenaAutoCacheSmart] Unique models after deduplication: {len(unique_models)}")
+            for model in unique_models:
+                print(f"[ArenaAutoCacheSmart] - {model['category']}: {model['name']}")
+            
+            # Кешируем модели если нужно
+            cache_results = []
+            if auto_cache and unique_models:
+                print(f"[ArenaAutoCacheSmart] Starting cache process for {len(unique_models)} models")
+                cache_results = self._cache_models_with_progress(unique_models)
+                print(f"[ArenaAutoCacheSmart] Cache process completed. Results: {len(cache_results)}")
+            else:
+                print("[ArenaAutoCacheSmart] Skipping cache process (auto_cache=False or no models)")
+            
+            # Формируем результат
+            result = {
+                "ok": True,
+                "source": source_info,
+                "workflow_analysis": {
+                    "total_nodes": len(workflow_data.get("nodes", [])),
+                    "models_found": len(unique_models),
+                    "categories_checked": category_list,
+                },
+                "models": unique_models,
+                "cache_results": cache_results if auto_cache else [],
+            }
+            
+            # UI отчет
+            cached_count = len([r for r in cache_results if r["status"] == "cached"])
+            skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+            error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+            
+            if show_analysis:
+                details = [
+                    f"Source: {source_info}",
+                    f"Models found: {len(unique_models)}",
+                ]
+                if auto_cache:
+                    details.extend([
+                        f"Cached: {cached_count}",
+                        f"Skipped: {skipped_count}",
+                        f"Errors: {error_count}",
+                    ])
+                else:
+                    details.append("Analysis only (caching disabled)")
+            else:
+                details = [
+                    f"Source: {source_info}",
+                    f"Models: {len(unique_models)}",
+                    f"Cached: {cached_count}" if auto_cache else "Analysis only",
+                ]
+            
+            summary = {
+                "ok": True,
+                "ui": {
+                    "headline": f"Smart Cache: {len(unique_models)} models processed",
+                    "details": details,
+                },
+                "workflow_path": current_workflow_path,
+            }
+            
+            return (
+                json.dumps(result, ensure_ascii=False, indent=2),
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                json.dumps(workflow_data, ensure_ascii=False, indent=2)
+            )
+            
+        except Exception as e:
+            # Добавляем диагностику для отладки
+            debug_info = []
+            if workflow_data is not None:
+                debug_info.append(f"Workflow type: {type(workflow_data)}")
+                if isinstance(workflow_data, dict):
+                    debug_info.append(f"Keys: {list(workflow_data.keys())}")
+                elif isinstance(workflow_data, list):
+                    debug_info.append(f"List length: {len(workflow_data)}")
+            
+            return self._error_result("Error", [
+                f"Error: {str(e)}",
+                "Check workflow format and settings"
+            ] + debug_info, current_workflow_path)
+    
+    def _error_result(self, headline: str, details: list, workflow_path: str = "No workflow loaded") -> tuple:
+        """Создает результат с ошибкой."""
+        summary = {
+            "ok": False,
+            "ui": {
+                "headline": f"Smart Cache: {headline}",
+                "details": details,
+            },
+            "workflow_path": workflow_path,
+        }
+        return ("{}", json.dumps(summary, ensure_ascii=False, indent=2), "{}")
+    
+    def _analyze_workflow(self, workflow_data: dict, categories: list) -> list:
+        """Анализирует workflow и находит модели."""
+        found_models = []
+        nodes = workflow_data.get("nodes", [])
+        print(f"[ArenaAutoCacheSmart] Analyzing {len(nodes)} nodes")
+        
+        for i, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                print(f"[ArenaAutoCacheSmart] Node {i}: skipping (not dict)")
+                continue
+            
+            inputs = node.get("inputs", {})
+            class_type = node.get("class_type", "") or node.get("type", "")
+            print(f"[ArenaAutoCacheSmart] Node {i}: {class_type or 'Unknown'} with {len(inputs)} inputs")
+            
+            # Детальная диагностика ноды
+            if not class_type:
+                print(f"[ArenaAutoCacheSmart] Node {i} missing class_type/type. Available keys: {list(node.keys())}")
+                # Пытаемся найти class_type в других полях
+                for key, value in node.items():
+                    if isinstance(value, str) and any(keyword in value.lower() for keyword in ['checkpoint', 'lora', 'controlnet', 'upscale', 'clip', 'ipadapter', 'insightface']):
+                        print(f"[ArenaAutoCacheSmart] Found potential class_type in {key}: {value}")
+                        class_type = value
+                        break
+            
+            # Ищем модели в inputs и widgets_values
+            print(f"[ArenaAutoCacheSmart] Node {i} inputs: {list(inputs.keys())}")
+            
+            # Проверяем widgets_values (ComfyUI Desktop формат)
+            widgets_values = node.get("widgets_values", [])
+            if widgets_values:
+                print(f"[ArenaAutoCacheSmart] Node {i} widgets_values: {len(widgets_values)} items")
+                for j, widget_value in enumerate(widgets_values):
+                    # Обрабатываем строки
+                    if isinstance(widget_value, str) and widget_value.strip():
+                        print(f"[ArenaAutoCacheSmart] Node {i} widget {j}: {widget_value}")
+                        # Нормализуем путь (заменяем обратные слеши)
+                        normalized_value = widget_value.replace("\\", "/")
+                        # Проверяем расширение файла
+                        if any(normalized_value.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                            print(f"[ArenaAutoCacheSmart] Found model file in widget: {normalized_value}")
+                            # Определяем категорию
+                            category = self._guess_category(class_type, f"widget_{j}", categories)
+                            if category:
+                                print(f"[ArenaAutoCacheSmart] Categorized as: {category}")
+                                found_models.append({
+                                    "category": category,
+                                    "name": normalized_value,
+                                    "node_type": class_type,
+                                    "input_key": f"widget_{j}"
+                                })
+                            else:
+                                print(f"[ArenaAutoCacheSmart] No category found for: {normalized_value} (class_type: {class_type})")
+                        else:
+                            print(f"[ArenaAutoCacheSmart] Not a model file: {widget_value}")
+                    # Обрабатываем объекты (например, Power Lora Loader) - упрощенно
+                    elif isinstance(widget_value, dict):
+                        print(f"[ArenaAutoCacheSmart] Node {i} widget {j} (object): {type(widget_value)}")
+                        # Ищем lora в объекте
+                        if "lora" in widget_value and isinstance(widget_value["lora"], str):
+                            lora_name = widget_value["lora"]
+                            print(f"[ArenaAutoCacheSmart] Found lora in object: {lora_name}")
+                            # Нормализуем путь
+                            normalized_lora = lora_name.replace("\\", "/")
+                            if any(normalized_lora.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                                print(f"[ArenaAutoCacheSmart] Found lora model: {normalized_lora}")
+                                category = self._guess_category(class_type, f"widget_{j}_lora", categories)
+                                if category:
+                                    print(f"[ArenaAutoCacheSmart] Categorized as: {category}")
+                                    found_models.append({
+                                        "category": category,
+                                        "name": normalized_lora,
+                                        "node_type": class_type,
+                                        "input_key": f"widget_{j}_lora"
+                                    })
+                                else:
+                                    print(f"[ArenaAutoCacheSmart] No category found for lora: {normalized_lora}")
+                    else:
+                        print(f"[ArenaAutoCacheSmart] Node {i} widget {j}: {type(widget_value)}")
+            
+            # Проверяем обычные inputs
+            for key, value in inputs.items():
+                if isinstance(value, str) and value.strip():
+                    print(f"[ArenaAutoCacheSmart] Node {i} input '{key}': {value}")
+                    # Проверяем расширение файла
+                    if any(value.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                        print(f"[ArenaAutoCacheSmart] Found model file: {value}")
+                        # Определяем категорию
+                        category = self._guess_category(class_type, key, categories)
+                        if category:
+                            print(f"[ArenaAutoCacheSmart] Categorized as: {category}")
+                            found_models.append({
+                                "category": category,
+                                "name": value,
+                                "node_type": class_type,
+                                "input_key": key
+                            })
+                        else:
+                            print(f"[ArenaAutoCacheSmart] No category found for: {value} (class_type: {class_type}, key: {key})")
+                    else:
+                        print(f"[ArenaAutoCacheSmart] Not a model file: {value}")
+                else:
+                    print(f"[ArenaAutoCacheSmart] Node {i} input '{key}': {type(value)} = {value}")
+        
+        return found_models
+    
+    def _cache_models(self, models: list) -> list:
+        """Кеширует модели с применением фильтров."""
+        results = []
+        
+        for i, model in enumerate(models):
+            print(f"[ArenaAutoCacheSmart] Processing model {i+1}/{len(models)}: {model['name']}")
+            try:
+                from folder_paths import get_full_path
+                src_path = get_full_path(model["category"], model["name"])
+                print(f"[ArenaAutoCacheSmart] Source path: {src_path}")
+                
+                if src_path and Path(src_path).exists():
+                    print(f"[ArenaAutoCacheSmart] File exists, checking filters")
+                    # Проверяем фильтры
+                    settings = get_settings()
+                    if _should_skip_by_size(Path(src_path), settings):
+                        print(f"[ArenaAutoCacheSmart] Skipping due to size filter")
+                        results.append({
+                            "model": model["name"],
+                            "status": "skipped_size",
+                            "reason": f"Size < {settings.min_size_gb}GB"
+                        })
+                        continue
+                    
+                    if _should_skip_hardcoded_path(Path(src_path), settings):
+                        print(f"[ArenaAutoCacheSmart] Skipping due to hardcoded path filter")
+                        results.append({
+                            "model": model["name"],
+                            "status": "skipped_hardcoded",
+                            "reason": "Hardcoded path"
+                        })
+                        continue
+                    
+                    # Копируем в кеш
+                    cache_path = _ensure_category_root(model["category"]) / model["name"]
+                    print(f"[ArenaAutoCacheSmart] Cache path: {cache_path}")
+                    
+                    if not cache_path.exists():
+                        print(f"[ArenaAutoCacheSmart] Starting copy process")
+                        src_path = get_full_path(model["category"], model["name"])
+                        _copy_into_cache_lru(Path(src_path), cache_path, model["category"])
+                        print(f"[ArenaAutoCacheSmart] Copy completed")
+                        results.append({
+                            "model": model["name"],
+                            "status": "cached",
+                            "category": model["category"]
+                        })
+                    else:
+                        print(f"[ArenaAutoCacheSmart] Already cached")
+                        results.append({
+                            "model": model["name"],
+                            "status": "already_cached",
+                            "category": model["category"]
+                        })
+                else:
+                    print(f"[ArenaAutoCacheSmart] File not found")
+                    results.append({
+                        "model": model["name"],
+                        "status": "not_found",
+                        "reason": "File not found"
+                    })
+            except Exception as e:
+                print(f"[ArenaAutoCacheSmart] Error processing model: {str(e)}")
+                results.append({
+                    "model": model["name"],
+                    "status": "error",
+                    "reason": str(e)
+                })
+        
+        return results
+    
+    def _cache_models_with_progress(self, models: list) -> list:
+        """Кеширует модели с индикатором прогресса."""
+        results = []
+        total = len(models)
+        
+        print(f"🔄 Кеширование {total} моделей...")
+        
+        for i, model in enumerate(models, 1):
+            try:
+                print(f"📁 [{i}/{total}] Кеширую {model['name']} ({model['category']})...")
+                
+                from folder_paths import get_full_path, folder_names_and_paths
+                src_path = get_full_path(model["category"], model["name"])
+                print(f"🔍 [{i}/{total}] Ищу модель: {model['name']} в категории: {model['category']}")
+                print(f"🔍 [{i}/{total}] Полный путь: {src_path}")
+                
+                # Показываем доступные пути для категории
+                if model["category"] in folder_names_and_paths:
+                    paths = folder_names_and_paths[model["category"]]
+                    print(f"🔍 [{i}/{total}] Доступные пути для {model['category']}: {paths}")
+                
+                # Получаем размер файла для отображения
+                file_size_mb = 0
+                if src_path and Path(src_path).exists():
+                    try:
+                        file_size_bytes = Path(src_path).stat().st_size
+                        file_size_mb = round(file_size_bytes / (1024 * 1024), 2)
+                        print(f"📏 [{i}/{total}] Размер файла: {file_size_mb} MB")
+                    except Exception as e:
+                        print(f"⚠️ [{i}/{total}] Не удалось получить размер файла: {e}")
+                
+                if src_path and Path(src_path).exists():
+                    # Проверяем фильтры
+                    settings = get_settings()
+                    if _should_skip_by_size(Path(src_path), settings):
+                        result = {
+                            "model": model["name"],
+                            "status": "skipped_size",
+                            "reason": f"Size < {settings.min_size_gb}GB",
+                            "size_mb": file_size_mb
+                        }
+                        results.append(result)
+                        print(f"⏭️  [{i}/{total}] Пропущено по размеру: {model['name']}")
+                        continue
+                    
+                    if _should_skip_hardcoded_path(Path(src_path), settings):
+                        result = {
+                            "model": model["name"],
+                            "status": "skipped_hardcoded",
+                            "reason": "Hardcoded path",
+                            "size_mb": file_size_mb
+                        }
+                        results.append(result)
+                        print(f"⏭️  [{i}/{total}] Пропущено по пути: {model['name']}")
+                        continue
+                    
+                    # Копируем в кеш
+                    cache_path = _ensure_category_root(model["category"]) / model["name"]
+                    
+                    if not cache_path.exists():
+                        print(f"📋 [{i}/{total}] Копирую {model['name']}...")
+                        print(f"🔄 [{i}/{total}] Прогресс: 0% - Начинаю копирование...")
+                        _copy_into_cache_lru(Path(src_path), cache_path, model["category"])
+                        print(f"✅ [{i}/{total}] Прогресс: 100% - Копирование завершено!")
+                        result = {
+                            "model": model["name"],
+                            "status": "cached",
+                            "category": model["category"],
+                            "size_mb": file_size_mb
+                        }
+                        results.append(result)
+                        print(f"✅ [{i}/{total}] Скопировано: {model['name']}")
+                    else:
+                        result = {
+                            "model": model["name"],
+                            "status": "skipped_exists",
+                            "reason": "Already cached",
+                            "size_mb": file_size_mb
+                        }
+                        results.append(result)
+                        print(f"⏭️  [{i}/{total}] Уже в кеше: {model['name']}")
+                else:
+                    result = {
+                        "model": model["name"],
+                        "status": "not_found",
+                        "reason": "File not found"
+                    }
+                    results.append(result)
+                    print(f"❌ [{i}/{total}] Файл не найден: {model['name']}")
+                    
+            except Exception as e:
+                result = {
+                    "model": model["name"],
+                    "status": "error",
+                    "reason": str(e)
+                }
+                results.append(result)
+                print(f"❌ [{i}/{total}] Ошибка: {model['name']} - {str(e)}")
+        
+        cached_count = len([r for r in results if r["status"] == "cached"])
+        print(f"🎯 Кеширование завершено: {cached_count}/{total} моделей скопировано")
+        
+        return results
+    
+    def _guess_category(self, class_type: str, input_key: str, categories: list) -> str | None:
+        """Определяет категорию модели по типу ноды и ключу."""
+        class_type_lower = class_type.lower()
+        input_key_lower = input_key.lower()
+        
+        # Checkpoint models
+        if any(keyword in class_type_lower for keyword in ["checkpoint", "model"]):
+            if any(keyword in input_key_lower for keyword in ["ckpt", "model", "checkpoint"]):
+                return "checkpoints" if "checkpoints" in categories else None
+        
+        # LoRA models
+        if "lora" in class_type_lower or "lora" in input_key_lower:
+            return "loras" if "loras" in categories else None
+        
+        # ControlNet models
+        if "controlnet" in class_type_lower or "controlnet" in input_key_lower:
+            return "controlnet" if "controlnet" in categories else None
+        
+        # Upscale models
+        if any(keyword in class_type_lower for keyword in ["upscale", "upscaler"]):
+            return "upscale_models" if "upscale_models" in categories else None
+        
+        # CLIP Vision models
+        if "clip" in class_type_lower and "vision" in class_type_lower:
+            return "clip_vision" if "clip_vision" in categories else None
+        
+        # IP-Adapter models
+        if "ipadapter" in class_type_lower:
+            return "ipadapter" if "ipadapter" in categories else None
+        
+        # InsightFace models
+        if "insightface" in class_type_lower:
+            return "insightface" if "insightface" in categories else None
+        
+        # Generic fallback
+        if any(keyword in input_key_lower for keyword in ["model", "ckpt", "lora", "controlnet"]):
+            for category in categories:
+                if category in input_key_lower:
+                    return category
+        
+        return None
+    
+    def _analyze_current_canvas(self) -> list:
+        """Анализирует текущий холст ComfyUI и находит ноды с моделями."""
+        found_models = []
+        
+        try:
+            print("[ArenaAutoCacheSmart] Analyzing current canvas...")
+            
+            # Метод 1: Через PromptServer и очередь
+            try:
+                from server import PromptServer
+                if hasattr(PromptServer, 'instance') and PromptServer.instance:
+                    prompt_server = PromptServer.instance
+                    print("[ArenaAutoCacheSmart] Accessing PromptServer...")
+                    
+                    # Получаем текущую очередь
+                    if hasattr(prompt_server, 'prompt_queue'):
+                        queue = prompt_server.prompt_queue
+                        print("[ArenaAutoCacheSmart] Accessing prompt queue...")
+                        
+                        # Получаем текущую очередь
+                        if hasattr(queue, 'get_current_queue'):
+                            current_queue = queue.get_current_queue()
+                            print(f"[ArenaAutoCacheSmart] Current queue length: {len(current_queue) if current_queue else 0}")
+                            
+                            if current_queue:
+                                for i, item in enumerate(current_queue):
+                                    if isinstance(item, dict) and 'prompt' in item:
+                                        prompt = item['prompt']
+                                        print(f"[ArenaAutoCacheSmart] Analyzing queue item {i}: {type(prompt)}")
+                                        
+                                        if isinstance(prompt, dict) and 'nodes' in prompt:
+                                            models = self._extract_models_from_workflow(prompt)
+                                            found_models.extend(models)
+                                            print(f"[ArenaAutoCacheSmart] Found {len(models)} models in queue item {i}")
+                        
+                        # Получаем текущий выполняемый prompt
+                        if hasattr(queue, 'currently_running') and queue.currently_running:
+                            running = queue.currently_running
+                            print(f"[ArenaAutoCacheSmart] Currently running: {type(running)}")
+                            
+                            if isinstance(running, dict) and 'prompt' in running:
+                                prompt = running['prompt']
+                                if isinstance(prompt, dict) and 'nodes' in prompt:
+                                    models = self._extract_models_from_workflow(prompt)
+                                    found_models.extend(models)
+                                    print(f"[ArenaAutoCacheSmart] Found {len(models)} models in currently running")
+            except Exception as e:
+                print(f"[ArenaAutoCacheSmart] Error accessing PromptServer: {e}")
+            
+            # Метод 2: Через NODE_CLASS_MAPPINGS - ищем зарегистрированные ноды
+            try:
+                print("[ArenaAutoCacheSmart] Searching registered node classes...")
+                import sys
+                
+                # Ищем модули с NODE_CLASS_MAPPINGS
+                for module_name, module in sys.modules.items():
+                    if module and hasattr(module, 'NODE_CLASS_MAPPINGS'):
+                        mappings = getattr(module, 'NODE_CLASS_MAPPINGS', {})
+                        try:
+                            mappings_len = len(mappings) if hasattr(mappings, '__len__') else 'unknown'
+                            print(f"[ArenaAutoCacheSmart] Found NODE_CLASS_MAPPINGS in {module_name}: {mappings_len} nodes")
+                        except:
+                            print(f"[ArenaAutoCacheSmart] Found NODE_CLASS_MAPPINGS in {module_name}: type {type(mappings)}")
+                        
+                        # Проверяем, что mappings поддерживает итерацию
+                        if hasattr(mappings, 'items'):
+                            for node_name, node_class in mappings.items():
+                                if hasattr(node_class, 'class_type'):
+                                    class_type = getattr(node_class, 'class_type', '')
+                                    if isinstance(class_type, str) and class_type.strip():
+                                        if any(keyword in class_type.lower() for keyword in ['checkpoint', 'lora', 'controlnet', 'upscale', 'clip', 'ipadapter', 'insightface']):
+                                            print(f"[ArenaAutoCacheSmart] Found model node class: {class_type} ({node_name})")
+                                            
+                                            # Пытаемся создать экземпляр и получить inputs
+                                            try:
+                                                if hasattr(node_class, 'INPUT_TYPES'):
+                                                    input_types = node_class.INPUT_TYPES()
+                                                    if isinstance(input_types, dict) and 'required' in input_types:
+                                                        required_inputs = input_types['required']
+                                                        for input_name, input_config in required_inputs.items():
+                                                            if isinstance(input_config, tuple) and len(input_config) > 0:
+                                                                input_type = input_config[0]
+                                                                if isinstance(input_type, str) and any(keyword in input_type.lower() for keyword in ['model', 'ckpt', 'lora', 'controlnet']):
+                                                                    print(f"[ArenaAutoCacheSmart] Found model input: {input_name} in {class_type}")
+                                            except Exception as e:
+                                                print(f"[ArenaAutoCacheSmart] Error analyzing {class_type}: {e}")
+            except Exception as e:
+                print(f"[ArenaAutoCacheSmart] Error searching node classes: {e}")
+            
+            # Метод 3: Через folder_paths - ищем недавно использованные модели
+            try:
+                print("[ArenaAutoCacheSmart] Checking recently used models...")
+                
+                # Получаем папки с моделями
+                try:
+                    from folder_paths import get_folder_paths
+                    model_folders = get_folder_paths()
+                except (TypeError, ImportError):
+                    # Если get_folder_paths не работает, пробуем folder_paths напрямую
+                    try:
+                        from folder_paths import folder_paths
+                        model_folders = folder_paths
+                    except ImportError:
+                        print("[ArenaAutoCacheSmart] Cannot import folder_paths, skipping recent models check")
+                        model_folders = {}
+                
+                if model_folders:
+                    print(f"[ArenaAutoCacheSmart] Model folders: {list(model_folders.keys())}")
+                else:
+                    print("[ArenaAutoCacheSmart] No model folders found")
+                
+                # Ищем недавно модифицированные файлы в папках моделей
+                for category, folder_path in model_folders.items():
+                    if folder_path and Path(folder_path).exists():
+                        try:
+                            # Ищем файлы моделей, модифицированные в последние 5 минут
+                            import time
+                            current_time = time.time()
+                            recent_files = []
+                            
+                            for file_path in Path(folder_path).glob("*"):
+                                if file_path.is_file() and any(file_path.suffix.lower() in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                                    if current_time - file_path.stat().st_mtime < 300:  # 5 минут
+                                        recent_files.append(file_path)
+                            
+                            if recent_files:
+                                print(f"[ArenaAutoCacheSmart] Found {len(recent_files)} recently used models in {category}")
+                                for file_path in recent_files:
+                                    found_models.append({
+                                        "category": category,
+                                        "name": file_path.name,
+                                        "node_type": "recent_file",
+                                        "input_key": "file",
+                                        "source": "recent_usage"
+                                    })
+                        except Exception as e:
+                            print(f"[ArenaAutoCacheSmart] Error checking {category}: {e}")
+            except Exception as e:
+                print(f"[ArenaAutoCacheSmart] Error checking recent models: {e}")
+            
+            # Удаляем дубликаты
+            unique_models = []
+            seen = set()
+            for model in found_models:
+                key = (model["category"], model["name"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_models.append(model)
+            
+            print(f"[ArenaAutoCacheSmart] Total unique models found: {len(unique_models)}")
+            return unique_models
+            
+        except Exception as e:
+            print(f"[ArenaAutoCacheSmart] Error analyzing canvas: {e}")
+            return []
+    
+    def _convert_json_models_to_arena_format(self, json_models: list[dict]) -> list[object]:
+        """Convert JSON model format to Arena format."""
+        arena_models = []
+        
+        for model in json_models:
+            arena_model = {
+                'name': model['name'],
+                'class_type': model['class_type'],
+                'category': model['category'],
+                'directory': model['directory'],
+                'url': model['url'],
+                'node_id': model['node_id']
+            }
+            arena_models.append(arena_model)
+        
+        print(f"[ArenaAutoCacheSmart] Converted {len(arena_models)} JSON models to Arena format")
+        return arena_models
+
+    def _extract_models_from_workflow(self, workflow: dict) -> list:
+        """Извлекает модели из workflow."""
+        models = []
+        
+        print(f"[ArenaAutoCacheSmart] _extract_models_from_workflow called with workflow type: {type(workflow)}")
+        
+        if not isinstance(workflow, dict):
+            print(f"[ArenaAutoCacheSmart] Workflow is not a dict: {type(workflow)}")
+            return models
+            
+        if 'nodes' not in workflow:
+            print(f"[ArenaAutoCacheSmart] No 'nodes' key in workflow. Keys: {list(workflow.keys())}")
+            return models
+        
+        nodes = workflow.get('nodes', [])
+        print(f"[ArenaAutoCacheSmart] Processing {len(nodes)} nodes from workflow")
+        
+        for i, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                print(f"[ArenaAutoCacheSmart] Node {i} is not a dict: {type(node)}")
+                continue
+            
+            inputs = node.get('inputs', {})
+            class_type = node.get('class_type', '')
+            print(f"[ArenaAutoCacheSmart] Node {i}: {class_type} with {len(inputs)} inputs")
+            
+            for key, value in inputs.items():
+                if isinstance(value, str) and value.strip():
+                    if any(value.lower().endswith(ext) for ext in [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]):
+                        category = self._guess_category(class_type, key, ["checkpoints", "loras", "controlnet", "upscale_models", "clip_vision", "ipadapter", "insightface"])
+                        if category:
+                            print(f"[ArenaAutoCacheSmart] Found model: {value} in category {category} (node: {class_type})")
+                            models.append({
+                                "category": category,
+                                "name": value,
+                                "node_type": class_type,
+                                "input_key": key,
+                                "source": "workflow"
+                            })
+        
+        print(f"[ArenaAutoCacheSmart] Extracted {len(models)} models from workflow")
+        return models
+
+
+# Версия узлов для тестирования
+# v2.11 - Исправлена поддержка разных форматов workflow (class_type vs type)
+#         Добавлена поддержка widgets_values для извлечения моделей
+#         Теперь работает с реальными workflow ComfyUI
+# v2.10 - Добавлена отладка class_type и inputs для диагностики узлов
+#         Теперь показываются все inputs каждого узла для понимания структуры
+#         Поможет найти правильные ключи для извлечения моделей
+# v2.9 - Добавлен индикатор прогресса кеширования с эмодзи и подробными логами
+#        Добавлена функция _cache_models_with_progress для визуального отслеживания процесса
+#        Расширен список поддерживаемых узлов загрузки моделей
+#        Теперь пользователь видит процесс кеширования в реальном времени
+# v2.8 - Исправлена функция _extract_models_from_workflow_json для работы с ComfyUI форматом
+#        Теперь ищет модели в inputs вместо widgets_values
+#        Добавлена подробная отладочная информация для диагностики извлечения моделей
+#        Функция теперь должна корректно находить модели в workflow
+# v2.7 - Исправлена проблема с кешированием моделей - теперь используется правильный метод анализа
+#        ArenaAutoCacheSmart теперь использует _extract_models_from_workflow_json для извлечения моделей
+#        Добавлен fallback на старый метод при отсутствии моделей в JSON анализе
+#        Модели теперь должны корректно кешироваться
+# v2.6 - Исправлена проблема с "No workflow loaded" - теперь показывается реальный путь
+#        Исправлена Alert ошибка "Invalid workflow against zod schema" - добавлена коррекция links
+#        ArenaAutoCacheSmart теперь корректно обрабатывает неправильные links в workflow
+#        Добавлена автоматическая коррекция формата links для совместимости с ComfyUI
+# v2.5 - Исправлена ошибка 'list' object has no attribute 'keys' при работе с ArenaAutoCacheAnalyze
+#        Добавлена специальная обработка данных от ArenaAutoCacheAnalyze в ArenaAutoCacheSmart
+#        ArenaAutoCacheSmart теперь корректно обрабатывает список моделей от ArenaAutoCacheAnalyze
+#        Добавлена конвертация форматов между ArenaAutoCacheAnalyze и ArenaAutoCacheSmart
+# v2.4 - Добавлено отображение пути к workflow в интерфейсе ноды
+#        Добавлено поле workflow_path_display для показа источника workflow
+#        Обновлен summary с информацией о workflow_path
+#        Пользователь теперь видит откуда читается workflow (history API, файл, JSON)
+# v2.3 - Добавлен анализ JSON workflow для извлечения моделей из нод загрузки
+#        Добавлена функция _extract_models_from_workflow_json для парсинга JSON структуры
+#        Добавлена функция _get_model_category для определения категорий моделей
+#        ArenaAutoCacheSmart теперь использует новый метод анализа JSON workflow
+# v2.2 - Реализована правильная стратегия кеширования: работа с последним выполненным workflow
+#        Добавлена функция _load_last_executed_workflow через ComfyUI history API
+#        ArenaAutoCacheSmart теперь работает с выполняющимися workflow, а не с canvas
+#        Единственный рабочий путь: Запуск workflow → кеширование в процессе → следующий запуск из кеша
+# v2.1 - Добавлена улучшенная функция _load_active_workflow с новыми методами получения canvas workflow
+#        Добавлена подробная отладочная информация для WebSocket и модулей ComfyUI
+#        Основные узлы теперь имеют версии в названиях для удобства тестирования
+#        Обратная совместимость: старые названия узлов остаются для существующих workflow
+ARENA_NODES_VERSION = "v2.17"
+
 NODE_CLASS_MAPPINGS.update(
     {
-        "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
+        # Основные узлы с версиями для тестирования (новые)
+        f"ArenaAutoCacheSmart {ARENA_NODES_VERSION}": ArenaAutoCacheSmart,
+        f"ArenaAutoCacheAnalyze {ARENA_NODES_VERSION}": ArenaAutoCacheAnalyze,
+        f"ArenaGetActiveWorkflow {ARENA_NODES_VERSION}": ArenaGetActiveWorkflow,
+        f"ArenaAutoCacheRefreshWorkflow {ARENA_NODES_VERSION}": ArenaAutoCacheRefreshWorkflow,
+        
+        # Обратная совместимость - старые названия для существующих workflow
+        "ArenaAutoCacheSmart": ArenaAutoCacheSmart,
         "ArenaAutoCacheAnalyze": ArenaAutoCacheAnalyze,
         "ArenaGetActiveWorkflow": ArenaGetActiveWorkflow,
+        "ArenaAutoCacheRefreshWorkflow": ArenaAutoCacheRefreshWorkflow,
+        
+        # Остальные узлы без версий (стабильные)
+        "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
         "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
         "ArenaAutoCacheCopyStatus": ArenaAutoCacheCopyStatus,
         "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
         "ArenaAutoCacheOps": ArenaAutoCacheOps,
-        "ArenaAutoCacheRefreshWorkflow": ArenaAutoCacheRefreshWorkflow,
+        "ArenaAutoCachePrewarm": ArenaAutoCachePrewarm,
+        "ArenaAutoCachePrewarmFromFile": ArenaAutoCachePrewarmFromFile,
         "ArenaAutoCacheStats": ArenaAutoCacheStats,
         "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
         "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
@@ -3631,14 +5680,26 @@ NODE_CLASS_MAPPINGS.update(
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
-        "ArenaAutoCacheAudit": t("node.audit"),
+        # Основные узлы с версиями для тестирования (новые)
+        f"ArenaAutoCacheSmart {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache: Smart {ARENA_NODES_VERSION}",
+        f"ArenaAutoCacheAnalyze {ARENA_NODES_VERSION}": f"{t('node.analyze')} {ARENA_NODES_VERSION}",
+        f"ArenaGetActiveWorkflow {ARENA_NODES_VERSION}": f"{t('node.get_workflow')} {ARENA_NODES_VERSION}",
+        f"ArenaAutoCacheRefreshWorkflow {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache: Refresh Workflow {ARENA_NODES_VERSION}",
+        
+        # Обратная совместимость - старые названия для существующих workflow
+        "ArenaAutoCacheSmart": "🅰️ Arena AutoCache: Smart",
         "ArenaAutoCacheAnalyze": t("node.analyze"),
         "ArenaGetActiveWorkflow": t("node.get_workflow"),
+        "ArenaAutoCacheRefreshWorkflow": "🅰️ Arena AutoCache: Refresh Workflow",
+        
+        # Остальные узлы без версий (стабильные)
+        "ArenaAutoCacheAudit": t("node.audit"),
         "ArenaAutoCacheConfig": t("node.config"),
         "ArenaAutoCacheCopyStatus": t("node.copy_status"),
         "ArenaAutoCacheDashboard": t("node.dashboard"),
         "ArenaAutoCacheOps": t("node.ops"),
-        "ArenaAutoCacheRefreshWorkflow": "🅰️ Arena AutoCache: Refresh Workflow",
+        "ArenaAutoCachePrewarm": "🅰️ Arena AutoCache: Prewarm",
+        "ArenaAutoCachePrewarmFromFile": "🅰️ Arena AutoCache: Prewarm From File",
         "ArenaAutoCacheStats": t("node.stats"),
         "ArenaAutoCacheStatsEx": t("node.statsex"),
         "ArenaAutoCacheTrim": t("node.trim"),

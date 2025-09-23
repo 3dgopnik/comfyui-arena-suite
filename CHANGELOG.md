@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- **Bootstrap Scripts v2.0**: New `arena_bootstrap_cache_v2.bat` and `arena_bootstrap_cache_v2.ps1` with Debug/Prod profiles for easy configuration. / **RU:** Новые скрипты `arena_bootstrap_cache_v2.bat` и `arena_bootstrap_cache_v2.ps1` с профилями Debug/Prod для простой настройки.
+- **Progress Indicator**: Real-time copy progress display in terminal with percentage and status messages. / **RU:** Индикатор прогресса копирования в терминале с процентами и статусными сообщениями.
+- **MB Size Support**: Added `ARENA_CACHE_MIN_SIZE_MB` environment variable for fine-grained size filtering (default: 1024 MB). / **RU:** Поддержка размера в МБ: добавлена переменная `ARENA_CACHE_MIN_SIZE_MB` для точной фильтрации по размеру (по умолчанию: 1024 МБ).
+- **NAS Availability Check**: Automatic detection of NAS connectivity before cache operations. / **RU:** Проверка доступности NAS: автоматическое определение подключения к NAS перед операциями кеширования.
+- **Cache Permissions Check**: Validation of write permissions to cache directory. / **RU:** Проверка прав кеша: валидация прав записи в папку кеша.
+- **Quick Tips System**: Built-in troubleshooting hints and solutions for common issues. / **RU:** Система быстрых подсказок: встроенные советы по устранению неполадок и решениям типичных проблем.
+
+### Fixed
+- **Critical Copy Bug**: Fixed `_copy_into_cache_lru() missing 1 required positional argument: 'category'` error that prevented model caching. / **RU:** Критическая ошибка копирования: исправлена ошибка `_copy_into_cache_lru() missing 1 required positional argument: 'category'`, которая препятствовала кешированию моделей.
+- **Hardcoded Path Filter**: Debug mode now properly disables `ARENA_CACHE_SKIP_HARDCODED=0` to allow NAS model caching. / **RU:** Фильтр жестко прописанных путей: Debug режим теперь правильно отключает `ARENA_CACHE_SKIP_HARDCODED=0` для разрешения кеширования моделей с NAS.
+- **Size Filter Logic**: Updated `_should_skip_by_size()` to support both GB and MB thresholds simultaneously. / **RU:** Логика фильтра размера: обновлена функция `_should_skip_by_size()` для поддержки порогов ГБ и МБ одновременно.
+
+### Changed
+- **Node Versioning**: ArenaAutoCacheSmart updated to v2.17 with improved error handling and progress reporting. / **RU:** Версионирование узлов: ArenaAutoCacheSmart обновлен до v2.17 с улучшенной обработкой ошибок и отчетностью о прогрессе.
+- **Bootstrap Profiles**: 
+  - **Debug Mode**: `ARENA_CACHE_SKIP_HARDCODED=0`, `ARENA_CACHE_MIN_SIZE_GB=0.0`, `ARENA_CACHE_VERBOSE=1` for troubleshooting. / **RU:** Debug режим: отключены фильтры, включены подробные логи для диагностики.
+  - **Production Mode**: `ARENA_CACHE_SKIP_HARDCODED=0`, `ARENA_CACHE_MIN_SIZE_GB=1.0`, `ARENA_CACHE_VERBOSE=0` for daily work. / **RU:** Production режим: включены фильтры, обычные логи для повседневной работы.
+  - **Default Mode**: `ARENA_CACHE_SKIP_HARDCODED=1`, `ARENA_CACHE_MIN_SIZE_GB=1.0` for safe settings. / **RU:** Default режим: безопасные настройки по умолчанию.
+
+### Added
 - **Visual Copy Status Indicator**: New `ArenaAutoCache Copy Status` node displays real-time copy progress with speed, ETA, and filter settings. / **RU:** Новый узел `ArenaAutoCache Copy Status` показывает прогресс копирования в реальном времени со скоростью, оставшимся временем и настройками фильтров.
 - **Model Size Filter**: Skip caching models smaller than 1GB (configurable via `ARENA_CACHE_MIN_SIZE_GB`). Small auxiliary models remain on NAS to save cache space. / **RU:** Фильтр размера моделей: пропускать модели меньше 1 ГБ (настраивается через `ARENA_CACHE_MIN_SIZE_GB`). Маленькие вспомогательные модели остаются на NAS для экономии места в кеше.
 - **Hardcoded Path Filter**: Skip caching models with fixed paths (ControlNet, InsightFace, etc.) that only work in their specific directories. / **RU:** Фильтр жестко прописанных путей: пропускать модели с фиксированными путями (ControlNet, InsightFace и др.), которые работают только в своих папках.
