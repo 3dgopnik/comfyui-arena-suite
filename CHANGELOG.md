@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **ArenaAutoCacheSmart v2.19**: Fixed issue where Arena AutoCache Smart was showing models from previous workflows instead of current canvas. Now properly analyzes current canvas workflow instead of falling back to ComfyUI history. / **RU:** Исправлена проблема, когда Arena AutoCache Smart показывал модели из предыдущих workflow вместо текущего canvas. Теперь правильно анализирует текущий canvas workflow вместо fallback к истории ComfyUI.
+
 ### Changed
 - **Global Rules**: Updated GLOBAL RULES.md with new workflow requirements, Russian language preferences, and GitHub integration guidelines. / **RU:** Обновлены глобальные правила с новыми требованиями рабочего процесса, предпочтениями русского языка и руководящими принципами интеграции GitHub.
 - **Project Rules**: Enhanced comfyui.mdc with technical details, structured documentation requirements, and comprehensive workflow patterns. / **RU:** Улучшены правила проекта с техническими деталями, структурированными требованиями к документации и комплексными паттернами рабочего процесса.

@@ -411,6 +411,20 @@ def _load_active_workflow(force_refresh: bool = False) -> object | None:
                 candidates.append(current_workflow)
                 print(f"[ArenaAutoCache] Found current workflow via current_workflow attribute: {type(current_workflow)}")
         
+        # Проверяем, есть ли метод для получения canvas через JavaScript API
+        if hasattr(prompt_server, 'get_canvas_workflow'):
+            canvas_workflow = prompt_server.get_canvas_workflow()
+            if canvas_workflow:
+                candidates.append(canvas_workflow)
+                print(f"[ArenaAutoCache] Found canvas workflow via get_canvas_workflow: {type(canvas_workflow)}")
+        
+        # Проверяем, есть ли атрибут с canvas workflow
+        if hasattr(prompt_server, 'canvas_workflow'):
+            canvas_workflow = getattr(prompt_server, 'canvas_workflow')
+            if canvas_workflow:
+                candidates.append(canvas_workflow)
+                print(f"[ArenaAutoCache] Found canvas workflow via canvas_workflow attribute: {type(canvas_workflow)}")
+        
         # Проверяем WebSocket соединения для получения canvas
         if hasattr(prompt_server, 'sockets'):
             sockets = getattr(prompt_server, 'sockets')
@@ -4752,13 +4766,13 @@ class ArenaAutoCacheSmart:
         try:
             # Получаем workflow в зависимости от источника
             if workflow_source == "auto":
-                print("[ArenaAutoCacheSmart] Auto mode: analyzing last executed workflow for model nodes")
+                print("[ArenaAutoCacheSmart] Auto mode: analyzing current canvas for model nodes")
                 
-                # Используем улучшенную функцию _resolve_workflow_json с фоллбэком к истории
-                workflow_data = _resolve_workflow_json("", force_refresh=True)
+                # Сначала пробуем получить активный canvas workflow
+                workflow_data = _load_active_workflow(force_refresh=True)
                 if workflow_data:
-                    print(f"[ArenaAutoCacheSmart] Found workflow: {type(workflow_data)}")
-                    current_workflow_path = "Resolved workflow (active or history)"
+                    print(f"[ArenaAutoCacheSmart] Found active canvas workflow: {type(workflow_data)}")
+                    current_workflow_path = "Active canvas workflow"
                     
                     # Регистрируем элементы workflow для заполнения allowlist
                     default_category = "checkpoints"  # Основная категория по умолчанию
@@ -4779,18 +4793,16 @@ class ArenaAutoCacheSmart:
                         # Fallback на старый метод
                         found_models = self._extract_models_from_workflow(workflow_data)
                     
-                    print(f"[ArenaAutoCacheSmart] Final extracted {len(found_models)} models from last executed workflow")
+                    print(f"[ArenaAutoCacheSmart] Final extracted {len(found_models)} models from active canvas workflow")
                 else:
-                    # Fallback на старые методы
-                    workflow_data = _load_active_workflow()
-                    if workflow_data:
-                        found_models = self._extract_models_from_workflow(workflow_data)
-                    else:
-                        found_models = self._analyze_current_canvas()
+                    # Если активный canvas недоступен, пробуем анализ текущего canvas
+                    print("[ArenaAutoCacheSmart] Active canvas workflow not available, analyzing current canvas")
+                    found_models = self._analyze_current_canvas()
+                    workflow_data = {"nodes": []}  # Создаем пустой workflow для совместимости
                 
                 if found_models:
-                    source_info = "Last executed workflow"
-                    # print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models in last executed workflow")
+                    source_info = "Current canvas workflow"
+                    # print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models in current canvas workflow")
                     
                     # Если workflow_data не был получен из _load_active_workflow, создаем фиктивный
                     if not workflow_data:
@@ -5682,6 +5694,10 @@ class ArenaAutoCacheSmart:
 #        Добавлено поле workflow_path_display для показа источника workflow
 #        Обновлен summary с информацией о workflow_path
 #        Пользователь теперь видит откуда читается workflow (history API, файл, JSON)
+# v2.4 - Исправлена проблема с определением активного workflow в ArenaAutoCacheSmart
+#        Убрана зависимость от истории ComfyUI как fallback для определения моделей
+#        ArenaAutoCacheSmart теперь анализирует текущий canvas вместо последнего выполненного workflow
+#        Добавлены дополнительные методы получения canvas workflow через JavaScript API
 # v2.3 - Добавлен анализ JSON workflow для извлечения моделей из нод загрузки
 #        Добавлена функция _extract_models_from_workflow_json для парсинга JSON структуры
 #        Добавлена функция _get_model_category для определения категорий моделей
@@ -5694,7 +5710,7 @@ class ArenaAutoCacheSmart:
 #        Добавлена подробная отладочная информация для WebSocket и модулей ComfyUI
 #        Основные узлы теперь имеют версии в названиях для удобства тестирования
 #        Обратная совместимость: старые названия узлов остаются для существующих workflow
-ARENA_NODES_VERSION = "v2.18"
+ARENA_NODES_VERSION = "v2.19"
 
 NODE_CLASS_MAPPINGS.update(
     {
