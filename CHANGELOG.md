@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- **Global Rules**: Updated GLOBAL RULES.md with new workflow requirements, Russian language preferences, and GitHub integration guidelines. / **RU:** Обновлены глобальные правила с новыми требованиями рабочего процесса, предпочтениями русского языка и руководящими принципами интеграции GitHub.
+- **Project Rules**: Enhanced comfyui.mdc with technical details, structured documentation requirements, and comprehensive workflow patterns. / **RU:** Улучшены правила проекта с техническими деталями, структурированными требованиями к документации и комплексными паттернами рабочего процесса.
+
 ### Added
 - **Bootstrap Scripts v2.0**: New `arena_bootstrap_cache_v2.bat` and `arena_bootstrap_cache_v2.ps1` with Debug/Prod profiles for easy configuration. / **RU:** Новые скрипты `arena_bootstrap_cache_v2.bat` и `arena_bootstrap_cache_v2.ps1` с профилями Debug/Prod для простой настройки.
 - **Progress Indicator**: Real-time copy progress display in terminal with percentage and status messages. / **RU:** Индикатор прогресса копирования в терминале с процентами и статусными сообщениями.
