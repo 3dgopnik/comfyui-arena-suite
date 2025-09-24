@@ -10,3 +10,7 @@ venv/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Cursor rules - локальные файлы, не для GitHub
+GLOBAL-RULES.md
+PROJECT-RULES.md
