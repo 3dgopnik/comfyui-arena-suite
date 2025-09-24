@@ -867,22 +867,9 @@ def _resolve_workflow_json(workflow_json: object, force_refresh: bool = False) -
         print("[ArenaAutoCacheSmart] Found active workflow from canvas")
         return fallback
     
-    # Если активный workflow не найден, пробуем загрузить из файлов workflow
-    print("[ArenaAutoCacheSmart] No active workflow found, trying to load from workflow files")
-    file_workflow = _load_workflow_from_files()
-    if file_workflow is not None:
-        print("[ArenaAutoCacheSmart] Found workflow from files")
-        return file_workflow
-    
-    # В последнюю очередь пробуем последний выполненный из истории
-    print("[ArenaAutoCacheSmart] No workflow found in canvas or files, trying last executed workflow from history")
-    history_workflow = _load_last_executed_workflow()
-    if history_workflow is not None:
-        print("[ArenaAutoCacheSmart] Found workflow from history API")
-        return history_workflow
-    
-    print("[ArenaAutoCacheSmart] No workflow found in active canvas, files, or history")
-    return workflow_json
+    # Если активный workflow не найден, возвращаем None
+    print("[ArenaAutoCacheSmart] No active workflow found in canvas")
+    return None
 
 
 def reset_workflow_allowlist() -> None:
@@ -4604,116 +4591,377 @@ class ArenaAutoCacheSmart:
         return {
             "required": {},
             "optional": {
-                "workflow_source": (
-                    ["auto", "file", "json"],
+                "categories": (
+                    "STRING",
                     {
-                        "default": "auto",
-                        "description": "Workflow source",
-                        "tooltip": "auto = find active/file, file = load from file, json = paste JSON",
+                        "default": "checkpoints,loras,vaes,upscale_models,controlnet",
+                        "description": "Model categories to cache",
+                        "tooltip": "Comma-separated list of model categories to automatically cache",
                     },
                 ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("result",)
+    RETURN_DESCRIPTIONS = ("Cache operation result",)
+    OUTPUT_TOOLTIPS = ("Shows which models were cached",)
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = "Automatically cache models from current workflow"
+    OUTPUT_NODE = True
+
+    def run(
+        self,
+        categories: str = "checkpoints,loras,vaes,upscale_models,controlnet"
+    ):
+        """Automatically detect and cache models from current workflow."""
+        print("[ArenaAutoCache] Starting automatic model detection and caching")
+        
+        # Анализируем текущий canvas для поиска моделей
+        found_models = self._analyze_current_canvas()
+        
+        if not found_models:
+            print("[ArenaAutoCache] No models found in current canvas")
+            return json.dumps({
+                "ok": False,
+                "message": "No models found in current canvas",
+                "details": [
+                    "Add model loading nodes to your canvas first",
+                    "Use Load Checkpoint, Load VAE, or other model nodes"
+                ]
+            }, ensure_ascii=False, indent=2)
+        
+        print(f"[ArenaAutoCache] Found {len(found_models)} models in current canvas")
+        
+        # Убеждаемся, что патч путей активен
+        _apply_folder_paths_patch_locked()
+        
+        # Кешируем найденные модели
+        print(f"[ArenaAutoCache] Starting cache process for {len(found_models)} models")
+        cache_results = self._cache_models_with_progress(found_models)
+        print(f"[ArenaAutoCache] Cache process completed. Results: {len(cache_results)}")
+        
+        # Формируем результат
+        cached_count = len([r for r in cache_results if r["status"] == "cached"])
+        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+        
+        result = {
+            "ok": True,
+            "message": f"Successfully processed {len(found_models)} models",
+            "models_found": len(found_models),
+            "cached": cached_count,
+            "skipped": skipped_count,
+            "errors": error_count,
+            "categories_checked": [cat.strip() for cat in categories.split(",")],
+            "models": found_models,
+            "cache_results": cache_results,
+        }
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+class ArenaAutoCachePrewarmFromFile:
+    """RU: Предварительное кеширование моделей из сохраненного workflow файла.
+
+    Загружает workflow из файла и кеширует все необходимые модели.
+    Полезно для работы с пресетами и сохраненными workflow.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {
                 "workflow_file": (
                     "STRING",
                     {
                         "default": "",
-                        "description": "Workflow file path (if source=file)",
-                        "tooltip": "Path to workflow file, e.g., 'workflows/default.json'",
+                        "description": "Path to workflow file (.json)",
+                        "tooltip": "Path to saved workflow file, e.g., 'workflows/my_workflow.json'",
                     },
                 ),
-                "workflow_json": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": True,
-                        "description": "Workflow JSON (if source=json)",
-                        "tooltip": "Paste workflow JSON here",
-                    },
-                ),
-                "auto_cache": (
-                    "BOOLEAN",
-                    {
-                        "default": True,
-                        "description": "Auto cache models",
-                        "tooltip": "Automatically cache found models",
-                    },
-                ),
-                "show_analysis": (
-                    "BOOLEAN",
-                    {
-                        "default": True,
-                        "description": "Show analysis",
-                        "tooltip": "Show detailed analysis of found models",
-                    },
-                ),
+            },
+            "optional": {
                 "categories": (
                     "STRING",
                     {
-                        "default": "checkpoints,loras",
-                        "description": "Categories to process",
-                        "tooltip": "Comma-separated list of model categories",
-                    },
-                ),
-                "workflow_path_display": (
-                    "STRING",
-                    {
-                        "default": "No workflow loaded",
-                        "description": "Current workflow path",
-                        "tooltip": "Shows the path to the currently loaded workflow",
+                        "default": "checkpoints,loras,vaes,upscale_models,controlnet",
+                        "description": "Model categories to cache",
+                        "tooltip": "Comma-separated list of model categories to cache",
                     },
                 ),
             },
         }
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = (t("output.json"), t("output.summary_json"), "workflow_json")
-    RETURN_DESCRIPTIONS = RETURN_NAMES
-    OUTPUT_TOOLTIPS = RETURN_NAMES
+    RETURN_NAMES = ("result", "summary", "workflow_json")
+    RETURN_DESCRIPTIONS = ("Cache operation result", "Summary of cached models", "Workflow JSON")
+    OUTPUT_TOOLTIPS = ("Shows which models were cached", "Summary information", "Original workflow JSON")
     FUNCTION = "run"
     CATEGORY = "Arena/AutoCache"
-    DESCRIPTION = "Smart model caching - one node for all tasks"
+    DESCRIPTION = "Pre-cache models from saved workflow file"
+    OUTPUT_NODE = True
+
+    def run(self, workflow_file: str, categories: str = "checkpoints,loras,vaes,upscale_models,controlnet"):
+        """Pre-cache models from workflow file."""
+        if not workflow_file.strip():
+            return (
+                json.dumps({"ok": False, "message": "No workflow file specified"}, ensure_ascii=False, indent=2),
+                "No workflow file specified",
+                ""
+            )
+        
+        # Определяем путь к файлу
+        if not Path(workflow_file).is_absolute():
+            comfyui_path = Path("C:/ComfyUI")
+            full_path = comfyui_path / workflow_file
+        else:
+            full_path = Path(workflow_file)
+        
+        if not full_path.exists():
+            return (
+                json.dumps({"ok": False, "message": f"File not found: {full_path}"}, ensure_ascii=False, indent=2),
+                f"File not found: {full_path}",
+                ""
+            )
+        
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                workflow_data = json.load(f)
+        except Exception as e:
+            return (
+                json.dumps({"ok": False, "message": f"Error loading file: {str(e)}"}, ensure_ascii=False, indent=2),
+                f"Error loading file: {str(e)}",
+                ""
+            )
+        
+        # Анализируем workflow
+        categories_list = [cat.strip() for cat in categories.split(",")]
+        found_models = []
+        
+        for node in workflow_data.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+                
+            class_type = node.get("class_type", "")
+            inputs = node.get("inputs", {})
+            
+            # Анализируем входы узла на предмет моделей
+            for input_key, input_value in inputs.items():
+                if isinstance(input_value, str) and input_value.strip():
+                    model_info = self._extract_model_info(input_value, class_type, input_key, categories_list)
+                    if model_info:
+                        found_models.append(model_info)
+        
+        if not found_models:
+            return (
+                json.dumps({"ok": False, "message": "No models found in workflow"}, ensure_ascii=False, indent=2),
+                "No models found in workflow",
+                json.dumps(workflow_data, ensure_ascii=False, indent=2)
+            )
+        
+        # Кешируем найденные модели
+        _apply_folder_paths_patch_locked()
+        cache_results = self._cache_models_with_progress(found_models)
+        
+        # Формируем результат
+        cached_count = len([r for r in cache_results if r["status"] == "cached"])
+        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+        
+        result = {
+            "ok": True,
+            "message": f"Successfully processed {len(found_models)} models from {full_path.name}",
+            "workflow_file": str(full_path),
+            "models_found": len(found_models),
+            "cached": cached_count,
+            "skipped": skipped_count,
+            "errors": error_count,
+            "categories_checked": categories_list,
+            "models": found_models,
+            "cache_results": cache_results,
+        }
+        
+        summary = f"Processed {len(found_models)} models: {cached_count} cached, {skipped_count} skipped, {error_count} errors"
+        
+        return (
+            json.dumps(result, ensure_ascii=False, indent=2),
+            summary,
+            json.dumps(workflow_data, ensure_ascii=False, indent=2)
+        )
+    
+    def _extract_model_info(self, input_value: str, class_type: str, input_key: str, categories: list[str]) -> dict | None:
+        """Извлекает информацию о модели из входного значения."""
+        if not input_value or not isinstance(input_value, str):
+            return None
+        
+        # Определяем категорию модели на основе class_type и input_key
+        category = self._determine_model_category(class_type, input_key, categories)
+        if not category:
+            return None
+        
+        # Извлекаем имя файла
+        filename = Path(input_value).name
+        
+        return {
+            "name": filename,
+            "category": category,
+            "path": input_value,
+            "class_type": class_type,
+            "input_key": input_key
+        }
+    
+    def _determine_model_category(self, class_type: str, input_key: str, categories: list[str]) -> str | None:
+        """Определяет категорию модели на основе class_type и input_key."""
+        class_type_lower = class_type.lower()
+        input_key_lower = input_key.lower()
+        
+        # Checkpoint models
+        if "checkpoint" in class_type_lower or "ckpt" in input_key_lower:
+            return "checkpoints" if "checkpoints" in categories else None
+        
+        # VAE models
+        if "vae" in class_type_lower or "vae" in input_key_lower:
+            return "vaes" if "vaes" in categories else None
+        
+        # LoRA models
+        if "lora" in class_type_lower or "lora" in input_key_lower:
+            return "loras" if "loras" in categories else None
+        
+        # ControlNet models
+        if "controlnet" in class_type_lower or "controlnet" in input_key_lower:
+            return "controlnet" if "controlnet" in categories else None
+        
+        # Upscale models
+        if "upscale" in class_type_lower or "upscale" in input_key_lower:
+            return "upscale_models" if "upscale_models" in categories else None
+        
+        # IP-Adapter models
+        if "ipadapter" in class_type_lower:
+            return "ipadapter" if "ipadapter" in categories else None
+        
+        # InsightFace models
+        if "insightface" in class_type_lower:
+            return "insightface" if "insightface" in categories else None
+        
+        # Generic fallback
+        if any(keyword in input_key_lower for keyword in ["model", "ckpt", "lora", "controlnet"]):
+            for category in categories:
+                if category in input_key_lower:
+                    return category
+        
+        return None
+
+
+class ArenaAutoCacheSmart:
+    """RU: Умная нода для кеширования моделей.
+
+    Автоматически определяет workflow (активный или из файла),
+    анализирует модели, применяет фильтры и кеширует.
+    Одна нода для всех задач кеширования.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):  # noqa: N802
+        return {
+            "required": {},
+            "optional": {
+                "categories": (
+                    "STRING",
+                    {
+                        "default": "checkpoints,loras,vaes,upscale_models,controlnet",
+                        "description": "Model categories to cache",
+                        "tooltip": "Comma-separated list of model categories to automatically cache",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("result",)
+    RETURN_DESCRIPTIONS = ("Cache operation result",)
+    OUTPUT_TOOLTIPS = ("Shows which models were cached",)
+    FUNCTION = "run"
+    CATEGORY = "Arena/AutoCache"
+    DESCRIPTION = "Automatically cache models from current workflow"
     OUTPUT_NODE = True
 
     def run(
         self,
-        workflow_source: str = "auto",
-        workflow_file: str = "",
-        workflow_json: str = "",
-        auto_cache: bool = True,
-        show_analysis: bool = True,
-        categories: str = "checkpoints,loras",
-        workflow_path_display: str = "No workflow loaded"
+        categories: str = "checkpoints,loras,vaes,upscale_models,controlnet"
     ):
-        """Smart workflow analysis and caching."""
-        # print(f"[ArenaAutoCacheSmart] Starting with source={workflow_source}, auto_cache={auto_cache}")
+        """Automatically detect and cache models from current workflow."""
+        print("[ArenaAutoCache] Starting automatic model detection and caching")
         
-        # Проверяем, не получили ли мы данные от ArenaAutoCacheAnalyze
-        if workflow_json and workflow_json.strip():
-            try:
-                # Пытаемся парсить как JSON
-                parsed_json = json.loads(workflow_json)
-                if isinstance(parsed_json, list) and len(parsed_json) > 0 and isinstance(parsed_json[0], dict):
-                    # Это список моделей от ArenaAutoCacheAnalyze
-                    # print(f"[ArenaAutoCacheSmart] Detected models list from ArenaAutoCacheAnalyze: {len(parsed_json)} models")
-                    
-                    # Конвертируем в формат ArenaAutoCacheSmart
-                    found_models = []
-                    for model_data in parsed_json:
-                        if isinstance(model_data, dict) and "name" in model_data and "category" in model_data:
-                            found_models.append({
-                                "name": model_data["name"],
-                                "category": model_data["category"],
-                                "path": model_data.get("path", "N/A")
-                            })
-                    
-                    if found_models:
-                        # print(f"[ArenaAutoCacheSmart] Converted {len(found_models)} models from ArenaAutoCacheAnalyze")
-                        
-                        # Кешируем модели если нужно
-                        cache_results = []
-                        if auto_cache:
-                            # print(f"[ArenaAutoCacheSmart] Starting cache process for {len(found_models)} models")
-                            cache_results = self._cache_models_with_progress(found_models)
-                            # print(f"[ArenaAutoCacheSmart] Cache process completed. Results: {len(cache_results)}")
+        # Анализируем текущий canvas для поиска моделей
+        found_models = self._analyze_current_canvas()
+        
+        if not found_models:
+            print("[ArenaAutoCache] No models found in current canvas")
+            return json.dumps({
+                "ok": False,
+                "message": "No models found in current canvas",
+                "details": [
+                    "Add model loading nodes to your canvas first",
+                    "Use Load Checkpoint, Load VAE, or other model nodes"
+                ]
+            }, ensure_ascii=False, indent=2)
+        
+        print(f"[ArenaAutoCache] Found {len(found_models)} models in current canvas")
+        
+        # Убеждаемся, что патч путей активен
+        _apply_folder_paths_patch_locked()
+        
+        # Кешируем найденные модели
+        print(f"[ArenaAutoCache] Starting cache process for {len(found_models)} models")
+        cache_results = self._cache_models_with_progress(found_models)
+        print(f"[ArenaAutoCache] Cache process completed. Results: {len(cache_results)}")
+        
+        # Формируем результат
+        cached_count = len([r for r in cache_results if r["status"] == "cached"])
+        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
+        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
+        
+        result = {
+            "ok": True,
+            "message": f"Successfully processed {len(found_models)} models",
+            "models_found": len(found_models),
+            "cached": cached_count,
+            "skipped": skipped_count,
+            "errors": error_count,
+            "categories_checked": [cat.strip() for cat in categories.split(",")],
+            "models": found_models,
+            "cache_results": cache_results,
+        }
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+# Версия нод
+ARENA_NODES_VERSION = "v2.23"
+
+NODE_CLASS_MAPPINGS.update(
+    {
+        # Единственная нода Arena AutoCache - упрощенная версия
+        "ArenaAutoCache": ArenaAutoCacheSmart,
+        f"ArenaAutoCache {ARENA_NODES_VERSION}": ArenaAutoCacheSmart,
+        
+        # Обратная совместимость для существующих workflow
+        "ArenaAutoCacheSmart": ArenaAutoCacheSmart,
+    }
+)
+
+NODE_DISPLAY_NAME_MAPPINGS.update(
+    {
+        # Единственная нода Arena AutoCache - упрощенная версия
+        "ArenaAutoCache": "🅰️ Arena AutoCache",
+        f"ArenaAutoCache {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache {ARENA_NODES_VERSION}",
+        
+        # Обратная совместимость для существующих workflow
+        "ArenaAutoCacheSmart": "🅰️ Arena AutoCache: Smart",
+    }
+)
                         
                         # Формируем результат
                         cached_count = len([r for r in cache_results if r["status"] == "cached"])
@@ -4752,49 +5000,18 @@ class ArenaAutoCacheSmart:
         try:
             # Получаем workflow в зависимости от источника
             if workflow_source == "auto":
-                print("[ArenaAutoCacheSmart] Auto mode: analyzing last executed workflow for model nodes")
+                print("[ArenaAutoCacheSmart] Auto mode: analyzing current canvas for model nodes")
                 
-                # Используем улучшенную функцию _resolve_workflow_json с фоллбэком к истории
-                workflow_data = _resolve_workflow_json("", force_refresh=True)
-                if workflow_data:
-                    print(f"[ArenaAutoCacheSmart] Found workflow: {type(workflow_data)}")
-                    current_workflow_path = "Resolved workflow (active or history)"
-                    
-                    # Регистрируем элементы workflow для заполнения allowlist
-                    default_category = "checkpoints"  # Основная категория по умолчанию
-                    registered_items = register_workflow_items("", workflow_data, default_category)
-                    print(f"[ArenaAutoCacheSmart] Registered {len(registered_items)} items from workflow")
-                    
-                    # Пробуем новый метод анализа JSON workflow
-                    if isinstance(workflow_data, dict):
-                        json_models = _extract_models_from_workflow_json(workflow_data)
-                        if json_models:
-                            print(f"[ArenaAutoCacheSmart] Extracted {len(json_models)} models from JSON workflow")
-                            # Конвертируем в формат, ожидаемый ArenaAutoCacheSmart
-                            found_models = self._convert_json_models_to_arena_format(json_models)
-                        else:
-                            # Fallback на старый метод
-                            found_models = self._extract_models_from_workflow(workflow_data)
-                    else:
-                        # Fallback на старый метод
-                        found_models = self._extract_models_from_workflow(workflow_data)
-                    
-                    print(f"[ArenaAutoCacheSmart] Final extracted {len(found_models)} models from last executed workflow")
-                else:
-                    # Fallback на старые методы
-                    workflow_data = _load_active_workflow()
-                    if workflow_data:
-                        found_models = self._extract_models_from_workflow(workflow_data)
-                    else:
-                        found_models = self._analyze_current_canvas()
+                # В ComfyUI Desktop активный canvas недоступен через API
+                # Анализируем только текущий canvas через _analyze_current_canvas
+                print("[ArenaAutoCacheSmart] ComfyUI Desktop: Active canvas workflow not available via API")
+                
+                # Анализируем текущий canvas
+                found_models = self._analyze_current_canvas()
                 
                 if found_models:
-                    source_info = "Last executed workflow"
-                    # print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models in last executed workflow")
-                    
-                    # Если workflow_data не был получен из _load_active_workflow, создаем фиктивный
-                    if not workflow_data:
-                        workflow_data = {"nodes": []}
+                    print(f"[ArenaAutoCacheSmart] Found {len(found_models)} models in current canvas")
+                    source_info = "Current canvas workflow"
                     
                     # Кешируем найденные модели
                     if auto_cache and found_models:
@@ -4815,90 +5032,26 @@ class ArenaAutoCacheSmart:
                             "models": found_models,
                             "cache_results": cache_results,
                         }
-                        
-                        # UI отчет
-                        cached_count = len([r for r in cache_results if r["status"] == "cached"])
-                        skipped_count = len([r for r in cache_results if r["status"].startswith("skipped")])
-                        error_count = len([r for r in cache_results if r["status"] in ["error", "not_found"]])
-                        
-                        details = [
-                            f"Source: {source_info}",
-                            f"Models found: {len(found_models)}",
-                            f"Cached: {cached_count}",
-                            f"Skipped: {skipped_count}",
-                            f"Errors: {error_count}",
-                        ]
-                        
-                        summary = {
-                            "ok": True,
-                            "ui": {
-                                "headline": f"Smart Cache: {len(found_models)} models processed",
-                                "details": details,
-                            },
-                        }
-                        
-                        return (
-                            json.dumps(result, ensure_ascii=False, indent=2),
-                            json.dumps(summary, ensure_ascii=False, indent=2),
-                            json.dumps(workflow_data, ensure_ascii=False, indent=2)
-                        )
-                else:
-                    print("[ArenaAutoCacheSmart] No models found in current canvas, searching for saved files")
-                    # Ищем последний сохраненный файл в разных местах
-                    search_paths = [
-                        # ComfyUI Desktop user data (основные места)
-                        Path.home() / "AppData" / "Roaming" / "ComfyUI" / "workflows",
-                        Path.home() / "AppData" / "Local" / "ComfyUI" / "workflows",
-                        Path.home() / "AppData" / "Roaming" / "ComfyUI" / "user" / "workflows",
-                        Path.home() / "AppData" / "Local" / "ComfyUI" / "user" / "workflows",
-                        # ComfyUI Desktop installation paths
-                        Path("C:/Users") / Path.home().name / "AppData" / "Local" / "Programs" / "@comfyorgcomfyui-electron" / "resources" / "ComfyUI" / "workflows",
-                        Path("C:/Users") / Path.home().name / "AppData" / "Roaming" / "ComfyUI" / "workflows",
-                        Path("C:/Users") / Path.home().name / "AppData" / "Local" / "ComfyUI" / "workflows",
-                        # ComfyUI installation
-                        Path("C:/ComfyUI/workflows"),
-                        Path("C:/ComfyUI/user/workflows"),
-                        Path("C:/ComfyUI/user/default/workflows"),
-                        # Fallback locations
-                        Path("C:/ComfyUI"),
-                        Path(".") / "workflows",
-                        # Дополнительные места для ComfyUI Desktop
-                        Path.home() / "Documents" / "ComfyUI" / "workflows",
-                        Path.home() / "Desktop" / "ComfyUI" / "workflows",
-                    ]
-                    
-                    print(f"[ArenaAutoCacheSmart] Searching for workflow files in multiple locations...")
-                    json_files = []
-                    
-                    for search_path in search_paths:
-                        print(f"[ArenaAutoCacheSmart] Checking: {search_path}")
-                        if search_path.exists():
-                            if search_path.is_dir():
-                                # Ищем JSON файлы в папке
-                                found_files = list(search_path.glob("*.json"))
-                                print(f"[ArenaAutoCacheSmart] Found {len(found_files)} JSON files in {search_path}")
-                                json_files.extend(found_files)
-                            else:
-                                # Это файл, проверяем расширение
-                                if search_path.suffix.lower() == '.json':
-                                    print(f"[ArenaAutoCacheSmart] Found JSON file: {search_path}")
-                                    json_files.append(search_path)
-                    
-                    if json_files:
-                        # Сортируем по времени изменения и берем самый новый
-                        json_files = sorted(json_files, key=lambda f: f.stat().st_mtime, reverse=True)
-                        latest_file = json_files[0]
-                        print(f"[ArenaAutoCacheSmart] Using latest file: {latest_file}")
-                        with open(latest_file, 'r', encoding='utf-8') as f:
-                            workflow_data = json.load(f)
-                        source_info = f"Latest file: {latest_file.name}"
-                        print(f"[ArenaAutoCacheSmart] Loaded workflow from file: {type(workflow_data)}")
+                        return result
                     else:
-                        return self._error_result("No workflow found", [
-                            "No active workflow detected",
-                            "No saved workflow files found in any location",
-                            "Create a workflow with models first"
-                        ])
+                        # Только анализ без кеширования
+                        result = {
+                            "ok": True,
+                            "source": source_info,
+                            "canvas_analysis": {
+                                "models_found": len(found_models),
+                                "categories_checked": [cat.strip() for cat in categories.split(",")],
+                            },
+                            "models": found_models,
+                        }
+                        return result
+                else:
+                    print("[ArenaAutoCacheSmart] No models found in current canvas")
+                    return self._error_result("No models found in current canvas", [
+                        "No active workflow detected in canvas",
+                        "Add model loading nodes to your canvas first",
+                        "Use Load Checkpoint, Load VAE, or other model nodes"
+                    ])
             
             elif workflow_source == "file":
                 print(f"[ArenaAutoCacheSmart] File mode: loading from {workflow_file}")
@@ -5439,9 +5592,11 @@ class ArenaAutoCacheSmart:
         
         try:
             print("[ArenaAutoCacheSmart] Analyzing current canvas...")
+            print("[ArenaAutoCacheSmart] DEBUG: Starting canvas analysis")
             
             # Метод 1: Через PromptServer и очередь
             try:
+                print("[ArenaAutoCacheSmart] DEBUG: Method 1 - PromptServer analysis")
                 from server import PromptServer
                 if hasattr(PromptServer, 'instance') and PromptServer.instance:
                     prompt_server = PromptServer.instance
@@ -5484,6 +5639,7 @@ class ArenaAutoCacheSmart:
             
             # Метод 2: Через NODE_CLASS_MAPPINGS - ищем зарегистрированные ноды
             try:
+                print("[ArenaAutoCacheSmart] DEBUG: Method 2 - NODE_CLASS_MAPPINGS analysis")
                 print("[ArenaAutoCacheSmart] Searching registered node classes...")
                 import sys
                 
@@ -5498,32 +5654,22 @@ class ArenaAutoCacheSmart:
                             print(f"[ArenaAutoCacheSmart] Found NODE_CLASS_MAPPINGS in {module_name}: type {type(mappings)}")
                         
                         # Проверяем, что mappings поддерживает итерацию
-                        if hasattr(mappings, 'items'):
-                            for node_name, node_class in mappings.items():
-                                if hasattr(node_class, 'class_type'):
-                                    class_type = getattr(node_class, 'class_type', '')
-                                    if isinstance(class_type, str) and class_type.strip():
-                                        if any(keyword in class_type.lower() for keyword in ['checkpoint', 'lora', 'controlnet', 'upscale', 'clip', 'ipadapter', 'insightface']):
-                                            print(f"[ArenaAutoCacheSmart] Found model node class: {class_type} ({node_name})")
-                                            
-                                            # Пытаемся создать экземпляр и получить inputs
-                                            try:
-                                                if hasattr(node_class, 'INPUT_TYPES'):
-                                                    input_types = node_class.INPUT_TYPES()
-                                                    if isinstance(input_types, dict) and 'required' in input_types:
-                                                        required_inputs = input_types['required']
-                                                        for input_name, input_config in required_inputs.items():
-                                                            if isinstance(input_config, tuple) and len(input_config) > 0:
-                                                                input_type = input_config[0]
-                                                                if isinstance(input_type, str) and any(keyword in input_type.lower() for keyword in ['model', 'ckpt', 'lora', 'controlnet']):
-                                                                    print(f"[ArenaAutoCacheSmart] Found model input: {input_name} in {class_type}")
-                                            except Exception as e:
-                                                print(f"[ArenaAutoCacheSmart] Error analyzing {class_type}: {e}")
+                        if hasattr(mappings, 'items') and callable(getattr(mappings, 'items', None)):
+                            try:
+                                for node_name, node_class in mappings.items():
+                                    if hasattr(node_class, 'class_type'):
+                                        class_type = getattr(node_class, 'class_type', '')
+                                        if isinstance(class_type, str) and class_type.strip():
+                                            if any(keyword in class_type.lower() for keyword in ['checkpoint', 'lora', 'controlnet', 'upscale', 'clip', 'ipadapter', 'insightface']):
+                                                print(f"[ArenaAutoCacheSmart] Found model node class: {class_type} ({node_name})")
+                            except Exception as e:
+                                print(f"[ArenaAutoCacheSmart] Error iterating NODE_CLASS_MAPPINGS: {e}")
             except Exception as e:
                 print(f"[ArenaAutoCacheSmart] Error searching node classes: {e}")
             
             # Метод 3: Через folder_paths - ищем недавно использованные модели
             try:
+                print("[ArenaAutoCacheSmart] DEBUG: Method 3 - folder_paths analysis")
                 print("[ArenaAutoCacheSmart] Checking recently used models...")
                 
                 # Получаем папки с моделями
@@ -5583,6 +5729,10 @@ class ArenaAutoCacheSmart:
                     unique_models.append(model)
             
             print(f"[ArenaAutoCacheSmart] Total unique models found: {len(unique_models)}")
+            print(f"[ArenaAutoCacheSmart] DEBUG: Final result - {len(unique_models)} models found")
+            if unique_models:
+                for i, model in enumerate(unique_models):
+                    print(f"[ArenaAutoCacheSmart] DEBUG: Model {i+1}: {model.get('name', 'Unknown')} ({model.get('category', 'Unknown')})")
             return unique_models
             
         except Exception as e:
@@ -5682,6 +5832,10 @@ class ArenaAutoCacheSmart:
 #        Добавлено поле workflow_path_display для показа источника workflow
 #        Обновлен summary с информацией о workflow_path
 #        Пользователь теперь видит откуда читается workflow (history API, файл, JSON)
+# v2.4 - Исправлена проблема с определением активного workflow в ArenaAutoCacheSmart
+#        Убрана зависимость от истории ComfyUI как fallback для определения моделей
+#        ArenaAutoCacheSmart теперь анализирует текущий canvas вместо последнего выполненного workflow
+#        Добавлены дополнительные методы получения canvas workflow через JavaScript API
 # v2.3 - Добавлен анализ JSON workflow для извлечения моделей из нод загрузки
 #        Добавлена функция _extract_models_from_workflow_json для парсинга JSON структуры
 #        Добавлена функция _get_model_category для определения категорий моделей
@@ -5694,64 +5848,26 @@ class ArenaAutoCacheSmart:
 #        Добавлена подробная отладочная информация для WebSocket и модулей ComfyUI
 #        Основные узлы теперь имеют версии в названиях для удобства тестирования
 #        Обратная совместимость: старые названия узлов остаются для существующих workflow
-ARENA_NODES_VERSION = "v2.18"
+ARENA_NODES_VERSION = "v2.22"
 
 NODE_CLASS_MAPPINGS.update(
     {
-        # Основные узлы с версиями для тестирования (новые)
-        f"ArenaAutoCacheSmart {ARENA_NODES_VERSION}": ArenaAutoCacheSmart,
-        f"ArenaAutoCacheAnalyze {ARENA_NODES_VERSION}": ArenaAutoCacheAnalyze,
-        f"ArenaGetActiveWorkflow {ARENA_NODES_VERSION}": ArenaGetActiveWorkflow,
-        f"ArenaAutoCacheRefreshWorkflow {ARENA_NODES_VERSION}": ArenaAutoCacheRefreshWorkflow,
+        # Единственная нода Arena AutoCache - упрощенная версия
+        "ArenaAutoCache": ArenaAutoCacheSmart,
+        f"ArenaAutoCache {ARENA_NODES_VERSION}": ArenaAutoCacheSmart,
         
-        # Обратная совместимость - старые названия для существующих workflow
+        # Обратная совместимость для существующих workflow
         "ArenaAutoCacheSmart": ArenaAutoCacheSmart,
-        "ArenaAutoCacheAnalyze": ArenaAutoCacheAnalyze,
-        "ArenaGetActiveWorkflow": ArenaGetActiveWorkflow,
-        "ArenaAutoCacheRefreshWorkflow": ArenaAutoCacheRefreshWorkflow,
-        
-        # Остальные узлы без версий (стабильные)
-        "ArenaAutoCacheAudit": ArenaAutoCacheAudit,
-        "ArenaAutoCacheConfig": ArenaAutoCacheConfig,
-        "ArenaAutoCacheCopyStatus": ArenaAutoCacheCopyStatus,
-        "ArenaAutoCacheDashboard": ArenaAutoCacheDashboard,
-        "ArenaAutoCacheOps": ArenaAutoCacheOps,
-        "ArenaAutoCachePrewarm": ArenaAutoCachePrewarm,
-        "ArenaAutoCachePrewarmFromFile": ArenaAutoCachePrewarmFromFile,
-        "ArenaAutoCacheStats": ArenaAutoCacheStats,
-        "ArenaAutoCacheStatsEx": ArenaAutoCacheStatsEx,
-        "ArenaAutoCacheTrim": ArenaAutoCacheTrim,
-        "ArenaAutoCacheWarmup": ArenaAutoCacheWarmup,
-        "ArenaAutoCacheManager": ArenaAutoCacheManager,
     }
 )
 
 NODE_DISPLAY_NAME_MAPPINGS.update(
     {
-        # Основные узлы с версиями для тестирования (новые)
-        f"ArenaAutoCacheSmart {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache: Smart {ARENA_NODES_VERSION}",
-        f"ArenaAutoCacheAnalyze {ARENA_NODES_VERSION}": f"{t('node.analyze')} {ARENA_NODES_VERSION}",
-        f"ArenaGetActiveWorkflow {ARENA_NODES_VERSION}": f"{t('node.get_workflow')} {ARENA_NODES_VERSION}",
-        f"ArenaAutoCacheRefreshWorkflow {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache: Refresh Workflow {ARENA_NODES_VERSION}",
+        # Единственная нода Arena AutoCache - упрощенная версия
+        "ArenaAutoCache": "🅰️ Arena AutoCache",
+        f"ArenaAutoCache {ARENA_NODES_VERSION}": f"🅰️ Arena AutoCache {ARENA_NODES_VERSION}",
         
-        # Обратная совместимость - старые названия для существующих workflow
+        # Обратная совместимость для существующих workflow
         "ArenaAutoCacheSmart": "🅰️ Arena AutoCache: Smart",
-        "ArenaAutoCacheAnalyze": t("node.analyze"),
-        "ArenaGetActiveWorkflow": t("node.get_workflow"),
-        "ArenaAutoCacheRefreshWorkflow": "🅰️ Arena AutoCache: Refresh Workflow",
-        
-        # Остальные узлы без версий (стабильные)
-        "ArenaAutoCacheAudit": t("node.audit"),
-        "ArenaAutoCacheConfig": t("node.config"),
-        "ArenaAutoCacheCopyStatus": t("node.copy_status"),
-        "ArenaAutoCacheDashboard": t("node.dashboard"),
-        "ArenaAutoCacheOps": t("node.ops"),
-        "ArenaAutoCachePrewarm": "🅰️ Arena AutoCache: Prewarm",
-        "ArenaAutoCachePrewarmFromFile": "🅰️ Arena AutoCache: Prewarm From File",
-        "ArenaAutoCacheStats": t("node.stats"),
-        "ArenaAutoCacheStatsEx": t("node.statsex"),
-        "ArenaAutoCacheTrim": t("node.trim"),
-        "ArenaAutoCacheWarmup": t("node.warmup"),
-        "ArenaAutoCacheManager": t("node.manager"),
     }
 )
