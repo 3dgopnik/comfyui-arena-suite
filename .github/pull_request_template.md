@@ -1,28 +1,35 @@
 ## Summary
-<short EN summary>
+Краткое описание цели PR
 
 ## Changes
-- <key change 1>
-- <key change 2>
+- [ ] Изменение 1
+- [ ] Изменение 2
+- [ ] Изменение 3
 
 ## Docs
-- Updated: <paths under docs/...> (RU/EN)
-- Changelog: `CHANGELOG.md` — `[Unreleased]`
+- [ ] Обновлен файл 1
+- [ ] Обновлен файл 2
+- [ ] Обновлен файл 3
+
+## Changelog
+- [ ] Добавлена запись в `[Unreleased]` секцию CHANGELOG.md
 
 ## Test Plan
-1. ...
-2. ...
-3. ...
+### Шаги тестирования:
+1. Шаг 1
+2. Шаг 2
+3. Шаг 3
+
+### Ожидаемый результат:
+- Результат 1
+- Результат 2
+- Результат 3
 
 ## Risks
-- ...
+Возможные последствия изменений
 
 ## Rollback
-- ...
+Как откатить изменения в случае проблем
 
-## Checklist
-- [ ] Tests (if risky) / static checks pass
-- [ ] Docs updated
-- [ ] CHANGELOG updated
-- [ ] References Issue: Refs #<id>
-
+## Ideas
+Новые идеи для будущих улучшений (фиксируем в docs/IDEAS.md или ROADMAP.md)
