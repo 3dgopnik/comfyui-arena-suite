@@ -1,16 +1,93 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-.env
-.venv/
-venv/
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Cursor rules - локальные файлы, не для GitHub
-GLOBAL-RULES.md
-PROJECT-RULES.md
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ComfyUI specific
+comfyui.log
+*.log
+
+# Test files
+test_*.py
+test_*.json
+simple_api_test.py
+t_direct_api.py
+temp_*.txt
+
+# Temporary files
+temp_*
+*sions checks*
+*tatus*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
