@@ -1,6 +1,0 @@
-# ComfyUI Arena Suite v3 - Development Dependencies
-# Minimal dependencies for development
-
-# Code Quality (optional)
-ruff>=0.1.0
-mypy>=1.0.0
