@@ -14,8 +14,6 @@ __all__ = [
 Идентификаторы — на английском, комментарии — на русском.
 """
 
-
-
 import logging
 from pathlib import Path
 from types import ModuleType
@@ -49,15 +47,29 @@ else:
 
 _SUBMODULES: list[ModuleType] = []
 
+# Import legacy module
+try:
+    from . import legacy as _legacy  # RU: модуль устаревших узлов (совместимость)
+    _SUBMODULES.append(_legacy)
+    _LOGGER.info("[Arena] legacy module loaded successfully")
+except Exception as e:  # noqa: BLE001
+    _LOGGER.warning("[Arena] legacy disabled: %s", e)
+
 # Import autocache module
 try:
     from . import autocache as _autocache
     _SUBMODULES.append(_autocache)
-    print("[Arena] autocache module loaded successfully")
+    _LOGGER.info("[Arena] autocache module loaded successfully")
 except Exception as e:  # noqa: BLE001
-    print(f"[Arena] autocache failed to load: {e}")
-    import traceback
-    traceback.print_exc()
+    _LOGGER.warning("[Arena] autocache disabled: %s", e)
+
+# Import updater module
+try:
+    from . import updater as _updater
+    _SUBMODULES.append(_updater)
+    _LOGGER.info("[Arena] updater module loaded successfully")
+except Exception as e:  # noqa: BLE001
+    _LOGGER.warning("[Arena] updater disabled: %s", e)
 
 for _module in _SUBMODULES:
     NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
