@@ -22,7 +22,7 @@
 
 2. **Install dependencies:**
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -r requirements.txt
    ```
 
 3. **Copy to ComfyUI custom_nodes:**
@@ -53,7 +53,9 @@ comfyui-arena-suite/
 ├── scripts/                      # Installation scripts
 ├── tests/                        # Test suite
 ├── docs/                         # Documentation
-└── .github/workflows/            # CI/CD
+├── .github/workflows/            # CI/CD
+├── requirements.txt              # Production dependencies
+└── requirements-dev.txt          # Development dependencies
 ```
 
 ## 🛠️ Development
