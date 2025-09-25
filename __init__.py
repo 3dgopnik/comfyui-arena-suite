@@ -11,26 +11,53 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from types import ModuleType
 
-# Add the custom_nodes directory to Python path
-_package_root = Path(__file__).parent
-_custom_nodes_path = _package_root / "custom_nodes"
-if _custom_nodes_path.exists() and str(_custom_nodes_path) not in sys.path:
-    sys.path.insert(0, str(_custom_nodes_path))
+_LOGGER = logging.getLogger(__name__)
 
-# Import from the actual ComfyUI_Arena package
+# Initialize mappings
+NODE_CLASS_MAPPINGS: dict[str, type] = {}
+NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
+WEB_DIRECTORY = None
+
+# Add current directory to Python path for imports
+_current_dir = Path(__file__).parent
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
+# Import and register nodes from submodules
+_SUBMODULES: list[ModuleType] = []
+
+# Import autocache nodes
 try:
-    from ComfyUI_Arena import (
-        NODE_CLASS_MAPPINGS,
-        NODE_DISPLAY_NAME_MAPPINGS,
-        WEB_DIRECTORY,
-    )
-    print("[Arena Suite] Successfully loaded Arena nodes")
+    import autocache as _autocache
+    _SUBMODULES.append(_autocache)
+    print("[Arena Suite] Loaded autocache module")
 except Exception as e:
-    print(f"[Arena Suite] Failed to load Arena nodes: {e}")
-    NODE_CLASS_MAPPINGS = {}
-    NODE_DISPLAY_NAME_MAPPINGS = {}
-    WEB_DIRECTORY = None
+    print(f"[Arena Suite] Failed to load autocache: {e}")
+
+# Import legacy nodes
+try:
+    import legacy as _legacy
+    _SUBMODULES.append(_legacy)
+    print("[Arena Suite] Loaded legacy module")
+except Exception as e:
+    print(f"[Arena Suite] Failed to load legacy: {e}")
+
+# Import updater nodes
+try:
+    import updater as _updater
+    _SUBMODULES.append(_updater)
+    print("[Arena Suite] Loaded updater module")
+except Exception as e:
+    print(f"[Arena Suite] Failed to load updater: {e}")
+
+# Collect all node mappings from submodules
+for _module in _SUBMODULES:
+    NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
+    NODE_DISPLAY_NAME_MAPPINGS.update(getattr(_module, "NODE_DISPLAY_NAME_MAPPINGS", {}))
+
+print(f"[Arena Suite] Successfully loaded {len(NODE_CLASS_MAPPINGS)} Arena nodes")
 
 # Export the required mappings for ComfyUI
 __all__ = [
