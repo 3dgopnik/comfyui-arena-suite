@@ -138,6 +138,8 @@ def _apply_folder_paths_patch_locked():
         
         def patched_get_full_path(folder_type: str, filename: str) -> Optional[str]:
             """RU: Патчированная версия get_full_path с проверкой кеша."""
+            global _session_hits, _session_misses
+            
             if not _settings.enable:
                 return _orig_get_full_path(folder_type, filename) if _orig_get_full_path else None
             
@@ -146,7 +148,6 @@ def _apply_folder_paths_patch_locked():
             if cache_path.exists():
                 if _settings.verbose:
                     print(f"[ArenaAutoCache] Cache hit: {filename}")
-                global _session_hits
                 _session_hits += 1
                 return str(cache_path)
             
@@ -155,7 +156,6 @@ def _apply_folder_paths_patch_locked():
             if original_path and Path(original_path).exists():
                 if _settings.verbose:
                     print(f"[ArenaAutoCache] Cache miss: {filename}")
-                global _session_misses
                 _session_misses += 1
                 
                 # Кешируем файл в фоне
@@ -175,6 +175,8 @@ def _apply_folder_paths_patch_locked():
 
 def _schedule_cache_copy(folder_type: str, filename: str, source_path: str):
     """RU: Планирует копирование файла в кеш."""
+    global _copy_status
+    
     try:
         source_file = Path(source_path)
         if not source_file.exists():
@@ -199,14 +201,12 @@ def _schedule_cache_copy(folder_type: str, filename: str, source_path: str):
             shutil.copy2(source_file, cache_file)
             
             # Обновляем статистику
-            global _copy_status
             _copy_status["completed_jobs"] += 1
             _copy_status["current_file"] = filename
             _copy_status["last_update"] = _now()
             
     except Exception as e:
         print(f"[ArenaAutoCache] Error caching {filename}: {e}")
-        global _copy_status
         _copy_status["failed_jobs"] += 1
 
 class ArenaAutoCache:
