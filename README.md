@@ -1,131 +1,199 @@
-# ComfyUI Arena Suite
+# ComfyUI Arena Suite v3
 
-> 🚀 **NEW: Bootstrap Scripts v2.0** — Easy setup with Debug/Prod profiles!
-> 
-> **Quick Start:**
-> ```cmd
-> # Debug mode (for testing) - disables filters, enables verbose logs
-> arena_bootstrap_cache_v2.bat --debug
-> 
-> # Production mode (daily work) - enables filters, normal logs  
-> arena_bootstrap_cache_v2.bat --prod
-> 
-> # Then start ComfyUI in the same terminal
-> cd C:\ComfyUI
-> python main.py
-> ```
-> 
-> **Manual Setup (if needed):**
-> - Если `ARENA_CACHE_ROOT` не задан:
->   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (например, `C:\Users\you\AppData\Local\ArenaAutoCache`)
->   - Linux/macOS: `<корень ComfyUI>/ArenaAutoCache`
-> - Установите `ARENA_CACHE_ROOT=<путь>` перед запуском ComfyUI — SSD‑патч будет писать туда.
-> - Перезапустите ComfyUI после изменения переменных окружения.
-> - Примеры:
->   - PowerShell: `$env:ARENA_CACHE_ROOT='D:\ComfyCache'; python main.py`
->   - CMD: `set ARENA_CACHE_ROOT=D:\ComfyCache && python main.py`
->   - bash: `ARENA_CACHE_ROOT=/mnt/ssd/cache python main.py`
-> - Переопределения: `ARENA_CACHE_ENABLE=0` временно отключает патч; `ARENA_CACHE_MAX_GB=512` ограничивает размер кэша (GiB).
+🚀 **Modern ComfyUI Custom Node Suite** - Automatic model caching and workflow optimization for ComfyUI.
 
-Custom nodes for ComfyUI with the "Arena" prefix bundled in a single package.
+## ✨ Features
 
-RU: Набор узлов Arena: наследие (legacy), SSD‑кэширование (AutoCache) и утилиты обновления — всё в одном пакете для упрощения инсталляции ComfyUI.
+- **ArenaAutoCacheSimple** - Automatic model caching for faster workflows
+- **Web Extensions** - Seamless ComfyUI integration
+- **Modern Architecture** - Clean, maintainable codebase
+- **Comprehensive Testing** - Full test coverage with pytest
+- **CI/CD Ready** - GitHub Actions workflow included
 
-## Features overview
-- Legacy nodes — утилиты с прежними интерфейсами под `ComfyUI_Arena/legacy`.
-- AutoCache — рантайм‑патч `folder_paths` с SSD‑кэшем + узлы (Analyze/Ops/Config/StatsEx/Trim/Manager).
-- Audit & Warmup — проверка и прогрев кэша по спискам или workflow JSON.
-- (Отложено) UI‑оверлей был экспериментом и удалён по умолчанию для стабильности в ComfyUI Desktop. Возможное возвращение описано в ROADMAP.
-- Updater scaffolding — заготовки для Hugging Face/CivitAI (WIP) с управлением симлинками `current`.
+## 🚀 Quick Start
 
-### AutoCache highlights
-- **🚀 Bootstrap Scripts v2.0**: Easy setup with Debug/Prod profiles for different use cases
-- **✅ NAS Model Caching**: Successfully caches models from network storage (NAS) to local SSD
-- **📊 Progress Indicators**: Real-time copy progress display in terminal with percentage
-- **🔧 MB Size Support**: Fine-grained size filtering with `ARENA_CACHE_MIN_SIZE_MB` (default: 1024 MB)
-- **🌐 NAS Connectivity Check**: Automatic detection of NAS availability before cache operations
-- **🔒 Cache Permissions Check**: Validation of write permissions to cache directory
-- **💡 Quick Tips System**: Built-in troubleshooting hints and solutions for common issues
-- Zero‑input UX: узлы `Analyze` и `Ops` работают от активного воркфлоу (пустой `workflow_json`).
-- Fallback по `last_path`: если парсер не нашёл элементы в схеме, прогревается последняя использованная модель.
-- Группы нод: `Arena/AutoCache/Basic`, `Advanced`, `Utils`.
-- **Фильтры копирования**: автоматический пропуск мелких моделей (< 1 ГБ) и жёстко прописанных путей.
-- **Визуальный индикатор**: нода `Copy Status` показывает прогресс копирования в реальном времени.
+### Installation
 
-## System requirements
-- ComfyUI (актуальный `master`) с поддержкой кастом‑нодов.
-- Python 3.10+
-- Быстрый SSD для AutoCache
-- [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) для legacy‑узлов (добавьте `ComfyUI-Impact-Pack/modules` в `PYTHONPATH`).
-
-## Quick usage summary
-
-### 🚀 New: Bootstrap Scripts v2.0 (Recommended)
-1. Установите пакет через ComfyUI Manager → "Install from URL" (`https://github.com/3dgopnik/comfyui-arena-suite`).
-2. **Настройте кеш одним из способов:**
-   - **Debug режим** (для тестирования): `arena_bootstrap_cache_v2.bat --debug`
-   - **Production режим** (повседневная работа): `arena_bootstrap_cache_v2.bat --prod`
-   - **PowerShell GUI**: `arena_bootstrap_cache_v2.ps1`
-3. **Запустите ComfyUI в том же терминале:**
-   ```cmd
-   cd C:\ComfyUI
-   python main.py
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/3dgopnik/comfyui-arena-suite.git
+   cd comfyui-arena-suite
    ```
-4. **Добавьте узел из группы `Arena/AutoCache/Basic`:**
-   - для регулярной работы — `ArenaAutoCacheSmart v2.17` (по умолчанию `audit_then_warmup`),
-   - для оценки — `ArenaAutoCache Analyze` и подключите `Summary JSON` к `Show Any`,
-   - для мониторинга — `ArenaAutoCache Copy Status` для отслеживания прогресса копирования.
 
-### 📋 Manual Setup (Legacy)
-1. Установите пакет через ComfyUI Manager → "Install from URL" (`https://github.com/3dgopnik/comfyui-arena-suite`).
-2. Обновите список узлов или перезапустите ComfyUI.
-3. По необходимости настройте SSD‑кэш (`ARENA_CACHE_ROOT`) и лимит (`ARENA_CACHE_MAX_GB`) — см. документацию ниже.
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
 
-## 🎉 Latest Updates (v2.17)
+3. **Copy to ComfyUI custom_nodes:**
+   ```bash
+   cp -r custom_nodes/ComfyUI_Arena /path/to/ComfyUI/custom_nodes/
+   cp -r web /path/to/ComfyUI/
+   ```
 
-### ✅ Successfully Fixed: NAS Model Caching
-- **Problem Solved**: Model `Juggernaut_X_RunDiffusion_Hyper.safetensors` (6.7 GB) now caches successfully from NAS to local SSD
-- **Critical Bug Fixed**: `_copy_into_cache_lru()` function calls corrected
-- **Progress Indicators**: Real-time copy progress with percentage display
-- **MB Size Support**: Fine-grained filtering with `ARENA_CACHE_MIN_SIZE_MB=1024.0`
+4. **Restart ComfyUI** and find "ArenaAutoCacheSimple" in the node menu.
 
-### 🚀 Bootstrap Scripts v2.0
-- **Debug Mode**: `--debug` - Disables filters, enables verbose logs for troubleshooting
-- **Production Mode**: `--prod` - Enables filters, normal logs for daily work  
-- **Default Mode**: `--restore-defaults` - Safe settings for beginners
-- **PowerShell GUI**: Interactive setup with visual feedback
-- **NAS Check**: Automatic detection of network storage availability
-- **Permissions Check**: Validation of cache directory write access
+### Usage
 
-### 📊 Success Logs Example
+1. Add **ArenaAutoCacheSimple** node to your workflow
+2. Configure cache settings (optional)
+3. Run your workflow - models will be automatically cached
+4. Subsequent runs will use cached models for faster execution
+
+## 📁 Project Structure
+
 ```
-📋 [1/1] Копирую Juggernaut_X_RunDiffusion_Hyper.safetensors...
-🔄 [1/1] Прогресс: 0% - Начинаю копирование...
-[ArenaAutoCache] copy started: Juggernaut_X_RunDiffusion_Hyper.safetensors
-[ArenaAutoCache] copy \\nas-3d\Visual\Lib\SDModels\SDXL\... -> f:\ComfyUIModelCache\checkpoints\...
-✅ [1/1] Прогресс: 100% - Копирование завершено!
-🎯 Кеширование завершено: 1/1 моделей скопировано
+comfyui-arena-suite/
+├── custom_nodes/ComfyUI_Arena/    # Main custom node
+│   ├── autocache/                 # Autocache functionality
+│   └── __init__.py               # Node registration
+├── web/                          # ComfyUI web extensions
+│   ├── arena/                    # Core JS functionality
+│   └── extensions/               # ComfyUI integration
+├── scripts/                      # Installation scripts
+├── tests/                        # Test suite
+├── docs/                         # Documentation
+└── .github/workflows/            # CI/CD
 ```
 
-📖 **Подробные руководства**: [Русский мануал](docs/ru/MANUAL.md) | [English Manual](docs/en/MANUAL.md)  
-📋 **Bootstrap Scripts**: [README_BOOTSTRAP_V2.md](scripts/README_BOOTSTRAP_V2.md)  
-✅ **Success Documentation**: [SUCCESS_CACHING.md](docs/ru/SUCCESS_CACHING.md)
+## 🛠️ Development
 
-Примечание (ComfyUI Desktop): для перезагрузки фронтенда (JS‑расширений) используйте клавишу `R` в главном окне приложения. Изменения Python‑узлов требуют полного перезапуска Desktop.
+### Setup Development Environment
 
-## Documentation
-- Русская документация: `docs/ru/index.md`, `docs/ru/quickstart.md`, `docs/ru/cli.md`, `docs/ru/config.md`, `docs/ru/troubleshooting.md`, `docs/ru/nodes.md`
-- English placeholders: `docs/en/index.md`, `docs/en/quickstart.md`, `docs/en/cli.md`, `docs/en/config.md`, `docs/en/troubleshooting.md`
-- Правила для агентов: `AGENTS.md`
+```bash
+# Clone repository
+git clone https://github.com/3dgopnik/comfyui-arena-suite.git
+cd comfyui-arena-suite
 
-## Codex workflow (RU)
-1. Идентификаторы по‑английски, комментарии на русском.
-2. Описывайте задачи Issue: `Codex: <module> — <topic> — <YYYY-MM-DD>` с блоками SUMMARY / ISSUES & TASKS / TEST PLAN / NOTES.
-3. Делайте PR с описанием и ссылками на изменения (см. `.github/pull_request_template.md`).
-4. Ссылайтесь на Issue: `Refs #<id>`.
-5. Обновляйте CHANGELOG (`[Unreleased]`) и соответствующие разделы `docs` в рамках PR.
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-## Contributing
-- См. `CONTRIBUTING.md` для локального окружения и запуска тестов.
-- Следуйте `AGENTS.md` и `GLOBAL RULES.md` при добавлении агентов/узлов.
-- В CI запускаются тесты на PR — держите их зелёными.
+# Run tests
+pytest
+
+# Run linting
+ruff check .
+mypy custom_nodes/
+```
+
+### Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+1. **Fork the repository**
+2. **Create a feature branch:** `git checkout -b feature/your-feature`
+3. **Make your changes** and add tests
+4. **Run tests:** `pytest` and `ruff check .`
+5. **Commit changes:** `git commit -m "Add your feature"`
+6. **Push to branch:** `git push origin feature/your-feature`
+7. **Create a Pull Request**
+
+### Code Style
+
+- **Python:** Follow PEP 8, use type hints
+- **JavaScript:** Use modern ES6+ syntax
+- **Documentation:** Write clear, concise docstrings
+- **Tests:** Maintain >90% test coverage
+
+### Pull Request Guidelines
+
+Before submitting a PR, ensure:
+
+- ✅ All tests pass (`pytest`)
+- ✅ Code is linted (`ruff check .`)
+- ✅ Type checking passes (`mypy`)
+- ✅ Documentation is updated
+- ✅ CHANGELOG.md is updated
+- ✅ Commit messages are clear and descriptive
+
+### Issue Reporting
+
+When reporting issues, please include:
+
+- **ComfyUI version**
+- **Python version**
+- **Error logs** (if any)
+- **Steps to reproduce**
+- **Expected vs actual behavior**
+
+## 📚 Documentation
+
+- **[Quick Start Guide](docs/ru/quickstart.md)** - Get up and running quickly
+- **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
+- **[Configuration](docs/ru/config.md)** - Configuration options
+- **[Troubleshooting](docs/ru/troubleshooting.md)** - Common issues and solutions
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_autocache_simple.py
+
+# Run with coverage
+pytest --cov=custom_nodes
+
+# Run linting
+ruff check .
+mypy custom_nodes/
+```
+
+## 📦 Scripts
+
+- **`scripts/arena_bootstrap_cache_v2.bat`** - Windows batch installer
+- **`scripts/arena_bootstrap_cache_v2.ps1`** - PowerShell installer
+- **`scripts/arena_set_cache.bat`** - Cache configuration script
+
+## 🔧 Configuration
+
+### Environment Variables
+
+- `ARENA_CACHE_DIR` - Custom cache directory path
+- `ARENA_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
+
+### Node Settings
+
+- **Cache Directory** - Where to store cached models
+- **Cache Size Limit** - Maximum cache size in GB
+- **Auto Cleanup** - Automatically clean old cache files
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Node not appearing in ComfyUI:**
+   - Ensure files are in correct `custom_nodes/` directory
+   - Restart ComfyUI completely
+   - Check console for error messages
+
+2. **Cache not working:**
+   - Verify cache directory permissions
+   - Check available disk space
+   - Review log files for errors
+
+3. **Performance issues:**
+   - Monitor cache directory size
+   - Check disk I/O performance
+   - Consider SSD storage for cache
+
+### Getting Help
+
+- **GitHub Issues:** [Report bugs and request features](https://github.com/3dgopnik/comfyui-arena-suite/issues)
+- **Discussions:** [Community discussions](https://github.com/3dgopnik/comfyui-arena-suite/discussions)
+- **Documentation:** Check the [docs/](docs/) folder for detailed guides
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **ComfyUI** - The amazing workflow system
+- **Community** - All contributors and users
+- **Open Source** - Built on the shoulders of giants
+
+---
+
+**Made with ❤️ for the ComfyUI community**
