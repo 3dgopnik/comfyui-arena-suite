@@ -1,2 +1,14 @@
-pytest>=7.0
+# ComfyUI Arena Suite v3 - Development Dependencies
+# Dependencies for development, testing, and CI/CD
 
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code Quality
+ruff>=0.1.0
+mypy>=1.0.0
+
+# Development Tools
+black>=23.0.0
+isort>=5.12.0
