@@ -7,7 +7,6 @@
 - **ArenaAutoCacheSimple** - Automatic model caching for faster workflows
 - **Web Extensions** - Seamless ComfyUI integration
 - **Modern Architecture** - Clean, maintainable codebase
-- **Comprehensive Testing** - Full test coverage with pytest
 - **CI/CD Ready** - GitHub Actions workflow included
 
 ## 🚀 Quick Start
@@ -51,7 +50,6 @@ comfyui-arena-suite/
 │   ├── arena/                    # Core JS functionality
 │   └── extensions/               # ComfyUI integration
 ├── scripts/                      # Installation scripts
-├── tests/                        # Test suite
 ├── docs/                         # Documentation
 ├── .github/workflows/            # CI/CD
 ├── requirements.txt              # Production dependencies
@@ -67,13 +65,10 @@ comfyui-arena-suite/
 git clone https://github.com/3dgopnik/comfyui-arena-suite.git
 cd comfyui-arena-suite
 
-# Install development dependencies
+# Install development dependencies (optional)
 pip install -r requirements-dev.txt
 
-# Run tests
-pytest
-
-# Run linting
+# Run linting (optional)
 ruff check .
 mypy custom_nodes/
 ```
@@ -84,8 +79,8 @@ We welcome contributions! Please follow these guidelines:
 
 1. **Fork the repository**
 2. **Create a feature branch:** `git checkout -b feature/your-feature`
-3. **Make your changes** and add tests
-4. **Run tests:** `pytest` and `ruff check .`
+3. **Make your changes**
+4. **Run linting:** `ruff check .` (optional)
 5. **Commit changes:** `git commit -m "Add your feature"`
 6. **Push to branch:** `git push origin feature/your-feature`
 7. **Create a Pull Request**
@@ -95,15 +90,13 @@ We welcome contributions! Please follow these guidelines:
 - **Python:** Follow PEP 8, use type hints
 - **JavaScript:** Use modern ES6+ syntax
 - **Documentation:** Write clear, concise docstrings
-- **Tests:** Maintain >90% test coverage
 
 ### Pull Request Guidelines
 
 Before submitting a PR, ensure:
 
-- ✅ All tests pass (`pytest`)
-- ✅ Code is linted (`ruff check .`)
-- ✅ Type checking passes (`mypy`)
+- ✅ Code is linted (`ruff check .`) - optional
+- ✅ Type checking passes (`mypy`) - optional
 - ✅ Documentation is updated
 - ✅ CHANGELOG.md is updated
 - ✅ Commit messages are clear and descriptive
@@ -124,23 +117,6 @@ When reporting issues, please include:
 - **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
 - **[Configuration](docs/ru/config.md)** - Configuration options
 - **[Troubleshooting](docs/ru/troubleshooting.md)** - Common issues and solutions
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_autocache_simple.py
-
-# Run with coverage
-pytest --cov=custom_nodes
-
-# Run linting
-ruff check .
-mypy custom_nodes/
-```
 
 ## 📦 Scripts
 
