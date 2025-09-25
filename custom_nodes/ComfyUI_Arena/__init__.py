@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+VERSION = "3.0.0a0"
+
+__all__ = [
+    "VERSION",
+]
 """RU: Единый пакет нод Arena для ComfyUI.
 
 - legacy: перенос существующих нод без изменения логики
@@ -7,7 +14,7 @@
 Идентификаторы — на английском, комментарии — на русском.
 """
 
-from __future__ import annotations
+
 
 import logging
 from pathlib import Path
@@ -33,32 +40,24 @@ def _resolve_web_directory() -> str | None:
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
 
-# UI overlay removed for now. Keep WEB_DIRECTORY unset to avoid loading assets.
-WEB_DIRECTORY = None
-_LOGGER.info("[Arena] web overlay disabled (removed); see ROADMAP for future plans")
+# Enable web assets for ComfyUI integration
+WEB_DIRECTORY = _resolve_web_directory()
+if WEB_DIRECTORY:
+    _LOGGER.info("[Arena] web assets loaded from: %s", WEB_DIRECTORY)
+else:
+    _LOGGER.warning("[Arena] web assets not found")
 
 _SUBMODULES: list[ModuleType] = []
 
+# Import autocache module
 try:
-    from . import legacy as _legacy  # RU: модуль устаревших узлов (совместимость)
-except Exception as e:  # noqa: BLE001
-    _LOGGER.warning("[Arena] legacy disabled: %s", e)
-else:
-    _SUBMODULES.append(_legacy)
-
-try:  # RU: автокэш (в разработке?)
     from . import autocache as _autocache
-except Exception as e:  # noqa: BLE001
-    print(f"[Arena] autocache disabled: {e}")
-else:
     _SUBMODULES.append(_autocache)
-
-try:  # RU: обновление моделей (в разработке?)
-    from . import updater as _updater
+    print("[Arena] autocache module loaded successfully")
 except Exception as e:  # noqa: BLE001
-    print(f"[Arena] updater disabled: {e}")
-else:
-    _SUBMODULES.append(_updater)
+    print(f"[Arena] autocache failed to load: {e}")
+    import traceback
+    traceback.print_exc()
 
 for _module in _SUBMODULES:
     NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
