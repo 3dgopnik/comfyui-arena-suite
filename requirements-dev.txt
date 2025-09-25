@@ -1,14 +1,6 @@
 # ComfyUI Arena Suite v3 - Development Dependencies
-# Dependencies for development, testing, and CI/CD
+# Minimal dependencies for development
 
-# Testing
-pytest>=7.0.0
-pytest-cov>=4.0.0
-
-# Code Quality
+# Code Quality (optional)
 ruff>=0.1.0
 mypy>=1.0.0
-
-# Development Tools
-black>=23.0.0
-isort>=5.12.0
