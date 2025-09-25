@@ -1,0 +1,5 @@
+# ComfyUI Arena Suite v3 - Production Dependencies
+# Core dependencies for the custom node
+
+# No external dependencies required for basic functionality
+# The node uses only ComfyUI's built-in APIs
