@@ -190,7 +190,7 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
     if cache_root:
         root = Path(cache_root)
     else:
-        root = Path(os.environ.get("ARENA_CACHE_ROOT", "f:/ComfyUIModelCache"))
+        root = Path(os.environ.get("ARENA_CACHE_ROOT", Path.home() / "Documents" / "ComfyUI-Cache"))
     
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
