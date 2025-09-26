@@ -15,6 +15,15 @@ from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
 import platform
 
+@dataclass
+class CacheSettings:
+    """RU: Настройки кэширования."""
+    root: Path
+    min_size_mb: float
+    max_cache_gb: float
+    verbose: bool
+    effective_categories: List[str]
+
 # RU: Глобальные настройки и состояние
 _settings = None
 _folder_paths_patched = False
@@ -275,12 +284,12 @@ def _apply_folder_paths_patch():
             # RU: Кэширование только для эффективных категорий
             if folder_name in _settings.effective_categories:
                 # RU: Сначала проверяем кэш
-            cache_path = _settings.root / folder_name / filename
-            if cache_path.exists():
-                if _settings.verbose:
-                    print(f"[ArenaAutoCache] Cache hit: {filename}")
-                return str(cache_path)
-            
+                cache_path = _settings.root / folder_name / filename
+                if cache_path.exists():
+                    if _settings.verbose:
+                        print(f"[ArenaAutoCache] Cache hit: {filename}")
+                    return str(cache_path)
+                
                 # RU: Если не в кэше, получаем оригинальный путь
                 try:
                     original_path = folder_paths.get_full_path_origin(folder_name, filename)
@@ -357,18 +366,18 @@ def _copy_worker():
                 os.rename(temp_path, cache_path)
                 
                 _copy_status["completed_jobs"] += 1
-                    if _settings.verbose:
+                if _settings.verbose:
                     print(f"[ArenaAutoCache] Cached: {filename}")
                 
                 # RU: Проверяем размер кэша и очищаем при необходимости
                 _prune_cache_if_needed()
-                    
+                
             except Exception as e:
                 _copy_status["failed_jobs"] += 1
                 if _settings.verbose:
                     print(f"[ArenaAutoCache] Error caching {filename}: {e}")
             
-                _copy_queue.task_done()
+            _copy_queue.task_done()
             with _scheduled_lock:
                 _scheduled_tasks.discard((category, filename))
                 
@@ -466,10 +475,17 @@ def _start_deferred_autopatch():
         while time.time() - start_time < timeout_s:
             if _is_folder_paths_ready():
                 try:
-                    global _settings
+                    global _settings, _copy_thread_started
                     _settings = _init_settings()
                     if not _folder_paths_patched:
                         _apply_folder_paths_patch()
+                    
+                    # RU: Запускаем воркер копирования
+                    if not _copy_thread_started:
+                        copy_thread = threading.Thread(target=_copy_worker, daemon=True)
+                        copy_thread.start()
+                        _copy_thread_started = True
+                    
                     elapsed = time.time() - start_time
                     print(f"[ArenaAutoCache] Deferred autopatch applied after {elapsed:.1f}s")
                     return
@@ -485,7 +501,7 @@ def _start_deferred_autopatch():
 
 def _ensure_patch_applied():
     """RU: Идемпотентно применяет патч при первом использовании ноды."""
-    global _settings
+    global _settings, _copy_thread_started
     
     if _folder_paths_patched:
         return
@@ -493,6 +509,13 @@ def _ensure_patch_applied():
     try:
         _settings = _init_settings()
         _apply_folder_paths_patch()
+        
+        # RU: Запускаем воркер копирования
+        if not _copy_thread_started:
+            copy_thread = threading.Thread(target=_copy_worker, daemon=True)
+            copy_thread.start()
+            _copy_thread_started = True
+        
         print("[ArenaAutoCache] Patched on first node use")
     except Exception as e:
         print(f"[ArenaAutoCache] Failed to patch on first node use: {e}")
@@ -511,14 +534,14 @@ def _clear_cache_folder():
         
         # RU: Проверяем Windows drive roots и глубину
         if os.name == 'nt':  # Windows
-            drive_roots = {f"{chr(i)}:/" for i in range(ord('A'), ord('Z') + 1)}
-            if str(cache_path) in drive_roots:
+            # RU: Проверяем корни дисков через Path.drive
+            if cache_path.drive and len(cache_path.parts) < 3:
                 return "Clear aborted: drive root or path too shallow"
             
-            # RU: Проверяем UNC paths
-            if str(cache_path).startswith("//"):
-                parts = str(cache_path).split("/")
-                if len(parts) <= 4:  # //server/share or //server/share/one
+            # RU: Проверяем UNC paths (двойной backslash)
+            if str(cache_path).startswith("\\\\"):
+                parts = str(cache_path).split("\\")
+                if len(parts) <= 4:  # \\server\share or \\server\share\one
                     return "Clear aborted: drive root or path too shallow"
             
             # RU: Требуем минимум C:/folder/subfolder (≥3 parts)
@@ -575,7 +598,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.2.0 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.2.1 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -598,10 +621,10 @@ class ArenaAutoCacheSimple:
     FUNCTION = "run"
     CATEGORY = "Arena"
     
-    def run(self, cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 100.0, 
+    def run(self, cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 0.0, 
             verbose: bool = True, cache_categories: str = "", 
             categories_mode: str = "extend", auto_patch_on_start: bool = False, 
-            persist_env: bool = True, clear_cache_now: bool = False):
+            persist_env: bool = False, clear_cache_now: bool = False):
         """RU: Основная функция ноды."""
         global _settings, _copy_thread_started
         
@@ -687,12 +710,11 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.1",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
 
 # RU: Отложенный автопатч - ждем готовности ComfyUI
-_load_env_file()
 if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
     _start_deferred_autopatch()
