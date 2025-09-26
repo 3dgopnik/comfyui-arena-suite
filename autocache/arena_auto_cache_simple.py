@@ -161,9 +161,9 @@ def _save_env_file(kv: Dict[str, str], remove_keys: List[str] = None):
         print(f"[ArenaAutoCache] Saved env to {env_file}")
     except Exception as e:
         print(f"[ArenaAutoCache] Error saving env file: {e}")
-        
-        @dataclass
-        class CacheSettings:
+
+@dataclass
+class CacheSettings:
     """RU: Настройки кэширования."""
     root: Path
     min_size_mb: float
