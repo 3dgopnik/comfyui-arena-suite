@@ -128,7 +128,8 @@ def _find_comfy_root():
     """RU: Находит корень ComfyUI, идя вверх от текущего файла."""
     current_path = Path(__file__).parent
     while current_path != current_path.parent:
-        if (current_path / "web").exists() or (current_path / "models").exists():
+        # RU: Ищем специфичные папки ComfyUI (models более надежный индикатор)
+        if (current_path / "models").exists() or ((current_path / "web").exists() and (current_path / "custom_nodes").exists()):
             return current_path
         current_path = current_path.parent
     return None
@@ -596,7 +597,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.2.2 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.2.4 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -708,11 +709,12 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.2",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.4",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
 
 # RU: Отложенный автопатч - ждем готовности ComfyUI
+_load_env_file()
 if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
     _start_deferred_autopatch()
