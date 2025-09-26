@@ -226,7 +226,7 @@ def _apply_folder_paths_patch():
             # RU: Создаем алиас для оригинальной функции
             if not hasattr(folder_paths, 'get_full_path_origin'):
                 folder_paths.get_full_path_origin = original_get_full_path
-            
+        
         def patched_get_folder_paths(folder_name: str) -> List[str]:
                 """RU: Патченная функция get_folder_paths с добавлением кэша."""
             original_paths = original_get_folder_paths(folder_name)
