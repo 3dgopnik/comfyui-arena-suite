@@ -25,37 +25,24 @@ _current_dir = Path(__file__).parent
 if str(_current_dir) not in sys.path:
     sys.path.insert(0, str(_current_dir))
 
-# Import and register nodes from submodules
-_SUBMODULES: list[ModuleType] = []
-
-# Import autocache nodes
+# Import only essential nodes
+# Arena AutoCache v3.3.5
 try:
-    import autocache as _autocache
-    _SUBMODULES.append(_autocache)
-    print("[Arena Suite] Loaded autocache module")
+    from autocache.arena_auto_cache_simple import NODE_CLASS_MAPPINGS as _autocache_mappings, NODE_DISPLAY_NAME_MAPPINGS as _autocache_display
+    NODE_CLASS_MAPPINGS.update(_autocache_mappings)
+    NODE_DISPLAY_NAME_MAPPINGS.update(_autocache_display)
+    print("[Arena Suite] Loaded Arena AutoCache v3.3.5")
 except Exception as e:
-    print(f"[Arena Suite] Failed to load autocache: {e}")
+    print(f"[Arena Suite] Failed to load Arena AutoCache: {e}")
 
-# Import legacy nodes
+# Arena Make Tiles Segments
 try:
-    import legacy as _legacy
-    _SUBMODULES.append(_legacy)
-    print("[Arena Suite] Loaded legacy module")
+    from legacy.arena_make_tiles_segs import NODE_CLASS_MAPPINGS as _legacy_mappings, NODE_DISPLAY_NAME_MAPPINGS as _legacy_display
+    NODE_CLASS_MAPPINGS.update(_legacy_mappings)
+    NODE_DISPLAY_NAME_MAPPINGS.update(_legacy_display)
+    print("[Arena Suite] Loaded Arena Make Tiles Segments")
 except Exception as e:
-    print(f"[Arena Suite] Failed to load legacy: {e}")
-
-# Import updater nodes
-try:
-    import updater as _updater
-    _SUBMODULES.append(_updater)
-    print("[Arena Suite] Loaded updater module")
-except Exception as e:
-    print(f"[Arena Suite] Failed to load updater: {e}")
-
-# Collect all node mappings from submodules
-for _module in _SUBMODULES:
-    NODE_CLASS_MAPPINGS.update(getattr(_module, "NODE_CLASS_MAPPINGS", {}))
-    NODE_DISPLAY_NAME_MAPPINGS.update(getattr(_module, "NODE_DISPLAY_NAME_MAPPINGS", {}))
+    print(f"[Arena Suite] Failed to load Arena Make Tiles Segments: {e}")
 
 print(f"[Arena Suite] Successfully loaded {len(NODE_CLASS_MAPPINGS)} Arena nodes")
 

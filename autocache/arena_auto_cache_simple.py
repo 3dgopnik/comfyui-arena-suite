@@ -212,7 +212,7 @@ class ArenaAutoCache:
     OUTPUT_TOOLTIPS = ("Shows which models were cached",)
 
     FUNCTION = "run"
-    CATEGORY = "Arena/AutoCache"
+    CATEGORY = "🅰️ Arena/AutoCache"
     DESCRIPTION = "OnDemand model caching with folder_paths patching for transparent caching."
     OUTPUT_NODE = True
 
@@ -262,11 +262,11 @@ class ArenaAutoCache:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "ArenaAutoCache v3.3.0-optimized": ArenaAutoCache,
+    "ArenaAutoCache v3.3.5": ArenaAutoCache,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache v3.3.0-optimized": "Arena AutoCache v3.3.0-optimized",
+    "ArenaAutoCache v3.3.5": "🅰️ Arena AutoCache v3.3.5",
 }
 
 print("[ArenaAutoCache] Loaded simplified version - OnDemand only for model caching")
