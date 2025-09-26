@@ -480,11 +480,38 @@ def _patch_hardcoded_paths():
 # RU: Загружаем настройки при импорте
 _load_env_file()
 
+# RU: Автопатч при загрузке модуля
+if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
+    try:
+        # RU: Инициализируем настройки для автопатча
+        _settings = _init_settings(
+            cache_root=os.environ.get("ARENA_CACHE_ROOT", ""),
+            min_size_mb=float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "10.0")),
+            max_cache_gb=float(os.environ.get("ARENA_CACHE_MAX_GB", "100.0")),
+            verbose=os.environ.get("ARENA_CACHE_VERBOSE", "0") == "1",
+            cache_categories=os.environ.get("ARENA_CACHE_CATEGORIES", ""),
+            categories_mode=os.environ.get("ARENA_CACHE_CATEGORIES_MODE", "extend")
+        )
+        
+        # RU: Применяем патч
+        _apply_folder_paths_patch()
+        
+        # RU: Запускаем фоновый поток
+        if not _copy_thread_started:
+            copy_thread = threading.Thread(target=_copy_worker, daemon=True)
+            copy_thread.start()
+            _copy_thread_started = True
+        
+        print("[ArenaAutoCache] Autopatch enabled - caching models automatically")
+        
+    except Exception as e:
+        print(f"[ArenaAutoCache] Autopatch error: {e}")
+
 class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.6.2 - Production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.6.3 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -567,11 +594,11 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.2",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.3",
 }
 
-print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning")
-print("[ArenaAutoCache] OnDemand caching: models are cached ONLY when used in active workflows")
-print("[ArenaAutoCache] Autopatch removed: use node in workflow for caching control")
+print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
+print("[ArenaAutoCache] Autopatch: models are cached automatically on startup")
+print("[ArenaAutoCache] OnDemand: models are cached when node is used in workflows")
 print("[ArenaAutoCache] Loaded simplified version - single node for model caching")
 print("[Arena Suite] Loaded Arena AutoCache Base")
