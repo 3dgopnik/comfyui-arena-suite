@@ -537,7 +537,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.1.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.1.1 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -646,7 +646,15 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.1.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.1.1",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
+
+# RU: Автопатч при импорте
+_load_env_file()
+if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
+    _settings = _init_settings()
+    if not _folder_paths_patched:
+        _apply_folder_paths_patch()
+    print("[ArenaAutoCache] Autopatch on import enabled")
