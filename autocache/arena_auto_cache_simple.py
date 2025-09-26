@@ -496,14 +496,6 @@ class ArenaAutoCacheSimple:
                         "tooltip": "Automatic pruning when exceeded (LRU by mtime to 95%)."
                     }
                 ),
-                "auto_patch_on_start": (
-                    "BOOLEAN",
-                    {
-                        "default": os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "0") == "1",
-                        "description": "Auto-patch on start (toggle for env var)",
-                        "tooltip": "Enable/disable autopatch via environment variable."
-                    }
-                ),
                 "persist_env": (
                     "BOOLEAN",
                     {
@@ -554,7 +546,7 @@ class ArenaAutoCacheSimple:
 
     FUNCTION = "run"
     CATEGORY = "utils/Arena"
-    DESCRIPTION = "Production-ready OnDemand-only node with robust env handling, thread-safety, safe pruning, and autopatch"
+    DESCRIPTION = "Production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning"
     OUTPUT_NODE = True
 
     def run(
@@ -563,7 +555,6 @@ class ArenaAutoCacheSimple:
         cache_root: str = "",
         min_size_mb: float = 10.0,
         max_cache_gb: float = 0.0,
-        auto_patch_on_start: bool = False,
         persist_env: bool = False,
         verbose: bool = False,
         clear_cache_now: bool = False,
@@ -595,10 +586,6 @@ class ArenaAutoCacheSimple:
         
         env_updates["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
         
-        if auto_patch_on_start:
-            env_updates["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-        else:
-            remove_keys.append("ARENA_AUTOCACHE_AUTOPATCH")
         
         # RU: Применяем к environment
         for key, value in env_updates.items():
@@ -629,19 +616,8 @@ class ArenaAutoCacheSimple:
         # RU: OnDemand режим
         return "OnDemand enabled — models will be cached on first use"
 
-# RU: Автопатч при импорте (критический порядок!)
-_load_env_file()  # RU: Сначала загружаем .env
-
-# RU: Отключаем автоматическое кэширование при старте
-# Arena AutoCache должен кэшировать ТОЛЬКО модели, используемые в активном workflow
-if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
-    try:
-        _settings = _init_settings()
-        _apply_folder_paths_patch()
-        _ensure_copy_thread()
-        print("[ArenaAutoCache] Autopatch on import enabled - OnDemand caching only")
-    except Exception as e:
-        print(f"[ArenaAutoCache] Error in autopatch on import: {e}")
+# RU: Загружаем .env файл при импорте
+_load_env_file()
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
@@ -652,5 +628,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.4.0",
 }
 
-print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, safe pruning, and autopatch")
+print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning")
 print("[ArenaAutoCache] OnDemand caching: models are cached ONLY when used in active workflows")
+print("[ArenaAutoCache] Autopatch removed: use node in workflow for caching control")
