@@ -150,11 +150,10 @@ class CacheSettings:
     min_size_mb: float
     max_cache_gb: float
     verbose: bool
-    auto_patch: bool
     effective_categories: List[str]
 
-def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 0.0, 
-                  verbose: bool = False, auto_patch: bool = False, cache_categories: str = "", 
+def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 100.0, 
+                  verbose: bool = False, cache_categories: str = "checkpoints,loras", 
                   categories_mode: str = "extend") -> CacheSettings:
     """RU: Инициализирует настройки кэширования с резолвингом путей по умолчанию."""
     global _settings
@@ -181,7 +180,6 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
         min_size_mb=min_size_mb,
         max_cache_gb=max_cache_gb,
         verbose=verbose,
-        auto_patch=auto_patch,
         effective_categories=effective_categories
     )
     
@@ -488,7 +486,7 @@ class ArenaAutoCacheSimple:
                 "max_cache_gb": (
                     "FLOAT",
                     {
-                        "default": float(os.environ.get("ARENA_CACHE_MAX_GB", "0.0")),
+                        "default": float(os.environ.get("ARENA_CACHE_MAX_GB", "100.0")),
                         "min": 0.0,
                         "max": 1000.0,
                         "step": 0.1,
@@ -523,7 +521,7 @@ class ArenaAutoCacheSimple:
                 "cache_categories": (
                     "STRING",
                     {
-                        "default": os.environ.get("ARENA_CACHE_CATEGORIES", ""),
+                        "default": os.environ.get("ARENA_CACHE_CATEGORIES", "checkpoints,loras"),
                         "description": "Additional cache categories (comma-separated)",
                         "tooltip": "Extra categories to cache beyond defaults. Empty = use defaults only."
                     }
@@ -596,7 +594,7 @@ class ArenaAutoCacheSimple:
             _save_env_file(env_updates, remove_keys)
         
         # RU: Инициализируем настройки
-        _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, auto_patch_on_start, cache_categories, categories_mode)
+        _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode)
         
         # RU: Применяем патч и запускаем воркер
         if not _folder_paths_patched:
