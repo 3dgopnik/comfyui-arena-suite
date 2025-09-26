@@ -440,35 +440,36 @@ def _clear_cache_folder():
         
         # RU: Проверяем безопасность пути
         try:
-            cache_path = _settings.root.resolve(strict=False)
+            cache_path = _settings.root.expanduser().resolve(strict=False)
         except Exception:
             return "Cache cleared: 0.0 MB freed (path resolution failed)"
         
-        # RU: Проверяем Windows drive roots
+        # RU: Проверяем Windows drive roots и глубину
         if os.name == 'nt':  # Windows
-            drive_roots = {f"{chr(i)}:\\" for i in range(ord('A'), ord('Z') + 1)}
+            drive_roots = {f"{chr(i)}:/" for i in range(ord('A'), ord('Z') + 1)}
             if str(cache_path) in drive_roots:
-                return "Cache cleared: 0.0 MB freed (drive root blocked)"
+                return "Clear aborted: drive root or path too shallow"
             
             # RU: Проверяем UNC paths
-            if str(cache_path).startswith("\\\\"):
-                parts = str(cache_path).split("\\")
-                if len(parts) <= 4:  # \\server\share or \\server\share\one
-                    return "Cache cleared: 0.0 MB freed (UNC root blocked)"
+            if str(cache_path).startswith("//"):
+                parts = str(cache_path).split("/")
+                if len(parts) <= 4:  # //server/share or //server/share/one
+                    return "Clear aborted: drive root or path too shallow"
+            
+            # RU: Требуем минимум C:/folder/subfolder (≥3 parts)
+            if len(cache_path.parts) < 3:
+                return "Clear aborted: drive root or path too shallow"
         
-        # RU: Проверяем минимальную глубину пути (≥2 уровня под якорем)
-        if len(cache_path.parts) < 2:
-            return "Cache cleared: 0.0 MB freed (path too shallow)"
-        
-        # RU: Дополнительная проверка для Windows: требуем минимум C:\folder\subfolder
-        if os.name == 'nt':
-            if len(cache_path.parts) < 3:  # C:\cache -> заблокировать, C:\folder\cache -> разрешить
-                return "Cache cleared: 0.0 MB freed (path too shallow - need at least 2 levels below drive)"
-        
-        # RU: Дополнительная проверка для POSIX: требуем минимум /var/tmp/arena
+        # RU: Проверяем POSIX
         else:  # POSIX
-            if len(cache_path.parts) < 3:  # /var -> заблокировать, /var/tmp/arena -> разрешить
-                return "Cache cleared: 0.0 MB freed (path too shallow - need at least 2 levels below root)"
+            # RU: Запрещаем корень и mount roots без достаточной глубины
+            forbidden_roots = {"/", "/mnt", "/media", "/Volumes"}
+            if str(cache_path) in forbidden_roots:
+                return "Clear aborted: drive root or path too shallow"
+            
+            # RU: Требуем минимум /var/tmp/arena (≥3 parts)
+            if len(cache_path.parts) < 3:
+                return "Clear aborted: drive root or path too shallow"
         
         # RU: Подсчитываем размер перед очисткой (рекурсивно)
         total_size = 0
@@ -536,7 +537,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.0.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.1.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -645,7 +646,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.0.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.1.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
