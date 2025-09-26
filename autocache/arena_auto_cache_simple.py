@@ -20,6 +20,7 @@ _settings = None
 _folder_paths_patched = False
 _copy_queue = Queue()
 _copy_thread_started = False
+_deferred_autopatch_started = False
 _scheduled_tasks: Set[Tuple[str, str]] = set()  # (category, filename)
 _patch_lock = threading.Lock()
 _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
@@ -183,9 +184,9 @@ def _save_env_file(kv: Dict[str, str], remove_keys: List[str] = None):
         print(f"[ArenaAutoCache] Saved env to {env_file}")
     except Exception as e:
         print(f"[ArenaAutoCache] Error saving env file: {e}")
-
-@dataclass
-class CacheSettings:
+        
+        @dataclass
+        class CacheSettings:
     """RU: Настройки кэширования."""
     root: Path
     min_size_mb: float
@@ -241,8 +242,8 @@ def _apply_folder_paths_patch():
     global _folder_paths_patched
     
     with _patch_lock:
-        if _folder_paths_patched:
-            return
+    if _folder_paths_patched:
+        return
     
     try:
         import folder_paths
@@ -261,11 +262,11 @@ def _apply_folder_paths_patch():
             
             # RU: Добавляем путь кэша только для эффективных категорий
             if folder_name in _settings.effective_categories:
-                cache_path = str(_settings.root / folder_name)
-                if cache_path not in original_paths:
-                    original_paths = [cache_path] + original_paths
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
+            cache_path = str(_settings.root / folder_name)
+            if cache_path not in original_paths:
+                original_paths = [cache_path] + original_paths
+                if _settings.verbose:
+                    print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
             
             return original_paths
         
@@ -274,12 +275,12 @@ def _apply_folder_paths_patch():
             # RU: Кэширование только для эффективных категорий
             if folder_name in _settings.effective_categories:
                 # RU: Сначала проверяем кэш
-                cache_path = _settings.root / folder_name / filename
-                if cache_path.exists():
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Cache hit: {filename}")
-                    return str(cache_path)
-                
+            cache_path = _settings.root / folder_name / filename
+            if cache_path.exists():
+                if _settings.verbose:
+                    print(f"[ArenaAutoCache] Cache hit: {filename}")
+                return str(cache_path)
+            
                 # RU: Если не в кэше, получаем оригинальный путь
                 try:
                     original_path = folder_paths.get_full_path_origin(folder_name, filename)
@@ -356,21 +357,21 @@ def _copy_worker():
                 os.rename(temp_path, cache_path)
                 
                 _copy_status["completed_jobs"] += 1
-                if _settings.verbose:
+                    if _settings.verbose:
                     print(f"[ArenaAutoCache] Cached: {filename}")
                 
                 # RU: Проверяем размер кэша и очищаем при необходимости
                 _prune_cache_if_needed()
-                
+                    
             except Exception as e:
                 _copy_status["failed_jobs"] += 1
                 if _settings.verbose:
                     print(f"[ArenaAutoCache] Error caching {filename}: {e}")
             
-            _copy_queue.task_done()
+                _copy_queue.task_done()
             with _scheduled_lock:
                 _scheduled_tasks.discard((category, filename))
-            
+                
         except Exception as e:
             if _settings and _settings.verbose:
                 print(f"[ArenaAutoCache] Copy worker error: {e}")
@@ -431,6 +432,70 @@ def _prune_cache_if_needed():
     except Exception as e:
         if _settings.verbose:
             print(f"[ArenaAutoCache] Error pruning cache: {e}")
+
+def _is_folder_paths_ready():
+    """RU: Проверяет готовность folder_paths для патчинга."""
+    try:
+        import folder_paths
+        return (hasattr(folder_paths, 'get_folder_paths') and 
+                hasattr(folder_paths, 'get_full_path') and
+                hasattr(folder_paths, 'folder_names_and_paths') and
+                len(folder_paths.folder_names_and_paths) > 0 and
+                not hasattr(folder_paths, 'get_full_path_origin'))
+    except:
+        return False
+
+def _start_deferred_autopatch():
+    """RU: Запускает отложенный автопатч в отдельном потоке."""
+    global _deferred_autopatch_started
+    
+    if _deferred_autopatch_started:
+        return
+    
+    _deferred_autopatch_started = True
+    print("[ArenaAutoCache] Waiting for ComfyUI to be ready (deferred autopatch)...")
+    
+    def deferred_worker():
+        import time
+        
+        timeout_s = int(os.environ.get("ARENA_AUTOCACHE_AUTOPATCH_TIMEOUT_S", "90"))
+        poll_ms = int(os.environ.get("ARENA_AUTOCACHE_AUTOPATCH_POLL_MS", "500"))
+        
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout_s:
+            if _is_folder_paths_ready():
+                try:
+                    global _settings
+                    _settings = _init_settings()
+                    if not _folder_paths_patched:
+                        _apply_folder_paths_patch()
+                    elapsed = time.time() - start_time
+                    print(f"[ArenaAutoCache] Deferred autopatch applied after {elapsed:.1f}s")
+                    return
+                except Exception as e:
+                    print(f"[ArenaAutoCache] Deferred autopatch failed: {e}")
+                    return
+            
+            time.sleep(poll_ms / 1000.0)
+        
+        print("[ArenaAutoCache] Deferred autopatch timed out; will patch on first node run")
+    
+    threading.Thread(target=deferred_worker, daemon=True).start()
+
+def _ensure_patch_applied():
+    """RU: Идемпотентно применяет патч при первом использовании ноды."""
+    global _settings
+    
+    if _folder_paths_patched:
+        return
+    
+    try:
+        _settings = _init_settings()
+        _apply_folder_paths_patch()
+        print("[ArenaAutoCache] Patched on first node use")
+    except Exception as e:
+        print(f"[ArenaAutoCache] Failed to patch on first node use: {e}")
 
 def _clear_cache_folder():
     """RU: Очищает папку кэша с безопасными проверками."""
@@ -506,39 +571,12 @@ def _clear_cache_folder():
 # RU: Загружаем настройки при импорте
 _load_env_file()
 
-# RU: Автопатч при загрузке модуля
-if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
-    try:
-        # RU: Инициализируем настройки для автопатча
-        _settings = _init_settings(
-            cache_root=os.environ.get("ARENA_CACHE_ROOT", ""),
-            min_size_mb=float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "10.0")),
-            max_cache_gb=float(os.environ.get("ARENA_CACHE_MAX_GB", "100.0")),
-            verbose=os.environ.get("ARENA_CACHE_VERBOSE", "0") == "1",
-            cache_categories=os.environ.get("ARENA_CACHE_CATEGORIES", ""),
-            categories_mode=os.environ.get("ARENA_CACHE_CATEGORIES_MODE", "extend")
-        )
-        
-        # RU: Применяем патч
-        _apply_folder_paths_patch()
-        
-        # RU: Запускаем фоновый поток
-        if not _copy_thread_started:
-            copy_thread = threading.Thread(target=_copy_worker, daemon=True)
-            copy_thread.start()
-            _copy_thread_started = True
-        
-        print("[ArenaAutoCache] Autopatch enabled - caching models automatically")
-        
-    except Exception as e:
-        print(f"[ArenaAutoCache] Autopatch error: {e}")
-
 class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.1.2 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
-    
+        self.description = "🅰️ Arena AutoCache (simple) v4.2.0 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -554,7 +592,7 @@ class ArenaAutoCacheSimple:
                 "clear_cache_now": ("BOOLEAN", {"default": False}),
             }
         }
-    
+
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("status",)
     FUNCTION = "run"
@@ -566,6 +604,9 @@ class ArenaAutoCacheSimple:
             persist_env: bool = True, clear_cache_now: bool = False):
         """RU: Основная функция ноды."""
         global _settings, _copy_thread_started
+        
+        # RU: Fallback - применяем патч при первом использовании ноды
+        _ensure_patch_applied()
         
         try:
             # RU: Обновляем переменные окружения (только непустые значения)
@@ -587,7 +628,7 @@ class ArenaAutoCacheSimple:
             _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode)
             
             # RU: Применяем патч folder_paths (только один раз)
-            if not _folder_paths_patched:
+        if not _folder_paths_patched:
                 _apply_folder_paths_patch()
             
             # RU: Запускаем фоновый поток копирования
@@ -635,7 +676,7 @@ class ArenaAutoCacheSimple:
             
             return (status,)
             
-        except Exception as e:
+            except Exception as e:
             error_msg = f"Arena AutoCache error: {str(e)}"
             print(f"[ArenaAutoCache] {error_msg}")
             return (error_msg,)
@@ -646,18 +687,12 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.1.2",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
 
-# RU: Автопатч при импорте - выполняется сразу после импорта
-try:
-    _load_env_file()
-    if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
-        _settings = _init_settings()
-        if not _folder_paths_patched:
-            _apply_folder_paths_patch()
-        print("[ArenaAutoCache] Autopatch on import enabled")
-except Exception as e:
-    print(f"[ArenaAutoCache] Autopatch failed: {e}")
+# RU: Отложенный автопатч - ждем готовности ComfyUI
+_load_env_file()
+if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
+    _start_deferred_autopatch()
