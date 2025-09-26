@@ -69,13 +69,13 @@ def _compute_effective_categories(cache_categories: str = "", categories_mode: s
     """RU: Вычисляет эффективные категории для кэширования."""
     # RU: Парсим категории из ноды
     node_categories = []
-    if cache_categories:
+    if cache_categories and cache_categories.strip():
         node_categories = [cat.strip().lower() for cat in cache_categories.split(',') if cat.strip()]
     
     # RU: Парсим категории из .env
     env_categories = []
     env_categories_str = os.environ.get("ARENA_CACHE_CATEGORIES", "")
-    if env_categories_str:
+    if env_categories_str and env_categories_str.strip():
         env_categories = [cat.strip().lower() for cat in env_categories_str.split(',') if cat.strip()]
     
     # RU: Определяем режим (приоритет: нода > .env > default)
@@ -88,18 +88,24 @@ def _compute_effective_categories(cache_categories: str = "", categories_mode: s
     # RU: Выбираем источник категорий (приоритет: нода > .env > default)
     source_categories = node_categories if node_categories else (env_categories if env_categories else [])
     
-    # RU: Фильтруем только известные категории
-    valid_categories = [cat for cat in source_categories if cat in KNOWN_CATEGORIES]
-    unknown_categories = [cat for cat in source_categories if cat not in KNOWN_CATEGORIES]
-    
-    if unknown_categories and verbose:
-        print(f"[ArenaAutoCache] Unknown categories ignored: {', '.join(unknown_categories)}")
-    
-    # RU: Вычисляем эффективные категории
-    if mode == "override":
-        effective = valid_categories if valid_categories else DEFAULT_WHITELIST
-    else:  # extend
-        effective = list(set(DEFAULT_WHITELIST + valid_categories))
+    # RU: Если категории пустые - кэшируем все известные категории
+    if not source_categories:
+        effective = KNOWN_CATEGORIES.copy()
+        if verbose:
+            print(f"[ArenaAutoCache] No categories specified - caching ALL known categories: {len(effective)} categories")
+    else:
+        # RU: Фильтруем только известные категории
+        valid_categories = [cat for cat in source_categories if cat in KNOWN_CATEGORIES]
+        unknown_categories = [cat for cat in source_categories if cat not in KNOWN_CATEGORIES]
+        
+        if unknown_categories and verbose:
+            print(f"[ArenaAutoCache] Unknown categories ignored: {', '.join(unknown_categories)}")
+        
+        # RU: Вычисляем эффективные категории
+        if mode == "override":
+            effective = valid_categories if valid_categories else DEFAULT_WHITELIST
+        else:  # extend
+            effective = list(set(DEFAULT_WHITELIST + valid_categories))
     
     # RU: Сортируем для консистентности
     effective.sort()
@@ -478,7 +484,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.6.1 - Production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.6.2 - Production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -561,7 +567,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.1",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.2",
 }
 
 print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning")
