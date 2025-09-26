@@ -447,9 +447,19 @@ def _clear_cache_folder():
                 if len(parts) <= 4:  # \\server\share or \\server\share\one
                     return "Cache cleared: 0.0 MB freed (UNC root blocked)"
         
-        # RU: Проверяем глубину пути
+        # RU: Проверяем минимальную глубину пути (≥2 уровня под якорем)
         if len(cache_path.parts) < 2:
             return "Cache cleared: 0.0 MB freed (path too shallow)"
+        
+        # RU: Дополнительная проверка для Windows: требуем минимум C:\folder\subfolder
+        if os.name == 'nt':
+            if len(cache_path.parts) < 3:  # C:\cache -> заблокировать, C:\folder\cache -> разрешить
+                return "Cache cleared: 0.0 MB freed (path too shallow - need at least 2 levels below drive)"
+        
+        # RU: Дополнительная проверка для POSIX: требуем минимум /var/tmp/arena
+        else:  # POSIX
+            if len(cache_path.parts) < 3:  # /var -> заблокировать, /var/tmp/arena -> разрешить
+                return "Cache cleared: 0.0 MB freed (path too shallow - need at least 2 levels below root)"
         
         # RU: Подсчитываем размер перед очисткой (рекурсивно)
         total_size = 0
@@ -517,7 +527,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.9.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.9.1 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -598,12 +608,10 @@ class ArenaAutoCacheSimple:
                 # RU: Управляем автопатчем в .env
                 if auto_patch_on_start:
                     env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+                    _save_env_file(env_data)
                 else:
                     # RU: Удаляем ключ автопатча при persist_env=True и auto_patch_on_start=False
                     _save_env_file(env_data, remove_keys=["ARENA_AUTOCACHE_AUTOPATCH"])
-                    return (status,)
-                
-                _save_env_file(env_data)
             
             # RU: Обновляем глобальные настройки для autopatch
             if _settings:
@@ -643,7 +651,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.9.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.9.1",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
