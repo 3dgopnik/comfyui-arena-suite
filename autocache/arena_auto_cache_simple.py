@@ -511,7 +511,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.6.4 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.6.5 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -584,6 +584,14 @@ class ArenaAutoCacheSimple:
                 _settings.max_cache_gb = max_cache_gb
                 _settings.verbose = verbose
                 _settings.effective_categories = _compute_effective_categories(cache_categories, categories_mode, verbose)
+                
+                # RU: Пересоздаем папки кэша для новых категорий
+                for category in _settings.effective_categories:
+                    (_settings.root / category).mkdir(exist_ok=True)
+                
+                # RU: Применяем патч заново с новыми настройками
+                if _folder_paths_patched:
+                    _apply_folder_paths_patch()
             
             status = f"Arena AutoCache initialized: {len(_settings.effective_categories)} categories, {_settings.max_cache_gb}GB limit"
             if verbose:
@@ -602,7 +610,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.4",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.5",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
