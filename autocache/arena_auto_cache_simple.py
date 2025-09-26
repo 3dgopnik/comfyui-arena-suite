@@ -604,8 +604,8 @@ class ArenaAutoCacheSimple:
             except Exception as e:
                 return f"Error applying folder_paths patch: {e}"
         
-        # RU: Включаем мониторинг жестко прописанных путей
-        _monitor_hardcoded_paths()
+        # RU: Патчим жестко прописанные пути для перенаправления в кэш
+        _patch_hardcoded_paths()
         
         _ensure_copy_thread()
         
@@ -617,53 +617,72 @@ class ArenaAutoCacheSimple:
         # RU: OnDemand режим
         return "OnDemand enabled — models will be cached on first use"
 
-def _monitor_hardcoded_paths():
-    """RU: Мониторит жестко прописанные пути к моделям."""
-    import re
+def _patch_hardcoded_paths():
+    """RU: Патчит жестко прописанные пути для перенаправления в кэш."""
+    import os
     
-    # RU: Паттерны для поиска жестко прописанных путей
-    hardcoded_patterns = [
-        r'C:\\ComfyUI\\models\\ultralytics\\bbox',
-        r'C:\\ComfyUI\\models\\ultralytics\\segm',
-        r'C:\\ComfyUI\\models\\[^"]+',
-        r'[A-Z]:\\\\[^"]+\\models\\[^"]+',
+    # RU: Создаем папки для жестко прописанных путей
+    hardcoded_paths = [
+        "C:\\ComfyUI\\models\\ultralytics\\bbox",
+        "C:\\ComfyUI\\models\\ultralytics\\segm",
     ]
     
-    # RU: Перехватываем print для поиска жестко прописанных путей
-    original_print = print
-    
-    def patched_print(*args, **kwargs):
-        message = ' '.join(str(arg) for arg in args)
-        
-        # RU: Ищем жестко прописанные пути в сообщениях
-        for pattern in hardcoded_patterns:
-            matches = re.findall(pattern, message)
-            for match in matches:
-                if os.path.exists(match):
-                    # RU: Определяем категорию по пути
-                    if 'ultralytics' in match:
-                        category = 'ultralytics'
-                    elif 'checkpoints' in match:
-                        category = 'checkpoints'
-                    elif 'loras' in match:
-                        category = 'loras'
-                    else:
-                        category = 'checkpoints'  # RU: По умолчанию
+    for hardcoded_path in hardcoded_paths:
+        if os.path.exists(hardcoded_path):
+            # RU: Определяем категорию по пути
+            if 'ultralytics' in hardcoded_path:
+                category = 'ultralytics'
+            else:
+                category = 'checkpoints'
+            
+            # RU: Создаем символическую ссылку или копируем содержимое
+            cache_path = _settings.root / category
+            if cache_path.exists():
+                # RU: Создаем символическую ссылку из кэша в жестко прописанный путь
+                try:
+                    if os.path.exists(hardcoded_path):
+                        # RU: Удаляем оригинальную папку
+                        import shutil
+                        shutil.rmtree(hardcoded_path)
                     
-                    # RU: Планируем кэширование
-                    if category in _settings.effective_categories:
-                        filename = os.path.basename(match)
-                        cache_path = _settings.root / category / filename
-                        _schedule_cache_copy(category, filename, match, str(cache_path))
-                        if _settings.verbose:
-                            print(f"[ArenaAutoCache] Hardcoded path detected: {match}")
-        
-        # RU: Вызываем оригинальный print
-        original_print(*args, **kwargs)
+                    # RU: Создаем символическую ссылку
+                    os.symlink(str(cache_path), hardcoded_path)
+                    if _settings.verbose:
+                        print(f"[ArenaAutoCache] Created symlink: {hardcoded_path} -> {cache_path}")
+                except Exception as e:
+                    if _settings.verbose:
+                        print(f"[ArenaAutoCache] Failed to create symlink: {e}")
     
-    # RU: Заменяем print на наш патченный
-    import builtins
-    builtins.print = patched_print
+    # RU: Перехватываем os.path.exists для жестко прописанных путей
+    original_exists = os.path.exists
+    
+    def patched_exists(path):
+        result = original_exists(path)
+        
+        # RU: Если файл не найден по жестко прописанному пути, ищем в кэше
+        if not result and path.startswith("C:\\ComfyUI\\models\\"):
+            # RU: Определяем категорию по пути
+            if 'ultralytics' in path:
+                category = 'ultralytics'
+            elif 'checkpoints' in path:
+                category = 'checkpoints'
+            elif 'loras' in path:
+                category = 'loras'
+            else:
+                category = 'checkpoints'
+            
+            # RU: Ищем в кэше
+            filename = os.path.basename(path)
+            cache_path = _settings.root / category / filename
+            if cache_path.exists():
+                if _settings.verbose:
+                    print(f"[ArenaAutoCache] Redirecting hardcoded path: {path} -> {cache_path}")
+                return True
+        
+        return result
+    
+    # RU: Заменяем os.path.exists
+    os.path.exists = patched_exists
 
 # RU: Загружаем .env файл при импорте
 _load_env_file()
