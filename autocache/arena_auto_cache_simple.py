@@ -427,21 +427,29 @@ def _clear_cache_folder():
     """RU: Очищает папку кэша с безопасными проверками."""
     try:
         if not _settings.root.exists():
-            return
+            return "Cache cleared: 0.0 MB freed (no cache found)"
         
         # RU: Проверяем безопасность пути
-        cache_path = _settings.root.resolve()
+        try:
+            cache_path = _settings.root.resolve(strict=False)
+        except Exception:
+            return "Cache cleared: 0.0 MB freed (path resolution failed)"
         
-        # RU: Проверяем, что это не корень диска или UNC путь
-        if cache_path.is_absolute() and len(cache_path.parts) < 2:
-            print("[ArenaAutoCache] Safety check failed: path too shallow")
-            return
+        # RU: Проверяем Windows drive roots
+        if os.name == 'nt':  # Windows
+            drive_roots = {f"{chr(i)}:\\" for i in range(ord('A'), ord('Z') + 1)}
+            if str(cache_path) in drive_roots:
+                return "Cache cleared: 0.0 MB freed (drive root blocked)"
+            
+            # RU: Проверяем UNC paths
+            if str(cache_path).startswith("\\\\"):
+                parts = str(cache_path).split("\\")
+                if len(parts) <= 4:  # \\server\share or \\server\share\one
+                    return "Cache cleared: 0.0 MB freed (UNC root blocked)"
         
-        # RU: Проверяем, что это не системные папки
-        forbidden_parts = {"C:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "I:\\", "J:\\", "K:\\", "L:\\", "M:\\", "N:\\", "O:\\", "P:\\", "Q:\\", "R:\\", "S:\\", "T:\\", "U:\\", "V:\\", "W:\\", "X:\\", "Y:\\", "Z:\\"}
-        if str(cache_path) in forbidden_parts:
-            print("[ArenaAutoCache] Safety check failed: cannot clear drive root")
-            return
+        # RU: Проверяем глубину пути
+        if len(cache_path.parts) < 2:
+            return "Cache cleared: 0.0 MB freed (path too shallow)"
         
         # RU: Подсчитываем размер перед очисткой (рекурсивно)
         total_size = 0
@@ -465,10 +473,14 @@ def _clear_cache_folder():
             (_settings.root / category).mkdir(exist_ok=True)
         
         freed_mb = total_size / 1024 / 1024
-        print(f"[ArenaAutoCache] Cleared cache: {freed_mb:.1f}MB freed")
+        result = f"Cache cleared: {freed_mb:.1f} MB freed"
+        print(f"[ArenaAutoCache] {result}")
+        return result
         
     except Exception as e:
+        error_msg = f"Cache cleared: 0.0 MB freed (error: {str(e)})"
         print(f"[ArenaAutoCache] Error clearing cache: {e}")
+        return error_msg
 
 
 # RU: Загружаем настройки при импорте
@@ -505,7 +517,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.8.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.9.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -570,27 +582,28 @@ class ArenaAutoCacheSimple:
             # RU: Очищаем кэш если запрошено
             clear_result = None
             if clear_cache_now:
-                _clear_cache_folder()
-                clear_result = f"Cache cleared: {_settings.root}"
+                clear_result = _clear_cache_folder()
             
-            # RU: Сохраняем настройки в .env
-            env_data = {
-                "ARENA_CACHE_ROOT": cache_root,
-                "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
-                "ARENA_CACHE_MAX_GB": str(max_cache_gb),
-                "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
-                "ARENA_CACHE_CATEGORIES": cache_categories,
-                "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
-            }
-            
-            # RU: Управляем автопатчем в .env
+            # RU: Сохраняем настройки в .env только если persist_env=True
             if persist_env:
+                env_data = {
+                    "ARENA_CACHE_ROOT": cache_root,
+                    "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
+                    "ARENA_CACHE_MAX_GB": str(max_cache_gb),
+                    "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
+                    "ARENA_CACHE_CATEGORIES": cache_categories,
+                    "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
+                }
+                
+                # RU: Управляем автопатчем в .env
                 if auto_patch_on_start:
                     env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
                 else:
-                    env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "0"
-            
-            _save_env_file(env_data)
+                    # RU: Удаляем ключ автопатча при persist_env=True и auto_patch_on_start=False
+                    _save_env_file(env_data, remove_keys=["ARENA_AUTOCACHE_AUTOPATCH"])
+                    return (status,)
+                
+                _save_env_file(env_data)
             
             # RU: Обновляем глобальные настройки для autopatch
             if _settings:
@@ -630,11 +643,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.8.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.9.0",
 }
 
-print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
-print("[ArenaAutoCache] Autopatch: models are cached automatically on startup")
-print("[ArenaAutoCache] OnDemand: models are cached when node is used in workflows")
-print("[ArenaAutoCache] Loaded simplified version - single node for model caching")
-print("[Arena Suite] Loaded Arena AutoCache Base")
+print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
