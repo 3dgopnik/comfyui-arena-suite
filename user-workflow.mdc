@@ -59,6 +59,7 @@
 - **Python Virtual Environment**: `c:\ComfyUI\.venv\`
 - **Логи**: `c:\Users\acherednikov\AppData\Roaming\ComfyUI\logs\`
 - **Extra Model Paths**: `c:\Users\acherednikov\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\extra_model_paths.yaml`
+- **GitHub Repository**: https://github.com/3dgopnik/comfyui-arena-suite
 
 ### Web Extensions
 - **Основной путь**: `c:\Users\acherednikov\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\web\extensions\`
