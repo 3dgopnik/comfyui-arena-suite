@@ -511,7 +511,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.6.3 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.6.4 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -577,6 +577,14 @@ class ArenaAutoCacheSimple:
                 "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
             })
             
+            # RU: Обновляем глобальные настройки для autopatch
+            if _settings:
+                _settings.root = Path(cache_root) if cache_root else Path(os.environ.get("ARENA_CACHE_ROOT", Path.home() / "Documents" / "ComfyUI-Cache"))
+                _settings.min_size_mb = min_size_mb
+                _settings.max_cache_gb = max_cache_gb
+                _settings.verbose = verbose
+                _settings.effective_categories = _compute_effective_categories(cache_categories, categories_mode, verbose)
+            
             status = f"Arena AutoCache initialized: {len(_settings.effective_categories)} categories, {_settings.max_cache_gb}GB limit"
             if verbose:
                 print(f"[ArenaAutoCache] {status}")
@@ -594,7 +602,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.3",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.4",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
