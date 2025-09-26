@@ -1,9 +1,39 @@
-c:\ComfyUI\user\default\workflows\Test_lora_multiple.json# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [4.1.0] - 2025-01-27
+
+### Enhanced
+- **Усиленная безопасность очистки кэша** - строгие проверки глубины путей для всех платформ
+  - **Windows drive roots** - запрещены корни дисков (C:/) и одноуровневые пути (C:/cache)
+  - **UNC paths** - запрещены //server/share и //server/share/one, требуется //server/share/arena/cache
+  - **POSIX** - запрещены /, /mnt, /media, /Volumes без достаточной глубины
+  - **Минимальная глубина ≥3** для всех платформ (C:/folder/subfolder, /var/tmp/arena)
+  - **Улучшенное разрешение путей** - используется expanduser().resolve(strict=False)
+  - **Дружественные сообщения** - "Clear aborted: drive root or path too shallow"
+
+### Changed
+- **Версия ноды** обновлена до v4.1.0
+- **Документация** обновлена с новыми возможностями безопасности
+
+## [4.0.0] - 2025-01-27
+
+### Added
+- **UI: 0 = unlimited для pruning** - max_cache_gb min изменён с 1.0 на 0.0
+- **Safer defaults** - persist_env по умолчанию False, cache_categories по умолчанию ""
+- **Remove redundant post-init reconfiguration** - убран блок повторной инициализации в run()
+- **Clear: user-visible status passthrough** - run() возвращает точную строку из _clear_cache_folder()
+- **Prune: add compact summary log** - добавлен summary лог после pruning
+- **Tiny log/UX polish** - условные сообщения autopatch только при включении
+
+### Changed
+- **max_cache_gb default** изменён с 100.0 на 0.0 (unlimited по умолчанию)
+- **persist_env default** изменён с True на False
+- **cache_categories default** изменён с "checkpoints,loras" на ""
 
 ## [3.4.0] - 2025-01-27
 
