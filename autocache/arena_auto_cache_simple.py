@@ -623,7 +623,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.4.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.5.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning")
