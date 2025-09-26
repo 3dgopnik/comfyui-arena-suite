@@ -24,6 +24,15 @@ _scheduled_tasks: Set[Tuple[str, str]] = set()  # (category, filename)
 _patch_lock = threading.Lock()
 _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
 
+# RU: Whitelist категорий для кэширования
+DEFAULT_WHITELIST = ["checkpoints", "loras", "clip", "clip_vision", "text_encoders"]
+KNOWN_CATEGORIES = [
+    "checkpoints", "loras", "clip", "clip_vision", "text_encoders", "vae", "controlnet", 
+    "upscale_models", "embeddings", "hypernetworks", "ipadapter", "gligen", 
+    "animatediff_models", "t2i_adapter", "diffusion_models", "ultralytics", 
+    "insightface", "inpaint", "pix2pix", "sams", "pulid"
+]
+
 # RU: Статистика копирования
 _copy_status = {
     "total_jobs": 0,
@@ -36,6 +45,50 @@ _copy_status = {
 def _now() -> float:
     """RU: Текущее время в секундах."""
     return time.time()
+
+def _compute_effective_categories(cache_categories: str = "", categories_mode: str = "extend", verbose: bool = False) -> List[str]:
+    """RU: Вычисляет эффективные категории для кэширования."""
+    # RU: Парсим категории из ноды
+    node_categories = []
+    if cache_categories:
+        node_categories = [cat.strip().lower() for cat in cache_categories.split(',') if cat.strip()]
+    
+    # RU: Парсим категории из .env
+    env_categories = []
+    env_categories_str = os.environ.get("ARENA_CACHE_CATEGORIES", "")
+    if env_categories_str:
+        env_categories = [cat.strip().lower() for cat in env_categories_str.split(',') if cat.strip()]
+    
+    # RU: Определяем режим (приоритет: нода > .env > default)
+    mode = categories_mode
+    if not mode and "ARENA_CACHE_CATEGORIES_MODE" in os.environ:
+        mode = os.environ["ARENA_CACHE_CATEGORIES_MODE"]
+    if not mode:
+        mode = "extend"
+    
+    # RU: Выбираем источник категорий (приоритет: нода > .env > default)
+    source_categories = node_categories if node_categories else (env_categories if env_categories else [])
+    
+    # RU: Фильтруем только известные категории
+    valid_categories = [cat for cat in source_categories if cat in KNOWN_CATEGORIES]
+    unknown_categories = [cat for cat in source_categories if cat not in KNOWN_CATEGORIES]
+    
+    if unknown_categories and verbose:
+        print(f"[ArenaAutoCache] Unknown categories ignored: {', '.join(unknown_categories)}")
+    
+    # RU: Вычисляем эффективные категории
+    if mode == "override":
+        effective = valid_categories if valid_categories else DEFAULT_WHITELIST
+    else:  # extend
+        effective = list(set(DEFAULT_WHITELIST + valid_categories))
+    
+    # RU: Сортируем для консистентности
+    effective.sort()
+    
+    if verbose:
+        print(f"[ArenaAutoCache] Cache categories mode: {mode}; effective: {', '.join(effective)}")
+    
+    return effective
 
 def _load_env_file():
     """RU: Загружает настройки из user/arena_autocache.env если файл существует."""
@@ -98,9 +151,11 @@ class CacheSettings:
     max_cache_gb: float
     verbose: bool
     auto_patch: bool
+    effective_categories: List[str]
 
 def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 0.0, 
-                  verbose: bool = False, auto_patch: bool = False) -> CacheSettings:
+                  verbose: bool = False, auto_patch: bool = False, cache_categories: str = "", 
+                  categories_mode: str = "extend") -> CacheSettings:
     """RU: Инициализирует настройки кэширования с резолвингом путей по умолчанию."""
     global _settings
     
@@ -114,13 +169,11 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
         else:
             root = Path.home() / ".cache/comfyui/arena"
     
-    # RU: Создаем структуру папок
-    categories = [
-        "checkpoints", "vae", "loras", "controlnet", "clip", "upscale_models",
-        "hypernetworks", "ipadapter", "gligen", "animatediff_models", "t2i_adapter"
-    ]
+    # RU: Вычисляем эффективные категории
+    effective_categories = _compute_effective_categories(cache_categories, categories_mode, verbose)
     
-    for category in categories:
+    # RU: Создаем структуру папок только для эффективных категорий
+    for category in effective_categories:
         (root / category).mkdir(parents=True, exist_ok=True)
     
     _settings = CacheSettings(
@@ -128,7 +181,8 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
         min_size_mb=min_size_mb,
         max_cache_gb=max_cache_gb,
         verbose=verbose,
-        auto_patch=auto_patch
+        auto_patch=auto_patch,
+        effective_categories=effective_categories
     )
     
     # RU: Логируем настройки
@@ -160,38 +214,41 @@ def _apply_folder_paths_patch():
                 """RU: Патченная функция get_folder_paths с добавлением кэша."""
                 original_paths = original_get_folder_paths(folder_name)
                 
-                # RU: Добавляем путь кэша в начало (приоритет)
-                cache_path = str(_settings.root / folder_name)
-                if cache_path not in original_paths:
-                    original_paths = [cache_path] + original_paths
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
+                # RU: Добавляем путь кэша только для эффективных категорий
+                if folder_name in _settings.effective_categories:
+                    cache_path = str(_settings.root / folder_name)
+                    if cache_path not in original_paths:
+                        original_paths = [cache_path] + original_paths
+                        if _settings.verbose:
+                            print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
                 
                 return original_paths
             
             def patched_get_full_path(folder_name: str, filename: str) -> str:
                 """RU: Патченная функция get_full_path с кэшированием."""
-                # RU: Сначала проверяем кэш
-                cache_path = _settings.root / folder_name / filename
-                if cache_path.exists():
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Cache hit: {filename}")
-                    return str(cache_path)
-                
-                # RU: Если не в кэше, получаем оригинальный путь
-                try:
-                    original_path = folder_paths.get_full_path_origin(folder_name, filename)
-                    if os.path.exists(original_path):
-                        # RU: Планируем копирование в фоне
-                        _schedule_cache_copy(folder_name, filename, original_path)
+                # RU: Кэширование только для эффективных категорий
+                if folder_name in _settings.effective_categories:
+                    # RU: Сначала проверяем кэш
+                    cache_path = _settings.root / folder_name / filename
+                    if cache_path.exists():
                         if _settings.verbose:
-                            print(f"[ArenaAutoCache] Cache miss: {filename}")
-                        return original_path
-                except Exception as e:
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Error resolving {filename}: {e}")
+                            print(f"[ArenaAutoCache] Cache hit: {filename}")
+                        return str(cache_path)
+                    
+                    # RU: Если не в кэше, получаем оригинальный путь
+                    try:
+                        original_path = folder_paths.get_full_path_origin(folder_name, filename)
+                        if os.path.exists(original_path):
+                            # RU: Планируем копирование в фоне
+                            _schedule_cache_copy(folder_name, filename, original_path)
+                            if _settings.verbose:
+                                print(f"[ArenaAutoCache] Cache miss: {filename}")
+                            return original_path
+                    except Exception as e:
+                        if _settings.verbose:
+                            print(f"[ArenaAutoCache] Error resolving {filename}: {e}")
                 
-                # RU: Возвращаем оригинальный путь
+                # RU: Для неэффективных категорий или при ошибках - делегируем оригиналу
                 return folder_paths.get_full_path_origin(folder_name, filename)
             
             # RU: Применяем патчи
@@ -384,9 +441,8 @@ def _clear_cache_folder():
             elif item.is_dir():
                 shutil.rmtree(item)
         
-        # RU: Пересоздаем структуру
-        categories = ["checkpoints", "vae", "loras", "controlnet", "clip", "upscale_models", "hypernetworks", "ipadapter", "gligen", "animatediff_models", "t2i_adapter"]
-        for category in categories:
+        # RU: Пересоздаем структуру только для эффективных категорий
+        for category in _settings.effective_categories:
             (cache_path / category).mkdir(parents=True, exist_ok=True)
         
         freed_mb = total_size / (1024 * 1024)
@@ -470,6 +526,22 @@ class ArenaAutoCacheSimple:
                         "tooltip": "Wipe cache folder with safety checks, then auto-reset to False."
                     }
                 ),
+                "cache_categories": (
+                    "STRING",
+                    {
+                        "default": os.environ.get("ARENA_CACHE_CATEGORIES", ""),
+                        "description": "Additional cache categories (comma-separated)",
+                        "tooltip": "Extra categories to cache beyond defaults. Empty = use defaults only."
+                    }
+                ),
+                "categories_mode": (
+                    ["extend", "override"],
+                    {
+                        "default": os.environ.get("ARENA_CACHE_CATEGORIES_MODE", "extend"),
+                        "description": "Categories mode",
+                        "tooltip": "extend = add to defaults, override = replace defaults"
+                    }
+                ),
             },
         }
 
@@ -493,6 +565,8 @@ class ArenaAutoCacheSimple:
         persist_env: bool = False,
         verbose: bool = False,
         clear_cache_now: bool = False,
+        cache_categories: str = "",
+        categories_mode: str = "extend",
     ):
         """RU: Основная функция ноды кэширования."""
         global _settings, _folder_paths_patched
@@ -511,6 +585,14 @@ class ArenaAutoCacheSimple:
         env_updates["ARENA_CACHE_MAX_GB"] = str(max_cache_gb)
         env_updates["ARENA_CACHE_VERBOSE"] = "1" if verbose else "0"
         
+        # RU: Настраиваем категории
+        if cache_categories:
+            env_updates["ARENA_CACHE_CATEGORIES"] = cache_categories
+        else:
+            remove_keys.append("ARENA_CACHE_CATEGORIES")
+        
+        env_updates["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
+        
         if auto_patch_on_start:
             env_updates["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
         else:
@@ -525,7 +607,7 @@ class ArenaAutoCacheSimple:
             _save_env_file(env_updates, remove_keys)
         
         # RU: Инициализируем настройки
-        _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, auto_patch_on_start)
+        _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, auto_patch_on_start, cache_categories, categories_mode)
         
         # RU: Применяем патч и запускаем воркер
         if not _folder_paths_patched:
