@@ -333,12 +333,18 @@ def _copy_worker():
                 if source_size < _settings.min_size_mb * 1024 * 1024:
                     if _settings.verbose:
                         print(f"[ArenaAutoCache] Skipping {filename}: too small ({source_size / 1024 / 1024:.1f}MB)")
+                    _copy_queue.task_done()
+                    with _scheduled_lock:
+                        _scheduled_tasks.discard((category, filename))
                     continue
                 
                 # RU: Проверяем, не существует ли уже в кэше
                 if os.path.exists(cache_path):
                     if _settings.verbose:
                         print(f"[ArenaAutoCache] Already cached: {filename}")
+                    _copy_queue.task_done()
+                    with _scheduled_lock:
+                        _scheduled_tasks.discard((category, filename))
                     continue
                 
                 # RU: Создаем папку кэша
@@ -362,6 +368,8 @@ def _copy_worker():
                     print(f"[ArenaAutoCache] Error caching {filename}: {e}")
             
             _copy_queue.task_done()
+            with _scheduled_lock:
+                _scheduled_tasks.discard((category, filename))
             
         except Exception as e:
             if _settings and _settings.verbose:
@@ -371,14 +379,18 @@ def _copy_worker():
 def _prune_cache_if_needed():
     """RU: Очищает кэш при превышении лимита (LRU)."""
     try:
-        # RU: Получаем размер кэша
+        # RU: Проверяем, включен ли лимит
+        if _settings.max_cache_gb <= 0:
+            return
+        
+        # RU: Получаем размер кэша (рекурсивно)
         total_size = 0
         all_files = []
         
         for category in _settings.effective_categories:
             category_path = _settings.root / category
             if category_path.exists():
-                for file_path in category_path.iterdir():
+                for file_path in category_path.rglob("*"):
                     if file_path.is_file():
                         size = file_path.stat().st_size
                         total_size += size
@@ -431,20 +443,20 @@ def _clear_cache_folder():
             print("[ArenaAutoCache] Safety check failed: cannot clear drive root")
             return
         
-        # RU: Подсчитываем размер перед очисткой
+        # RU: Подсчитываем размер перед очисткой (рекурсивно)
         total_size = 0
         for category in _settings.effective_categories:
             category_path = _settings.root / category
             if category_path.exists():
-                for file_path in category_path.iterdir():
+                for file_path in category_path.rglob("*"):
                     if file_path.is_file():
                         total_size += file_path.stat().st_size
         
-        # RU: Очищаем только эффективные категории
+        # RU: Очищаем только эффективные категории (рекурсивно)
         for category in _settings.effective_categories:
             category_path = _settings.root / category
             if category_path.exists():
-                for file_path in category_path.iterdir():
+                for file_path in category_path.rglob("*"):
                     if file_path.is_file():
                         file_path.unlink()
         
@@ -493,7 +505,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.7.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.8.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -505,6 +517,8 @@ class ArenaAutoCacheSimple:
                 "verbose": ("BOOLEAN", {"default": True}),
                 "cache_categories": ("STRING", {"default": "", "multiline": False}),
                 "categories_mode": (["extend", "override"], {"default": "extend"}),
+                "auto_patch_on_start": ("BOOLEAN", {"default": False}),
+                "persist_env": ("BOOLEAN", {"default": True}),
                 "clear_cache_now": ("BOOLEAN", {"default": False}),
             }
         }
@@ -516,7 +530,8 @@ class ArenaAutoCacheSimple:
     
     def run(self, cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 100.0, 
             verbose: bool = True, cache_categories: str = "", 
-            categories_mode: str = "extend", clear_cache_now: bool = False):
+            categories_mode: str = "extend", auto_patch_on_start: bool = False, 
+            persist_env: bool = True, clear_cache_now: bool = False):
         """RU: Основная функция ноды."""
         global _settings, _copy_thread_started
         
@@ -529,6 +544,12 @@ class ArenaAutoCacheSimple:
             if categories_mode:
                 os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
             os.environ["ARENA_CACHE_VERBOSE"] = "1" if verbose else "0"
+            
+            # RU: Управляем автопатчем
+            if auto_patch_on_start:
+                os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+            else:
+                os.environ.pop("ARENA_AUTOCACHE_AUTOPATCH", None)
             
             # RU: Инициализируем настройки
             _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode)
@@ -547,18 +568,29 @@ class ArenaAutoCacheSimple:
             
             
             # RU: Очищаем кэш если запрошено
+            clear_result = None
             if clear_cache_now:
                 _clear_cache_folder()
+                clear_result = f"Cache cleared: {_settings.root}"
             
             # RU: Сохраняем настройки в .env
-            _save_env_file({
+            env_data = {
                 "ARENA_CACHE_ROOT": cache_root,
                 "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
                 "ARENA_CACHE_MAX_GB": str(max_cache_gb),
                 "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
                 "ARENA_CACHE_CATEGORIES": cache_categories,
                 "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
-            })
+            }
+            
+            # RU: Управляем автопатчем в .env
+            if persist_env:
+                if auto_patch_on_start:
+                    env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+                else:
+                    env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "0"
+            
+            _save_env_file(env_data)
             
             # RU: Обновляем глобальные настройки для autopatch
             if _settings:
@@ -576,7 +608,12 @@ class ArenaAutoCacheSimple:
                 if _folder_paths_patched:
                     _apply_folder_paths_patch()
             
-            status = f"Arena AutoCache initialized: {len(_settings.effective_categories)} categories, {_settings.max_cache_gb}GB limit"
+            # RU: Возвращаем результат очистки или статус инициализации
+            if clear_result:
+                status = clear_result
+            else:
+                status = f"Arena AutoCache initialized: {len(_settings.effective_categories)} categories, {_settings.max_cache_gb}GB limit"
+            
             if verbose:
                 print(f"[ArenaAutoCache] {status}")
             
@@ -593,7 +630,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.7.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.8.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
