@@ -193,15 +193,6 @@ def _save_env_file(kv: Dict[str, str], remove_keys: List[str] = None):
         print(f"[ArenaAutoCache] Saved env to {env_file}")
     except Exception as e:
         print(f"[ArenaAutoCache] Error saving env file: {e}")
-        
-        @dataclass
-        class CacheSettings:
-    """RU: Настройки кэширования."""
-    root: Path
-    min_size_mb: float
-    max_cache_gb: float
-    verbose: bool
-    effective_categories: List[str]
 
 def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 0.0, 
                   verbose: bool = False, cache_categories: str = "", 
@@ -211,6 +202,13 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
     
     # RU: Загружаем .env файл
     _load_env_file()
+    
+    # RU: Env-aware инициализация для deferred режима
+    if not cache_root and not min_size_mb and not max_cache_gb and not verbose:
+        # RU: Читаем из .env если аргументы не переданы (deferred режим)
+        min_size_mb = float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "10.0"))
+        max_cache_gb = float(os.environ.get("ARENA_CACHE_MAX_GB", "0.0"))
+        verbose = os.environ.get("ARENA_CACHE_VERBOSE", "false").lower() in ("true", "1", "yes")
     
     # RU: Резолвим корень кэша
     if cache_root:
@@ -251,8 +249,8 @@ def _apply_folder_paths_patch():
     global _folder_paths_patched
     
     with _patch_lock:
-    if _folder_paths_patched:
-        return
+        if _folder_paths_patched:
+            return
     
     try:
         import folder_paths
@@ -271,11 +269,11 @@ def _apply_folder_paths_patch():
             
             # RU: Добавляем путь кэша только для эффективных категорий
             if folder_name in _settings.effective_categories:
-            cache_path = str(_settings.root / folder_name)
-            if cache_path not in original_paths:
-                original_paths = [cache_path] + original_paths
-                if _settings.verbose:
-                    print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
+                cache_path = str(_settings.root / folder_name)
+                if cache_path not in original_paths:
+                    original_paths = [cache_path] + original_paths
+                    if _settings.verbose:
+                        print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
             
             return original_paths
         
@@ -598,7 +596,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.2.1 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.2.2 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -651,7 +649,7 @@ class ArenaAutoCacheSimple:
             _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode)
             
             # RU: Применяем патч folder_paths (только один раз)
-        if not _folder_paths_patched:
+            if not _folder_paths_patched:
                 _apply_folder_paths_patch()
             
             # RU: Запускаем фоновый поток копирования
@@ -699,7 +697,7 @@ class ArenaAutoCacheSimple:
             
             return (status,)
             
-            except Exception as e:
+        except Exception as e:
             error_msg = f"Arena AutoCache error: {str(e)}"
             print(f"[ArenaAutoCache] {error_msg}")
             return (error_msg,)
@@ -710,7 +708,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.1",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.2",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
