@@ -193,8 +193,8 @@ class CacheSettings:
     verbose: bool
     effective_categories: List[str]
 
-def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 100.0, 
-                  verbose: bool = False, cache_categories: str = "checkpoints,loras", 
+def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 0.0, 
+                  verbose: bool = False, cache_categories: str = "", 
                   categories_mode: str = "extend") -> CacheSettings:
     """RU: Инициализирует настройки кэширования с резолвингом путей по умолчанию."""
     global _settings
@@ -405,6 +405,8 @@ def _prune_cache_if_needed():
             # RU: Удаляем файлы до 95% лимита
             target_size = max_size_bytes * 0.95
             current_size = total_size
+            pruned_files = 0
+            freed_bytes = 0
             
             for file_path, size, _ in all_files:
                 if current_size <= target_size:
@@ -413,11 +415,18 @@ def _prune_cache_if_needed():
                 try:
                     file_path.unlink()
                     current_size -= size
+                    pruned_files += 1
+                    freed_bytes += size
                     if _settings.verbose:
                         print(f"[ArenaAutoCache] Pruned: {file_path.name}")
                 except Exception as e:
                     if _settings.verbose:
                         print(f"[ArenaAutoCache] Error pruning {file_path.name}: {e}")
+            
+            # RU: Summary лог для prune
+            if pruned_files > 0:
+                freed_mb = freed_bytes / 1024 / 1024
+                print(f"[ArenaAutoCache] Pruned {pruned_files} files; freed {freed_mb:.1f} MB (target ~95%)")
     
     except Exception as e:
         if _settings.verbose:
@@ -527,7 +536,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.9.1 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.0.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -535,12 +544,12 @@ class ArenaAutoCacheSimple:
             "required": {
                 "cache_root": ("STRING", {"default": "", "multiline": False}),
                 "min_size_mb": ("FLOAT", {"default": 10.0, "min": 0.1, "max": 1000.0, "step": 0.1}),
-                "max_cache_gb": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 1000.0, "step": 1.0}),
+                "max_cache_gb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
                 "verbose": ("BOOLEAN", {"default": True}),
                 "cache_categories": ("STRING", {"default": "", "multiline": False}),
                 "categories_mode": (["extend", "override"], {"default": "extend"}),
                 "auto_patch_on_start": ("BOOLEAN", {"default": False}),
-                "persist_env": ("BOOLEAN", {"default": True}),
+                "persist_env": ("BOOLEAN", {"default": False}),
                 "clear_cache_now": ("BOOLEAN", {"default": False}),
             }
         }
@@ -613,21 +622,6 @@ class ArenaAutoCacheSimple:
                     # RU: Удаляем ключ автопатча при persist_env=True и auto_patch_on_start=False
                     _save_env_file(env_data, remove_keys=["ARENA_AUTOCACHE_AUTOPATCH"])
             
-            # RU: Обновляем глобальные настройки для autopatch
-            if _settings:
-                _settings.root = Path(cache_root) if cache_root else Path(os.environ.get("ARENA_CACHE_ROOT", Path.home() / "Documents" / "ComfyUI-Cache"))
-                _settings.min_size_mb = min_size_mb
-                _settings.max_cache_gb = max_cache_gb
-                _settings.verbose = verbose
-                _settings.effective_categories = _compute_effective_categories(cache_categories, categories_mode, verbose)
-                
-                # RU: Пересоздаем папки кэша для новых категорий
-                for category in _settings.effective_categories:
-                    (_settings.root / category).mkdir(exist_ok=True)
-                
-                # RU: Применяем патч заново с новыми настройками
-                if _folder_paths_patched:
-                    _apply_folder_paths_patch()
             
             # RU: Возвращаем результат очистки или статус инициализации
             if clear_result:
@@ -651,7 +645,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.9.1",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.0.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
