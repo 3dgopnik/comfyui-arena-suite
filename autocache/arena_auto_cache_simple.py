@@ -25,12 +25,31 @@ _patch_lock = threading.Lock()
 _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
 
 # RU: Whitelist категорий для кэширования
-DEFAULT_WHITELIST = ["checkpoints", "loras", "clip", "clip_vision", "text_encoders"]
+DEFAULT_WHITELIST = [
+    "checkpoints", "loras", "clip", "clip_vision", "text_encoders", "vae", 
+    "controlnet", "diffusion_models", "upscale_models", "embeddings"
+]
 KNOWN_CATEGORIES = [
+    # RU: Основные категории моделей ComfyUI
     "checkpoints", "loras", "clip", "clip_vision", "text_encoders", "vae", "controlnet", 
     "upscale_models", "embeddings", "hypernetworks", "ipadapter", "gligen", 
     "animatediff_models", "t2i_adapter", "diffusion_models", "ultralytics", 
-    "insightface", "inpaint", "pix2pix", "sams", "pulid"
+    "insightface", "inpaint", "pix2pix", "sams", "pulid",
+    
+    # RU: Дополнительные категории из лога ComfyUI
+    "llm", "ipadapter_encoders", "animatediff", "download_model_base",
+    
+    # RU: Специальные категории для GGUF и других форматов
+    "gguf_models", "unet_models", "style_models", "flux_models",
+    
+    # RU: Категории для восстановления лиц и детекции
+    "facerestore_models", "antelopev2", "bbox", "segm",
+    
+    # RU: Категории для апскейлинга
+    "apisr", "stablesr", "supir", "ccsr",
+    
+    # RU: Категории для видео и анимации
+    "video_models", "motion_models", "temporal_models"
 ]
 
 # RU: Статистика копирования
@@ -693,7 +712,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.5.0",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, and safe pruning")
