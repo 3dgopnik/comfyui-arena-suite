@@ -239,11 +239,13 @@ def _apply_folder_paths_patch():
                     try:
                         original_path = folder_paths.get_full_path_origin(folder_name, filename)
                         if os.path.exists(original_path):
-                            # RU: Планируем копирование в фоне
+                            # RU: Планируем копирование в фоне только для существующих файлов
                             _schedule_cache_copy(folder_name, filename, original_path)
                             if _settings.verbose:
                                 print(f"[ArenaAutoCache] Cache miss: {filename}")
                             return original_path
+                        elif _settings.verbose:
+                            print(f"[ArenaAutoCache] Skipping non-existent file: {filename}")
                     except Exception as e:
                         if _settings.verbose:
                             print(f"[ArenaAutoCache] Error resolving {filename}: {e}")
@@ -630,12 +632,14 @@ class ArenaAutoCacheSimple:
 # RU: Автопатч при импорте (критический порядок!)
 _load_env_file()  # RU: Сначала загружаем .env
 
+# RU: Отключаем автоматическое кэширование при старте
+# Arena AutoCache должен кэшировать ТОЛЬКО модели, используемые в активном workflow
 if os.environ.get("ARENA_AUTOCACHE_AUTOPATCH") == "1":
     try:
         _settings = _init_settings()
         _apply_folder_paths_patch()
         _ensure_copy_thread()
-        print("[ArenaAutoCache] Autopatch on import enabled")
+        print("[ArenaAutoCache] Autopatch on import enabled - OnDemand caching only")
     except Exception as e:
         print(f"[ArenaAutoCache] Error in autopatch on import: {e}")
 
@@ -649,3 +653,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
 print("[ArenaAutoCache] Loaded production-ready OnDemand-only node with robust env handling, thread-safety, safe pruning, and autopatch")
+print("[ArenaAutoCache] OnDemand caching: models are cached ONLY when used in active workflows")
