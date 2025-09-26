@@ -262,11 +262,11 @@ class ArenaAutoCache:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "ArenaAutoCache v3.3.5": ArenaAutoCache,
+    "ArenaAutoCache Base": ArenaAutoCache,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache v3.3.5": "🅰️ Arena AutoCache v3.3.5",
+    "ArenaAutoCache Base": "🅰️ Arena AutoCache Base",
 }
 
 print("[ArenaAutoCache] Loaded simplified version - OnDemand only for model caching")

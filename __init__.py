@@ -26,12 +26,12 @@ if str(_current_dir) not in sys.path:
     sys.path.insert(0, str(_current_dir))
 
 # Import only essential nodes
-# Arena AutoCache v3.3.5
+# Arena AutoCache Base
 try:
     from autocache.arena_auto_cache_simple import NODE_CLASS_MAPPINGS as _autocache_mappings, NODE_DISPLAY_NAME_MAPPINGS as _autocache_display
     NODE_CLASS_MAPPINGS.update(_autocache_mappings)
     NODE_DISPLAY_NAME_MAPPINGS.update(_autocache_display)
-    print("[Arena Suite] Loaded Arena AutoCache v3.3.5")
+    print("[Arena Suite] Loaded Arena AutoCache Base")
 except Exception as e:
     print(f"[Arena Suite] Failed to load Arena AutoCache: {e}")
 
