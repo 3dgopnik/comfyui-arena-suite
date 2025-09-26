@@ -1,8 +1,8 @@
-# 🅰️ Arena AutoCache Base - OnDemand кеширование моделей
+# 🅰️ Arena AutoCache Base
 
 ## Описание
 
-Базовая версия Arena AutoCache с OnDemand режимом кеширования. Модели кешируются автоматически при первом обращении через патч folder_paths, обеспечивая прозрачное кеширование без анализа workflow.
+Базовая нода Arena AutoCache с OnDemand режимом кеширования моделей. Модели кешируются автоматически при первом обращении через патч folder_paths, обеспечивая прозрачное кеширование без анализа workflow.
 
 **Базовая нода готова для модификации и расширения функциональности.**
 
@@ -28,7 +28,7 @@
 
 ### Базовая настройка
 
-1. **Добавьте ноду Arena AutoCache** на ваш canvas
+1. **Добавьте ноду Arena AutoCache Base** на ваш canvas
 2. **Настройте параметры** (опционально):
    - `categories`: Список категорий моделей для кэширования
    - `min_size_mb`: Минимальный размер файлов для кеширования
@@ -78,24 +78,16 @@
 
 ### 1. Первый запуск
 ```
-[ArenaAutoCache] Starting automatic model detection and caching
-[ArenaAutoCache] Analyzing current workflow for all models...
-[ArenaAutoCache] Found workflow data, analyzing for models...
-[ArenaAutoCache] Workflow analysis found X models
-[ArenaAutoCache] Starting cache warmup for X models
-[ArenaAutoCache] 🔄 Caching: model_name.safetensors (1024.0 MB)
-[ArenaAutoCache] ✅ Cached: model_name.safetensors
+[ArenaAutoCache] OnDemand caching enabled - models will be cached on first use
+[ArenaAutoCache] Applied folder_paths patch
+[ArenaAutoCache] Cache miss: model_name.safetensors
+[ArenaAutoCache] Scheduled cache copy: model_name.safetensors
+[ArenaAutoCache] Caching: model_name.safetensors
 ```
 
 ### 2. Повторный запуск
 ```
-[ArenaAutoCache] Cache warmup already completed in this session
-```
-
-### 3. Принудительный прогрев
-```
-[ArenaAutoCache] Force warmup requested, resetting session state
-[ArenaAutoCache] Starting cache warmup for X models
+[ArenaAutoCache] Cache hit: model_name.safetensors (already cached)
 ```
 
 ## Настройка переменных окружения
@@ -108,9 +100,7 @@ ARENA_CACHE_ENABLE=true
 ARENA_CACHE_VERBOSE=false
 
 # Настройки фильтрации
-ARENA_CACHE_MIN_SIZE_GB=1.0
-ARENA_CACHE_MIN_SIZE_MB=1024.0
-ARENA_CACHE_SKIP_HARDCODED=true
+ARENA_CACHE_MIN_SIZE_MB=10.0
 ```
 
 ## Результат работы
@@ -120,15 +110,12 @@ ARENA_CACHE_SKIP_HARDCODED=true
 ```json
 {
   "ok": true,
-  "message": "Successfully processed 5 models",
-  "warmup_completed": true,
-  "models_found": 5,
-  "cached": 3,
-  "skipped": 2,
-  "errors": 0,
-  "categories_checked": ["checkpoints", "loras", "vaes"],
-  "models": [...],
-  "cache_results": [...]
+  "cache_mode": "OnDemand",
+  "message": "OnDemand caching enabled - models will be cached on first use",
+  "patched": true,
+  "min_size_mb": 10.0,
+  "categories": ["checkpoints", "loras", "vaes"],
+  "description": "Models will be automatically cached when first loaded via patched get_full_path (min size: 10.0 MB)"
 }
 ```
 
@@ -179,3 +166,11 @@ categories = ""  # Пустая строка = все найденные мод�
 - **Проверка существования**: Избегает повторного копирования
 - **Фильтрация по размеру**: Пропускает маленькие файлы
 - **Умное определение путей**: Автоматически находит модели в папках ComfyUI
+
+## Готовность к модификации
+
+Базовая нода Arena AutoCache Base готова для:
+- Добавления новых режимов кеширования
+- Расширения функциональности
+- Создания специализированных версий
+- Интеграции с другими системами
