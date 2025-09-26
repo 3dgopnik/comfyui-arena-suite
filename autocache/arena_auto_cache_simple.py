@@ -26,8 +26,7 @@ _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
 
 # RU: Whitelist категорий для кэширования
 DEFAULT_WHITELIST = [
-    "checkpoints", "loras", "clip", "clip_vision", "text_encoders", "vae", 
-    "controlnet", "diffusion_models", "upscale_models", "embeddings"
+    "checkpoints", "loras", "clip", "clip_vision", "text_encoders"
 ]
 KNOWN_CATEGORIES = [
     # RU: Основные категории моделей ComfyUI
@@ -88,11 +87,11 @@ def _compute_effective_categories(cache_categories: str = "", categories_mode: s
     # RU: Выбираем источник категорий (приоритет: нода > .env > default)
     source_categories = node_categories if node_categories else (env_categories if env_categories else [])
     
-    # RU: Если категории пустые - кэшируем все известные категории
+    # RU: Если категории пустые - используем DEFAULT_WHITELIST
     if not source_categories:
-        effective = KNOWN_CATEGORIES.copy()
+        effective = DEFAULT_WHITELIST.copy()
         if verbose:
-            print(f"[ArenaAutoCache] No categories specified - caching ALL known categories: {len(effective)} categories")
+            print(f"[ArenaAutoCache] No categories specified - using DEFAULT_WHITELIST: {', '.join(effective)}")
     else:
         # RU: Фильтруем только известные категории
         valid_categories = [cat for cat in source_categories if cat in KNOWN_CATEGORIES]
@@ -115,9 +114,22 @@ def _compute_effective_categories(cache_categories: str = "", categories_mode: s
     
     return effective
 
+def _find_comfy_root():
+    """RU: Находит корень ComfyUI, идя вверх от текущего файла."""
+    current_path = Path(__file__).parent
+    while current_path != current_path.parent:
+        if (current_path / "web").exists() or (current_path / "models").exists():
+            return current_path
+        current_path = current_path.parent
+    return None
+
 def _load_env_file():
     """RU: Загружает настройки из user/arena_autocache.env если файл существует."""
-    env_file = Path("user/arena_autocache.env")
+    comfy_root = _find_comfy_root()
+    if not comfy_root:
+        return
+    
+    env_file = comfy_root / "user" / "arena_autocache.env"
     if env_file.exists():
         try:
             with open(env_file, 'r', encoding='utf-8') as f:
@@ -133,7 +145,11 @@ def _load_env_file():
 def _save_env_file(kv: Dict[str, str], remove_keys: List[str] = None):
     """RU: Сохраняет настройки в user/arena_autocache.env с поддержкой удаления ключей."""
     try:
-        env_dir = Path("user")
+        comfy_root = _find_comfy_root()
+        if not comfy_root:
+            return
+        
+        env_dir = comfy_root / "user"
         env_dir.mkdir(exist_ok=True)
         env_file = env_dir / "arena_autocache.env"
         
@@ -190,7 +206,12 @@ def _init_settings(cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb
     if cache_root:
         root = Path(cache_root)
     else:
-        root = Path(os.environ.get("ARENA_CACHE_ROOT", Path.home() / "Documents" / "ComfyUI-Cache"))
+        comfy_root = _find_comfy_root()
+        if comfy_root:
+            default_root = comfy_root / "user" / "ComfyUI-Cache"
+        else:
+            default_root = Path.home() / "Documents" / "ComfyUI-Cache"
+        root = Path(os.environ.get("ARENA_CACHE_ROOT", default_root))
     
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
@@ -301,7 +322,7 @@ def _copy_worker():
     
     while True:
         try:
-            category, filename, source_path, cache_path = _copy_queue.get(timeout=1)
+            category, filename, source_path, cache_path = _copy_queue.get()
             
             _copy_status["current_file"] = filename
             _copy_status["total_jobs"] += 1
@@ -342,8 +363,10 @@ def _copy_worker():
             
             _copy_queue.task_done()
             
-        except:
-            break
+        except Exception as e:
+            if _settings and _settings.verbose:
+                print(f"[ArenaAutoCache] Copy worker error: {e}")
+            continue
 
 def _prune_cache_if_needed():
     """RU: Очищает кэш при превышении лимита (LRU)."""
@@ -394,6 +417,20 @@ def _clear_cache_folder():
         if not _settings.root.exists():
             return
         
+        # RU: Проверяем безопасность пути
+        cache_path = _settings.root.resolve()
+        
+        # RU: Проверяем, что это не корень диска или UNC путь
+        if cache_path.is_absolute() and len(cache_path.parts) < 2:
+            print("[ArenaAutoCache] Safety check failed: path too shallow")
+            return
+        
+        # RU: Проверяем, что это не системные папки
+        forbidden_parts = {"C:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "I:\\", "J:\\", "K:\\", "L:\\", "M:\\", "N:\\", "O:\\", "P:\\", "Q:\\", "R:\\", "S:\\", "T:\\", "U:\\", "V:\\", "W:\\", "X:\\", "Y:\\", "Z:\\"}
+        if str(cache_path) in forbidden_parts:
+            print("[ArenaAutoCache] Safety check failed: cannot clear drive root")
+            return
+        
         # RU: Подсчитываем размер перед очисткой
         total_size = 0
         for category in _settings.effective_categories:
@@ -421,61 +458,6 @@ def _clear_cache_folder():
     except Exception as e:
         print(f"[ArenaAutoCache] Error clearing cache: {e}")
 
-def _patch_hardcoded_paths():
-    """RU: Патчит жестко прописанные пути для перенаправления в кэш."""
-    import os
-    
-    hardcoded_paths = [
-        "C:\\ComfyUI\\models\\ultralytics\\bbox",
-        "C:\\ComfyUI\\models\\ultralytics\\segm",
-    ]
-    
-    for hardcoded_path in hardcoded_paths:
-        if os.path.exists(hardcoded_path):
-            if 'ultralytics' in hardcoded_path:
-                category = 'ultralytics'
-            else:
-                category = 'checkpoints'
-            
-            cache_path = _settings.root / category
-            if cache_path.exists():
-                try:
-                    if os.path.exists(hardcoded_path):
-                        import shutil
-                        shutil.rmtree(hardcoded_path)
-                    
-                    os.symlink(str(cache_path), hardcoded_path)
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Created symlink: {hardcoded_path} -> {cache_path}")
-                except Exception as e:
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Failed to create symlink: {e}")
-    
-    original_exists = os.path.exists
-    
-    def patched_exists(path):
-        result = original_exists(path)
-        
-        if not result and path.startswith("C:\\ComfyUI\\models\\"):
-            if 'ultralytics' in path:
-                category = 'ultralytics'
-            elif 'checkpoints' in path:
-                category = 'checkpoints'
-            elif 'loras' in path:
-                category = 'loras'
-            else:
-                category = 'checkpoints'
-            
-            filename = os.path.basename(path)
-            cache_path = _settings.root / category / filename
-            if cache_path.exists():
-                if _settings.verbose:
-                    print(f"[ArenaAutoCache] Redirecting hardcoded path: {path} -> {cache_path}")
-                return True
-        
-        return result
-    
-    os.path.exists = patched_exists
 
 # RU: Загружаем настройки при импорте
 _load_env_file()
@@ -511,7 +493,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
     
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v3.6.5 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v3.7.0 - Production-ready node with autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -521,7 +503,7 @@ class ArenaAutoCacheSimple:
                 "min_size_mb": ("FLOAT", {"default": 10.0, "min": 0.1, "max": 1000.0, "step": 0.1}),
                 "max_cache_gb": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 1000.0, "step": 1.0}),
                 "verbose": ("BOOLEAN", {"default": True}),
-                "cache_categories": ("STRING", {"default": "checkpoints,loras", "multiline": False}),
+                "cache_categories": ("STRING", {"default": "", "multiline": False}),
                 "categories_mode": (["extend", "override"], {"default": "extend"}),
                 "clear_cache_now": ("BOOLEAN", {"default": False}),
             }
@@ -533,17 +515,20 @@ class ArenaAutoCacheSimple:
     CATEGORY = "Arena"
     
     def run(self, cache_root: str = "", min_size_mb: float = 10.0, max_cache_gb: float = 100.0, 
-            verbose: bool = True, cache_categories: str = "checkpoints,loras", 
+            verbose: bool = True, cache_categories: str = "", 
             categories_mode: str = "extend", clear_cache_now: bool = False):
         """RU: Основная функция ноды."""
         global _settings, _copy_thread_started
         
         try:
-            # RU: Обновляем переменные окружения
-            os.environ["ARENA_CACHE_ROOT"] = cache_root
+            # RU: Обновляем переменные окружения (только непустые значения)
+            if cache_root:
+                os.environ["ARENA_CACHE_ROOT"] = cache_root
+            if cache_categories:
+                os.environ["ARENA_CACHE_CATEGORIES"] = cache_categories
+            if categories_mode:
+                os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
             os.environ["ARENA_CACHE_VERBOSE"] = "1" if verbose else "0"
-            os.environ["ARENA_CACHE_CATEGORIES"] = cache_categories
-            os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
             
             # RU: Инициализируем настройки
             _settings = _init_settings(cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode)
@@ -560,8 +545,6 @@ class ArenaAutoCacheSimple:
                 if verbose:
                     print("[ArenaAutoCache] Started background copy thread")
             
-            # RU: Патчим жестко прописанные пути
-            _patch_hardcoded_paths()
             
             # RU: Очищаем кэш если запрошено
             if clear_cache_now:
@@ -610,7 +593,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.6.5",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v3.7.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with autopatch and OnDemand caching")
