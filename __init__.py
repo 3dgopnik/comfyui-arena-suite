@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from types import ModuleType
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +28,8 @@ if str(_current_dir) not in sys.path:
 # Import only essential nodes
 # Arena AutoCache Base
 try:
-    from autocache.arena_auto_cache_simple import NODE_CLASS_MAPPINGS as _autocache_mappings, NODE_DISPLAY_NAME_MAPPINGS as _autocache_display
+    from autocache.arena_auto_cache_simple import NODE_CLASS_MAPPINGS as _autocache_mappings
+    from autocache.arena_auto_cache_simple import NODE_DISPLAY_NAME_MAPPINGS as _autocache_display
     NODE_CLASS_MAPPINGS.update(_autocache_mappings)
     NODE_DISPLAY_NAME_MAPPINGS.update(_autocache_display)
     print("[Arena Suite] Loaded Arena AutoCache Base")
@@ -37,7 +38,8 @@ except Exception as e:
 
 # Arena Make Tiles Segments
 try:
-    from legacy.arena_make_tiles_segs import NODE_CLASS_MAPPINGS as _legacy_mappings, NODE_DISPLAY_NAME_MAPPINGS as _legacy_display
+    from legacy.arena_make_tiles_segs import NODE_CLASS_MAPPINGS as _legacy_mappings
+    from legacy.arena_make_tiles_segs import NODE_DISPLAY_NAME_MAPPINGS as _legacy_display
     NODE_CLASS_MAPPINGS.update(_legacy_mappings)
     NODE_DISPLAY_NAME_MAPPINGS.update(_legacy_display)
     print("[Arena Suite] Loaded Arena Make Tiles Segments")
@@ -49,6 +51,6 @@ print(f"[Arena Suite] Successfully loaded {len(NODE_CLASS_MAPPINGS)} Arena nodes
 # Export the required mappings for ComfyUI
 __all__ = [
     "NODE_CLASS_MAPPINGS",
-    "NODE_DISPLAY_NAME_MAPPINGS", 
+    "NODE_DISPLAY_NAME_MAPPINGS",
     "WEB_DIRECTORY",
 ]

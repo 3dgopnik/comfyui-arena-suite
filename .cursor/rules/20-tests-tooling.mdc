@@ -1,0 +1,139 @@
+---
+type: Agent Requested
+name: Tests & Tooling
+description: Генерация/поддержка тестов, линтеров и хуков.
+---
+
+## Тестирование
+- pytest: для каждой ноды — тесты на happy path и крайние случаи.
+- Импорт ноды по модулю, инициализация класса, вызов метода `FUNCTION`.
+- Тесты детерминированные, без зависимости от глобального состояния ComfyUI.
+
+## Структура тестов
+```
+tests/
+├── __init__.py
+├── conftest.py              # pytest fixtures
+├── test_nodes/
+│   ├── __init__.py
+│   ├── test_arena_math.py   # тесты математических нод
+│   └── test_arena_image.py  # тесты обработки изображений
+└── fixtures/                # тестовые данные
+    ├── images/
+    └── models/
+```
+
+## Пример теста ноды
+```python
+import pytest
+import torch
+from arena.nodes.arena_math import ArenaAddNode
+
+class TestArenaAddNode:
+    def test_add_basic(self):
+        """Test basic addition functionality."""
+        node = ArenaAddNode()
+        result = node.compute(a=2.0, b=3.0)
+        assert result[0] == 5.0
+
+    def test_add_with_negative(self):
+        """Test addition with negative numbers."""
+        node = ArenaAddNode()
+        result = node.compute(a=-1.0, b=2.0)
+        assert result[0] == 1.0
+
+    def test_add_type_validation(self):
+        """Test input type validation."""
+        node = ArenaAddNode()
+        with pytest.raises(TypeError, match="must be numeric"):
+            node.compute(a="invalid", b=1.0)
+```
+
+## Инструменты качества
+
+### Ruff (линтинг и форматирование)
+```toml
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+```
+
+### MyPy (типизация)
+```ini
+[mypy]
+python_version = 3.11
+strict = True
+warn_return_any = True
+warn_unused_configs = True
+disallow_untyped_defs = True
+disallow_incomplete_defs = True
+check_untyped_defs = True
+disallow_untyped_decorators = True
+no_implicit_optional = True
+warn_redundant_casts = True
+warn_unused_ignores = True
+warn_no_return = True
+warn_unreachable = True
+strict_equality = True
+```
+
+### Pre-commit hooks
+```yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+```
+
+## Команды для проверки
+```bash
+# Линтинг и форматирование
+ruff check .
+ruff format .
+
+# Типизация
+mypy .
+
+# Тесты
+pytest -v
+
+# Все проверки
+pre-commit run --all-files
+```
+
+## При ошибках инструментов
+- Показывать точные команды для исправления
+- Предоставлять диффы фиксов
+- Объяснять причины ошибок типизации

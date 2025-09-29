@@ -1,0 +1,95 @@
+---
+type: Always
+name: ComfyUI Desktop Paths
+description: Справочник путей и артефактов для вашей среды.
+---
+
+## Основные пути
+
+### ComfyUI Desktop Installation
+- **ComfyUI Desktop**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\`
+- **ComfyUI Core**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\`
+- **User Data**: `c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\`
+
+### Development Environment
+- **Пользовательская папка**: `c:\\ComfyUI\\`
+- **Python Virtual Environment**: `c:\\ComfyUI\\.venv\\`
+- **Current Project**: `c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\`
+
+### Логи и конфигурация
+- **Логи ComfyUI**: `c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\logs\\`
+- **Extra Model Paths**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\extra_model_paths.yaml`
+- **ComfyUI Config**: `c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\config.yaml`
+
+### Web Extensions
+- **Основной путь**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\`
+- **Альтернативный путь**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web_custom_versions\\desktop_app\\extensions\\`
+- **Arena Extension**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena\\`
+
+### Custom Nodes
+- **Custom Nodes Directory**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\`
+- **Arena Node**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\`
+
+## GitHub и репозитории
+- **GitHub Repository**: https://github.com/3dgopnik/comfyui-arena-suite
+- **Local Git**: `c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\.git\\`
+
+## Модели и кэш
+- **Models Directory**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\models\\`
+- **Arena Cache**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\arena_cache\\`
+- **Temp Files**: `c:\\Users\\acherednikov\\AppData\\Local\\Temp\\comfyui_arena\\`
+
+## Python Environment
+- **Python Executable**: `c:\\ComfyUI\\.venv\\Scripts\\python.exe`
+- **Pip Cache**: `c:\\Users\\acherednikov\\AppData\\Local\\pip\\cache\\`
+- **Virtual Environment**: `c:\\ComfyUI\\.venv\\Lib\\site-packages\\`
+
+## Полезные команды
+
+### Проверка путей
+```powershell
+# Проверка существования ComfyUI
+Test-Path "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\"
+
+# Проверка custom nodes
+Get-ChildItem "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\"
+
+# Проверка логов
+Get-ChildItem "c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\logs\\" | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+```
+
+### Синхронизация разработки
+```powershell
+# Копирование файлов из dev в production
+Copy-Item "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\*" -Destination "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\" -Recurse -Force
+
+# Копирование web extensions
+Copy-Item "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\web\\*" -Destination "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena\\" -Recurse -Force
+```
+
+## Переменные окружения
+```powershell
+# ComfyUI paths
+$env:COMFYUI_ROOT = "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\"
+$env:ARENA_DEV_ROOT = "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\"
+$env:ARENA_CACHE_DIR = "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\arena_cache\\"
+```
+
+## Отладка путей
+```python
+# Python скрипт для проверки путей
+import os
+import sys
+
+paths_to_check = [
+    r"c:\Users\acherednikov\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\",
+    r"c:\ComfyUI\custom_nodes\СomfyUI-Arena\",
+    r"c:\Users\acherednikov\AppData\Roaming\ComfyUI\logs\",
+]
+
+for path in paths_to_check:
+    exists = os.path.exists(path)
+    print(f"{path}: {'✓' if exists else '✗'}")
+    if exists:
+        print(f"  Files: {len(os.listdir(path))}")
+```

@@ -11,8 +11,9 @@ import importlib
 import importlib.util
 import logging
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
+
 
 LOGGER = logging.getLogger(__name__)
 IMPACT_REPO_URL = "https://github.com/ltdrdata/ComfyUI-Impact-Pack"

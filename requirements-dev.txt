@@ -1,0 +1,46 @@
+# ComfyUI Arena Suite v4 - Development Dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include production dependencies
+-r requirements.txt
+
+# Code Quality & Linting
+ruff>=0.1.6              # Fast Python linter and formatter
+mypy>=1.7.0              # Static type checker
+black>=23.0.0            # Code formatter (backup to ruff)
+isort>=5.12.0            # Import sorter (backup to ruff)
+
+# Testing
+pytest>=7.4.0            # Testing framework
+pytest-cov>=4.1.0        # Coverage reporting
+pytest-mock>=3.11.0      # Mocking utilities
+pytest-xdist>=3.3.0      # Parallel test execution
+
+# Pre-commit hooks
+pre-commit>=3.5.0        # Git hooks framework
+
+# Documentation
+pydocstyle>=6.3.0        # Docstring style checker
+sphinx>=7.1.0            # Documentation generator
+sphinx-rtd-theme>=1.3.0  # Read the Docs theme
+
+# Security
+bandit>=1.7.5            # Security linter
+safety>=2.3.0            # Dependency vulnerability scanner
+
+# Development utilities
+ipython>=8.15.0          # Enhanced REPL
+jupyter>=1.0.0           # Notebook support
+rich>=13.5.0             # Rich text and beautiful formatting
+click>=8.1.0             # Command line interface creation
+
+# Type stubs
+types-requests>=2.31.0   # Type stubs for requests
+types-PyYAML>=6.0.0      # Type stubs for PyYAML
+types-toml>=0.10.0       # Type stubs for TOML
+
+# Optional: ComfyUI development
+# torch>=2.0.0            # PyTorch (if needed for testing)
+# torchvision>=0.15.0     # Computer vision (if needed for testing)
+# numpy>=1.24.0           # Numerical computing (if needed for testing)
+# pillow>=10.0.0          # Image processing (if needed for testing)
