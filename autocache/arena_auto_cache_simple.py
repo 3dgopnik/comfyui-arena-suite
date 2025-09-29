@@ -34,8 +34,20 @@ _scheduled_tasks: set[tuple[str, str]] = set()  # (category, filename)
 _patch_lock = threading.Lock()
 _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
 
-# RU: Whitelist категорий для кэширования
-DEFAULT_WHITELIST = ["checkpoints", "loras", "clip", "clip_vision", "text_encoders"]
+# RU: Whitelist категорий для кэширования - основные категории моделей
+DEFAULT_WHITELIST = [
+    "checkpoints",      # RU: Основные модели (CheckpointLoaderSimple, CheckpointLoader, Load Diffusion Model)
+    "loras",           # RU: LoRA модели
+    "clip",            # RU: CLIP модели (Load CLIP)
+    "vae",             # RU: VAE модели
+    "controlnet",      # RU: ControlNet модели
+    "upscale_models",  # RU: Модели апскейлинга
+    "embeddings",      # RU: Embeddings
+    "hypernetworks",   # RU: Hypernetworks
+    "gguf_models",     # RU: GGUF модели (CLIPLoader GGUF, Unet loader GGUF)
+    "unet_models",     # RU: UNet модели (UNETLoader, отдельные UNet компоненты)
+    "diffusion_models", # RU: Diffusion модели (Load Diffusion Model)
+]
 KNOWN_CATEGORIES = [
     # RU: Основные категории моделей ComfyUI
     "checkpoints",
@@ -104,10 +116,19 @@ def _compute_effective_categories(
     cache_categories: str = "", categories_mode: str = "extend", verbose: bool = False
 ) -> list[str]:
     """RU: Вычисляет эффективные категории для кэширования."""
-    # RU: Маппинг для правильных названий категорий
+    # RU: Маппинг для правильных названий категорий (поддерживает разные регистры)
     CATEGORY_MAPPING = {
+        # RU: Основные модели (разные регистры)
         "checkpoint": "checkpoints",
-        "lora": "loras", 
+        "Checkpoint": "checkpoints",
+        "CHECKPOINT": "checkpoints",
+        "lora": "loras",
+        "LoRA": "loras", 
+        "LoRa": "loras",
+        "LORA": "loras",
+        "lora": "loras",
+        
+        # RU: Остальные категории
         "vae": "vae",
         "clip": "clip",
         "controlnet": "controlnet",
@@ -148,17 +169,17 @@ def _compute_effective_categories(
     # RU: Парсим категории из ноды
     node_categories = []
     if cache_categories and cache_categories.strip():
-        raw_categories = [cat.strip().lower() for cat in cache_categories.split(",") if cat.strip()]
-        # RU: Применяем маппинг для правильных названий
-        node_categories = [CATEGORY_MAPPING.get(cat, cat) for cat in raw_categories]
+        raw_categories = [cat.strip() for cat in cache_categories.split(",") if cat.strip()]
+        # RU: Применяем маппинг для правильных названий (сохраняем регистр)
+        node_categories = [CATEGORY_MAPPING.get(cat, cat.lower()) for cat in raw_categories]
 
     # RU: Парсим категории из .env
     env_categories = []
     env_categories_str = os.environ.get("ARENA_CACHE_CATEGORIES", "")
     if env_categories_str and env_categories_str.strip():
-        env_categories = [
-            cat.strip().lower() for cat in env_categories_str.split(",") if cat.strip()
-        ]
+        raw_env_categories = [cat.strip() for cat in env_categories_str.split(",") if cat.strip()]
+        # RU: Применяем маппинг для правильных названий (сохраняем регистр)
+        env_categories = [CATEGORY_MAPPING.get(cat, cat.lower()) for cat in raw_env_categories]
 
     # RU: Определяем режим (приоритет: нода > .env > default)
     mode = categories_mode
@@ -172,8 +193,9 @@ def _compute_effective_categories(
         node_categories if node_categories else (env_categories if env_categories else [])
     )
 
-    # RU: Если категории пустые - используем DEFAULT_WHITELIST
+    # RU: Умная логика взаимодействия с .env файлом
     if not source_categories:
+        # RU: Если категории пустые - используем DEFAULT_WHITELIST
         effective = DEFAULT_WHITELIST.copy()
         if verbose:
             print(
@@ -187,11 +209,20 @@ def _compute_effective_categories(
         if unknown_categories and verbose:
             print(f"[ArenaAutoCache] Unknown categories ignored: {', '.join(unknown_categories)}")
 
-        # RU: Вычисляем эффективные категории
-        if mode == "override":
-            effective = valid_categories if valid_categories else DEFAULT_WHITELIST
-        else:  # extend
-            effective = list(set(DEFAULT_WHITELIST + valid_categories))
+        # RU: Умная логика: дополняем недостающие категории из DEFAULT_WHITELIST
+        if valid_categories:
+            # RU: Добавляем недостающие категории из DEFAULT_WHITELIST
+            missing_categories = [cat for cat in DEFAULT_WHITELIST if cat not in valid_categories]
+            if missing_categories and verbose:
+                print(f"[ArenaAutoCache] Adding missing categories: {', '.join(missing_categories)}")
+            
+            # RU: Объединяем существующие + недостающие
+            effective = list(set(valid_categories + missing_categories))
+        else:
+            # RU: Если все категории неизвестные - используем DEFAULT_WHITELIST
+            effective = DEFAULT_WHITELIST.copy()
+            if verbose:
+                print(f"[ArenaAutoCache] All categories unknown - using DEFAULT_WHITELIST: {', '.join(effective)}")
 
     # RU: Сортируем для консистентности
     effective.sort()
@@ -224,13 +255,51 @@ def _load_env_file():
     env_file = comfy_root / "user" / "arena_autocache.env"
     if env_file.exists():
         try:
+            loaded_count = 0
             with open(env_file, encoding="utf-8") as f:
-                for line in f:
+                for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, value = line.split("=", 1)
-                        os.environ[key.strip()] = value.strip()
-            print(f"[ArenaAutoCache] Loaded env from {env_file}")
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # RU: Валидация ключей
+                        if not key or not value:
+                            print(f"[ArenaAutoCache] Warning: Empty key or value in {env_file}:{line_num}")
+                            continue
+                            
+                        # RU: Валидация известных ключей
+                        known_keys = {
+                            "ARENA_CACHE_ROOT", "ARENA_CACHE_MIN_SIZE_MB", "ARENA_CACHE_MAX_GB",
+                            "ARENA_CACHE_VERBOSE", "ARENA_CACHE_CATEGORIES", "ARENA_CACHE_CATEGORIES_MODE",
+                            "ARENA_AUTO_CACHE_ENABLED", "ARENA_AUTOCACHE_AUTOPATCH"
+                        }
+                        
+                        if key not in known_keys:
+                            print(f"[ArenaAutoCache] Warning: Unknown key '{key}' in {env_file}:{line_num}")
+                        
+                        # RU: Валидация значений для числовых параметров
+                        if key in ("ARENA_CACHE_MIN_SIZE_MB", "ARENA_CACHE_MAX_GB"):
+                            try:
+                                float(value)
+                            except ValueError:
+                                print(f"[ArenaAutoCache] Warning: Invalid numeric value '{value}' for {key} in {env_file}:{line_num}")
+                                continue
+                        
+                        # RU: Валидация булевых значений
+                        if key in ("ARENA_CACHE_VERBOSE", "ARENA_AUTO_CACHE_ENABLED", "ARENA_AUTOCACHE_AUTOPATCH"):
+                            if value.lower() not in ("true", "false", "1", "0", "yes", "no"):
+                                print(f"[ArenaAutoCache] Warning: Invalid boolean value '{value}' for {key} in {env_file}:{line_num}")
+                        
+                        os.environ[key] = value
+                        loaded_count += 1
+            
+            if loaded_count > 0:
+                print(f"[ArenaAutoCache] Loaded {loaded_count} settings from {env_file}")
+            else:
+                print(f"[ArenaAutoCache] No valid settings found in {env_file}")
+                
         except Exception as e:
             print(f"[ArenaAutoCache] Error loading env file: {e}")
 
@@ -289,38 +358,68 @@ def _init_settings(
     """RU: Инициализирует настройки кэширования с резолвингом путей по умолчанию."""
     global _settings
 
-    # RU: Загружаем .env файл только если не переданы параметры из ноды (deferred режим)
-    if not cache_root and not cache_categories:
-        _load_env_file()
+    # RU: Загружаем .env файл при каждой инициализации для актуальности настроек
+    _load_env_file()
 
-    # RU: Env-aware инициализация для deferred режима
-    if not cache_root and not min_size_mb and not max_cache_gb and not verbose:
-        # RU: Читаем из .env если аргументы не переданы (deferred режим)
-        min_size_mb = float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "10.0"))
-        max_cache_gb = float(os.environ.get("ARENA_CACHE_MAX_GB", "0.0"))
-        verbose = os.environ.get("ARENA_CACHE_VERBOSE", "false").lower() in ("true", "1", "yes")
 
+    # RU: Приоритет настроек: параметры ноды > .env файл > значения по умолчанию
+    # RU: Если параметр ноды пустой/по умолчанию, используем значение из .env
+    
+    # RU: Cache root - приоритет: нода > .env > default
+    # RU: Если cache_root пустой или None, используем .env
+    if not cache_root or cache_root.strip() == "":
+        env_cache_root = os.environ.get("ARENA_CACHE_ROOT", "")
+        if env_cache_root:
+            cache_root = env_cache_root
+    
+    # RU: Min size - приоритет: нода > .env > default (10.0)
+    if min_size_mb == 10.0:  # RU: Значение по умолчанию
+        env_min_size = os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "")
+        if env_min_size:
+            try:
+                min_size_mb = float(env_min_size)
+            except ValueError:
+                print(f"[ArenaAutoCache] Invalid ARENA_CACHE_MIN_SIZE_MB: {env_min_size}, using default 10.0")
+                min_size_mb = 10.0
+    
+    # RU: Max cache size - приоритет: нода > .env > default (0.0)
+    if max_cache_gb == 0.0:  # RU: Значение по умолчанию
+        env_max_cache = os.environ.get("ARENA_CACHE_MAX_GB", "")
+        if env_max_cache:
+            try:
+                max_cache_gb = float(env_max_cache)
+            except ValueError:
+                print(f"[ArenaAutoCache] Invalid ARENA_CACHE_MAX_GB: {env_max_cache}, using default 0.0")
+                max_cache_gb = 0.0
+    
+    # RU: Verbose - приоритет: нода > .env > default (True)
+    # RU: Всегда проверяем .env файл, если в ноде не указано явно
+    env_verbose = os.environ.get("ARENA_CACHE_VERBOSE", "")
+    if env_verbose:
+        verbose = env_verbose.lower() in ("true", "1", "yes")
+    
     # RU: Резолвим корень кэша (приоритет: параметр ноды > env переменная > default)
     if cache_root:
         root = Path(cache_root)
     else:
+        # RU: Определяем корень ComfyUI для относительных путей
         comfy_root = _find_comfy_root()
         if comfy_root:
-            default_root = comfy_root / "user" / "ComfyUI-Cache"
+            default_root = comfy_root / "models" / "arena_cache"
         else:
             default_root = Path.home() / "Documents" / "ComfyUI-Cache"
         root = Path(os.environ.get("ARENA_CACHE_ROOT", default_root))
-
+    
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
-
+    
     # RU: Вычисляем эффективные категории
     effective_categories = _compute_effective_categories(cache_categories, categories_mode, verbose)
-
+    
     # RU: Создаем подпапки для эффективных категорий
     for category in effective_categories:
         (root / category).mkdir(exist_ok=True)
-
+    
     _settings = CacheSettings(
         root=root,
         min_size_mb=min_size_mb,
@@ -328,12 +427,13 @@ def _init_settings(
         verbose=verbose,
         effective_categories=effective_categories,
     )
-
+    
+    
     if verbose:
         print(
             f"[ArenaAutoCache] Cache root: {root} / Min file size: {min_size_mb}MB / Max cache size: {max_cache_gb}GB / Verbose: {verbose}"
         )
-
+    
     return _settings
 
 
@@ -710,7 +810,7 @@ class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
 
     def __init__(self):
-        self.description = "🅰️ Arena AutoCache (simple) v4.2.4 - Production-ready node with deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
+        self.description = "🅰️ Arena AutoCache (simple) v4.3.0 - Production-ready node with smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), enhanced .env support, deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -754,28 +854,49 @@ class ArenaAutoCacheSimple:
         _ensure_patch_applied()
 
         try:
-            # RU: Инициализируем настройки (приоритет: параметры ноды > .env > default)
+            # RU: Инициализируем настройки с правильными приоритетами: нода > .env > default
             _settings = _init_settings(
                 cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode
             )
 
-            # RU: Обновляем переменные окружения после инициализации (только непустые значения)
+            # RU: Обновляем переменные окружения только если переданы явные значения из ноды
+            # RU: Это позволяет .env файлу оставаться приоритетным для непереданных параметров
             if cache_root:
                 os.environ["ARENA_CACHE_ROOT"] = cache_root
-            if cache_categories:
-                os.environ["ARENA_CACHE_CATEGORIES"] = cache_categories
-            if categories_mode:
+            # RU: НЕ перезаписываем cache_categories - приоритет .env файла
+            if categories_mode != "extend":  # RU: Только если не значение по умолчанию
                 os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
+            if min_size_mb != 10.0:  # RU: Только если не значение по умолчанию
+                os.environ["ARENA_CACHE_MIN_SIZE_MB"] = str(min_size_mb)
+            if max_cache_gb != 0.0:  # RU: Только если не значение по умолчанию
+                os.environ["ARENA_CACHE_MAX_GB"] = str(max_cache_gb)
             os.environ["ARENA_CACHE_VERBOSE"] = "1" if verbose else "0"
             
-            # RU: Управляем авто-кешированием (ВАЖНО: по умолчанию ОТКЛЮЧЕНО!)
-            os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1" if auto_cache_enabled else "0"
+            # RU: Управляем авто-кешированием (приоритет: нода > .env > default False)
+            if auto_cache_enabled:
+                os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1"
+            else:
+                # RU: Проверяем .env файл если в ноде не указано явно
+                env_auto_cache = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "")
+                if env_auto_cache:
+                    auto_cache_enabled = env_auto_cache.lower() in ("true", "1", "yes")
+                    if verbose and auto_cache_enabled:
+                        print(f"[ArenaAutoCache] Auto-caching enabled from .env file")
+                else:
+                    # RU: Значение по умолчанию - отключено для безопасности
+                    os.environ["ARENA_AUTO_CACHE_ENABLED"] = "0"
 
-            # RU: Управляем автопатчем
+            # RU: Управляем автопатчем (приоритет: нода > .env > default False)
             if auto_patch_on_start:
                 os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
             else:
-                os.environ.pop("ARENA_AUTOCACHE_AUTOPATCH", None)
+                # RU: Проверяем .env файл если в ноде не указано явно
+                env_autopatch = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "")
+                if not env_autopatch:
+                    # RU: Значение по умолчанию - отключено
+                    os.environ.pop("ARENA_AUTOCACHE_AUTOPATCH", None)
+                elif verbose:
+                    print(f"[ArenaAutoCache] Auto-patch setting from .env: {env_autopatch}")
 
             # RU: Применяем патч folder_paths (только один раз)
             if not _folder_paths_patched:
@@ -795,6 +916,7 @@ class ArenaAutoCacheSimple:
                 clear_result = _clear_cache_folder()
 
             # RU: Сохраняем настройки в .env только если persist_env=True
+            # RU: НЕ сохраняем категории автоматически - приоритет .env файла
             if persist_env:
                 env_data = {
                     "ARENA_CACHE_ROOT": cache_root,
@@ -844,10 +966,10 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.2.4",
+    "ArenaAutoCache (simple)": "🅰️ Arena AutoCache (simple) v4.3.0",
 }
 
-print("[ArenaAutoCache] Loaded production-ready node with OnDemand caching")
+print("[ArenaAutoCache] Loaded production-ready node with smart preset categories and OnDemand caching")
 
 # RU: Отложенный автопатч - ждем готовности ComfyUI
 # RU: НЕ загружаем .env при старте - только через ноду!
