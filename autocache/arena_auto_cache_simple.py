@@ -1057,8 +1057,7 @@ class ArenaAutoCacheSimple:
 
             # RU: Обновляем переменные окружения только если переданы явные значения из ноды
             # RU: Это позволяет .env файлу оставаться приоритетным для непереданных параметров
-            if cache_root:
-                os.environ["ARENA_CACHE_ROOT"] = cache_root
+            # RU: НЕ перезаписываем ARENA_CACHE_ROOT - путь из ноды используется только в памяти
             # RU: НЕ перезаписываем cache_categories - приоритет .env файла
             if categories_mode != "extend":  # RU: Только если не значение по умолчанию
                 os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
@@ -1175,7 +1174,7 @@ class ArenaAutoCacheSimple:
             # RU: Сохраняем настройки в .env только если persist_env=True (НЕ автоматически)
             if persist_env:
                 env_data = {
-                    "ARENA_CACHE_ROOT": cache_root,
+                    # RU: НЕ сохраняем ARENA_CACHE_ROOT - путь из ноды не должен перезаписывать .env
                     "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
                     "ARENA_CACHE_MAX_GB": str(max_cache_gb),
                     "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
