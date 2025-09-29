@@ -806,24 +806,48 @@ def _clear_cache_folder():
 # RU: НЕ загружаем .env при импорте - только через ноду или deferred режим
 
 
+def get_env_default(key: str, default_value, value_type=str):
+    """RU: Получает значение из .env файла с правильным типом данных."""
+    env_value = os.environ.get(key, "")
+    if not env_value:
+        return default_value
+    
+    try:
+        if value_type == bool:
+            return env_value.lower() in ("true", "1", "yes")
+        elif value_type == float:
+            return float(env_value)
+        elif value_type == int:
+            return int(env_value)
+        else:
+            return str(env_value)
+    except (ValueError, TypeError):
+        return default_value
+
+
 class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
 
     def __init__(self):
+        # RU: Загружаем .env файл при создании ноды для мгновенного доступа к настройкам
+        _load_env_file()
         self.description = "🅰️ Arena AutoCache (simple) v4.3.0 - Production-ready node with smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), enhanced .env support, deferred autopatch and OnDemand caching, robust env handling, thread-safety, and safe pruning"
 
     @classmethod
     def INPUT_TYPES(cls):
+        # RU: Загружаем .env файл для получения динамических значений по умолчанию
+        _load_env_file()
+        
         return {
             "required": {
-                "cache_root": ("STRING", {"default": "", "multiline": False}),
-                "min_size_mb": ("FLOAT", {"default": 10.0, "min": 0.1, "max": 1000.0, "step": 0.1}),
-                "max_cache_gb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
-                "verbose": ("BOOLEAN", {"default": True}),
-                "cache_categories": ("STRING", {"default": "", "multiline": False}),
-                "categories_mode": (["extend", "override"], {"default": "extend"}),
-                "auto_patch_on_start": ("BOOLEAN", {"default": False}),
-                "auto_cache_enabled": ("BOOLEAN", {"default": False}),
+                "cache_root": ("STRING", {"default": get_env_default("ARENA_CACHE_ROOT", ""), "multiline": False}),
+                "min_size_mb": ("FLOAT", {"default": get_env_default("ARENA_CACHE_MIN_SIZE_MB", 10.0, float), "min": 0.1, "max": 1000.0, "step": 0.1}),
+                "max_cache_gb": ("FLOAT", {"default": get_env_default("ARENA_CACHE_MAX_GB", 0.0, float), "min": 0.0, "max": 1000.0, "step": 1.0}),
+                "verbose": ("BOOLEAN", {"default": get_env_default("ARENA_CACHE_VERBOSE", True, bool)}),
+                "cache_categories": ("STRING", {"default": get_env_default("ARENA_CACHE_CATEGORIES", ""), "multiline": False}),
+                "categories_mode": (["extend", "override"], {"default": get_env_default("ARENA_CACHE_CATEGORIES_MODE", "extend")}),
+                "auto_patch_on_start": ("BOOLEAN", {"default": get_env_default("ARENA_AUTOCACHE_AUTOPATCH", False, bool)}),
+                "auto_cache_enabled": ("BOOLEAN", {"default": get_env_default("ARENA_AUTO_CACHE_ENABLED", False, bool)}),
                 "persist_env": ("BOOLEAN", {"default": False}),
                 "clear_cache_now": ("BOOLEAN", {"default": False}),
             }
