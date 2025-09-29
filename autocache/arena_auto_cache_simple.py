@@ -995,7 +995,7 @@ class ArenaAutoCacheSimple:
     def __init__(self):
         # RU: Гарантируем загрузку .env файла (идемпотентно)
         _ensure_env_loaded()
-        self.description = "Arena AutoCache (simple) v4.4.0 - Production-ready node with smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), automatic .env management, deferred autopatch, flexible caching modes (ondemand/eager/disabled), robust env handling, thread-safety, safe pruning, enhanced diagnostics, and proper .env loading architecture"
+        self.description = "Arena AutoCache (simple) v4.4.0 - Production-ready node with smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), automatic .env management, deferred autopatch, flexible caching modes (ondemand/eager/disabled), SAFE BY DEFAULT - caching disabled by default, robust env handling, thread-safety, safe pruning, enhanced diagnostics, and proper .env loading architecture"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1010,7 +1010,7 @@ class ArenaAutoCacheSimple:
                 "verbose": ("BOOLEAN", {"default": get_env_default("ARENA_CACHE_VERBOSE", True, bool)}),
                 "cache_categories": ("STRING", {"default": get_env_default("ARENA_CACHE_CATEGORIES", ""), "multiline": False}),
                 "categories_mode": (["extend", "override"], {"default": get_env_default("ARENA_CACHE_CATEGORIES_MODE", "extend")}),
-                "cache_mode": (["ondemand", "eager", "disabled"], {"default": get_env_default("ARENA_CACHE_MODE", "ondemand")}),
+                "cache_mode": (["ondemand", "eager", "disabled"], {"default": get_env_default("ARENA_CACHE_MODE", "disabled")}),
                 "auto_patch_on_start": ("BOOLEAN", {"default": get_env_default("ARENA_AUTOCACHE_AUTOPATCH", False, bool)}),
                 "auto_cache_enabled": ("BOOLEAN", {"default": get_env_default("ARENA_AUTO_CACHE_ENABLED", False, bool)}),
                 "persist_env": ("BOOLEAN", {"default": False}),
@@ -1101,9 +1101,9 @@ class ArenaAutoCacheSimple:
                         if verbose and auto_cache_enabled:
                             print(f"[ArenaAutoCache] Auto-caching enabled from .env file")
                     else:
-                        # RU: Для ondemand режима по умолчанию включаем кэширование
-                        auto_cache_enabled = True
-                        os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1"
+                        # RU: По умолчанию кэширование ОТКЛЮЧЕНО для безопасности
+                        auto_cache_enabled = False
+                        os.environ["ARENA_AUTO_CACHE_ENABLED"] = "0"
                 
                 if verbose:
                     print(f"[ArenaAutoCache] Cache mode: {cache_mode} - ondemand caching {'enabled' if auto_cache_enabled else 'disabled'}")
