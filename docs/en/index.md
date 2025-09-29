@@ -7,9 +7,16 @@ Overview · [Quickstart](quickstart.md) · [CLI](cli.md) · [Configuration](conf
 
 ---
 
-# Overview (English documentation coming soon)
+# ComfyUI Arena Suite v4.2.4 (English documentation)
 
-> **TL;DR — AutoCache setup**
+> **TL;DR — Arena AutoCache (simple) v4.2.4**
+> - Production-ready node for model caching
+> - OnDemand mode - transparent caching on first access
+> - Full configuration via .env files with autopatch
+> - Thread-safe deduplication and safe cache cleanup
+> - LRU-pruning up to 95% limit with detailed logging
+> - Enhanced security with path depth validation
+> - Deferred autopatch for better compatibility
 > - Default cache root if `ARENA_CACHE_ROOT` is not set:
 >   - Windows: `%LOCALAPPDATA%\ArenaAutoCache` (e.g. `C:\Users\you\AppData\Local\ArenaAutoCache`)
 >   - Linux/macOS: `<ComfyUI root>/ArenaAutoCache`
@@ -23,7 +30,18 @@ Overview · [Quickstart](quickstart.md) · [CLI](cli.md) · [Configuration](conf
 
 For socket-level guidance refer to the [Nodes](nodes.md) reference.
 
-The English documentation is under preparation. Please refer to the Russian guide in `../ru/index.md` for up-to-date instructions.
+Arena Suite combines: production-ready Arena AutoCache (simple) node and legacy nodes.
+
+## Features
+- **🅰️ Arena AutoCache (simple) v4.2.4** — production-ready node for model caching
+- **Legacy nodes** — Arena Make Tiles Segments and others
+- **Production-ready architecture** — thread-safe, safe cleanup, LRU-pruning
+- **Enhanced security** — strict path depth validation for all platforms
+
+## Requirements
+- ComfyUI (current master branch)
+- Python 3.10+
+- SSD for better AutoCache performance
 
 ---
 

@@ -6,11 +6,13 @@ import torch
 
 from . import IMPACT_AVAILABLE, IMPACT_MISSING_MESSAGE
 
+
 LOGGER = logging.getLogger(__name__)
 
 if IMPACT_AVAILABLE:
     from impact.core import SEG  # type: ignore  # Import SEG class
     from impact.utils import *  # type: ignore  # Import all utility functions
+
     from . import core  # Import core module for mask operations
 else:
     SEG = None  # type: ignore

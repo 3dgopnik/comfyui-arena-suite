@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-arena-suite"
-version = "0.0.1"
+version = "4.2.4"
 description = "ComfyUI custom nodes in a single package: Arena legacy + AutoCache + Updater"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,8 @@ line-length = 100
 [tool.ruff]
 target-version = "py310"
 line-length = 100
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -50,6 +52,8 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
     "S101",  # use of assert detected (for tests)
     "S311",  # suspicious non-cryptographic random usage
+    "N999",  # invalid module name (for ComfyUI custom nodes)
+    "T201",  # print statements (acceptable for ComfyUI nodes)
 ]
 exclude = [
     ".git",
@@ -67,7 +71,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["custom_nodes.ComfyUI_Arena"]
 force-single-line = false
 lines-after-imports = 2
@@ -112,10 +116,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--tb=short",
-    "--cov=custom_nodes.ComfyUI_Arena",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=80",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

@@ -2,8 +2,8 @@
 
 import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import Mock, patch
 
 import pytest
@@ -24,7 +24,7 @@ def mock_comfyui_environment() -> Generator[dict[str, str], None, None]:
         "ARENA_CACHE_MIN_SIZE_MB": "100",
         "ARENA_CACHE_CATEGORIES": "checkpoints,loras,vaes",
     }
-    
+
     with patch.dict(os.environ, env_vars):
         yield env_vars
 
@@ -36,17 +36,17 @@ def mock_torch() -> Generator[Mock, None, None]:
     mock_torch.cuda.is_available.return_value = True
     mock_torch.cuda.device_count.return_value = 1
     mock_torch.cuda.current_device.return_value = 0
-    
+
     # Mock tensor operations
     mock_tensor = Mock()
     mock_tensor.shape = (1, 3, 512, 512)
     mock_tensor.dtype = "float32"
     mock_tensor.device = "cuda:0"
-    
+
     mock_torch.tensor.return_value = mock_tensor
     mock_torch.zeros.return_value = mock_tensor
     mock_torch.ones.return_value = mock_tensor
-    
+
     with patch("torch", mock_torch):
         yield mock_torch
 
@@ -59,7 +59,7 @@ def mock_comfyui_modules() -> Generator[dict[str, Mock], None, None]:
         "execution": Mock(),
         "server": Mock(),
     }
-    
+
     # Mock folder_paths
     mock_modules["folder_paths"].get_folder_paths.return_value = {
         "checkpoints": ["/models/checkpoints"],
@@ -68,11 +68,11 @@ def mock_comfyui_modules() -> Generator[dict[str, Mock], None, None]:
         "clips": ["/models/clips"],
     }
     mock_modules["folder_paths"].get_full_path.return_value = "/models/checkpoints/model.safetensors"
-    
+
     # Mock execution
     mock_modules["execution"].graph = Mock()
     mock_modules["execution"].graph.nodes = []
-    
+
     with patch.dict("sys.modules", mock_modules):
         yield mock_modules
 
@@ -89,22 +89,22 @@ def temp_cache_dir(tmp_path: Path) -> Path:
 def sample_model_files(tmp_path: Path) -> list[Path]:
     """Create sample model files for testing."""
     model_files = []
-    
+
     # Create sample checkpoint
     checkpoint = tmp_path / "checkpoint.safetensors"
     checkpoint.write_bytes(b"fake checkpoint data" * 1000)  # ~18KB
     model_files.append(checkpoint)
-    
+
     # Create sample LoRA
     lora = tmp_path / "lora.safetensors"
     lora.write_bytes(b"fake lora data" * 500)  # ~9KB
     model_files.append(lora)
-    
+
     # Create sample VAE
     vae = tmp_path / "vae.safetensors"
     vae.write_bytes(b"fake vae data" * 200)  # ~3.6KB
     model_files.append(vae)
-    
+
     return model_files
 
 
@@ -114,9 +114,9 @@ def setup_test_environment():
     # Ensure clean environment
     os.environ.pop("ARENA_CACHE_ENABLE", None)
     os.environ.pop("ARENA_CACHE_DIR", None)
-    
+
     yield
-    
+
     # Cleanup after test
     pass
 
@@ -137,11 +137,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         # Add slow marker to tests with 'slow' in name
         if "slow" in item.name:
             item.add_marker(pytest.mark.slow)
-        
+
         # Add integration marker to tests in integration directory
         if "integration" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
-        
+
         # Add unit marker to tests in unit directory
         if "unit" in str(item.fspath):
             item.add_marker(pytest.mark.unit)

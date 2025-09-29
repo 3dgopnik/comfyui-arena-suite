@@ -1,37 +1,34 @@
-import copy
-import logging
-import os
-import warnings
-
-import numpy
-import torch
-from segment_anything import SamPredictor
-
-from comfy_extras.nodes_custom_sampler import Noise_RandomNoise
-from collections import namedtuple
-import numpy as np
-from skimage.measure import label
-
-import nodes
-import comfy_extras.nodes_upscale_model as model_upscale
-from server import PromptServer
-import comfy
-import math
-import cv2
-import time
-from comfy import model_management
-from concurrent.futures import ThreadPoolExecutor
 import inspect
+import logging
+import math
+import time
+import warnings
+from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
+
+import comfy
+import comfy_extras.nodes_upscale_model as model_upscale
+import cv2
+import nodes
+import numpy as np
+import torch
+from comfy import model_management
+from comfy_extras.nodes_custom_sampler import Noise_RandomNoise
+from segment_anything import SamPredictor
+from server import PromptServer
 
 from . import IMPACT_AVAILABLE, IMPACT_MISSING_MESSAGE, ensure_impact
+
 
 LOGGER = logging.getLogger(__name__)
 
 if IMPACT_AVAILABLE or ensure_impact():
-    from impact.utils import *  # type: ignore
     import impact.wildcards as wildcards  # type: ignore
-    from impact import utils  # type: ignore
-    from impact import impact_sampling  # type: ignore
+    from impact import (
+        impact_sampling,  # type: ignore
+        utils,  # type: ignore
+    )
+    from impact.utils import *  # type: ignore
 else:
     wildcards = None  # type: ignore
     utils = None  # type: ignore
@@ -42,7 +39,7 @@ else:
 try:
     from comfy_extras import nodes_differential_diffusion
 except Exception:
-    print(f"\n#############################################\n[Impact Pack] ComfyUI is an outdated version.\n#############################################\n")
+    print("\n#############################################\n[Impact Pack] ComfyUI is an outdated version.\n#############################################\n")
     raise Exception("[Impact Pack] ComfyUI is an outdated version.")
 
 
@@ -61,7 +58,6 @@ SCHEDULERS = comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS S
 
 def is_execution_model_version_supported():
     try:
-        import comfy_execution
         return True
     except:
         return False
@@ -277,7 +273,7 @@ def enhance_detail(image, model, clip, vae, guide_size, guide_size_for_bbox, max
 
     # Skip processing if the detected bbox is already larger than the guide_size
     if not force_inpaint and bbox_h >= guide_size and bbox_w >= guide_size:
-        print(f"Detailer: segment skip (enough big)")
+        print("Detailer: segment skip (enough big)")
         return None, None
 
     if guide_size_for_bbox:  # == "bbox"
@@ -309,7 +305,7 @@ def enhance_detail(image, model, clip, vae, guide_size, guide_size_for_bbox, max
             return None, None
     else:
         if upscale <= 1.0 or new_w == 0 or new_h == 0:
-            print(f"Detailer: force inpaint")
+            print("Detailer: force inpaint")
             upscale = 1.0
             new_w = w
             new_h = h
@@ -370,7 +366,7 @@ def enhance_detail(image, model, clip, vae, guide_size, guide_size_for_bbox, max
     try:
         # try to decode image normally
         refined_image = vae.decode(refined_latent['samples'])
-    except Exception as e:
+    except Exception:
         #usually an out-of-memory exception from the decode, so try a tiled approach
         refined_image = vae.decode_tiled(refined_latent["samples"], tile_x=64, tile_y=64, )
 
@@ -437,7 +433,7 @@ def enhance_detail_for_animatediff(image_frames, model, clip, vae, guide_size, g
         new_h = int(h * upscale)
 
     if upscale <= 1.0 or new_w == 0 or new_h == 0:
-        print(f"Detailer: force inpaint")
+        print("Detailer: force inpaint")
         upscale = 1.0
         new_w = w
         new_h = h
@@ -1030,7 +1026,7 @@ def apply_mask_to_each_seg(segs, masks):
 
     masks = masks.squeeze(1)
 
-    for seg, mask in zip(segs[1], masks):
+    for seg, mask in zip(segs[1], masks, strict=False):
         cropped_mask = (seg.cropped_mask * 255).astype(np.uint8)
         crop_region = seg.crop_region
 
@@ -1237,7 +1233,7 @@ def mask_to_segs(mask, combined, crop_factor, bbox_fill, drop_size=1, label='A',
                         result.append(item)
 
     if not result:
-        print(f"[mask_to_segs] Empty mask.")
+        print("[mask_to_segs] Empty mask.")
 
     print(f"# of Detected SEGS: {len(result)}")
     # for r in result:
@@ -1447,7 +1443,7 @@ def latent_upscale_on_pixel_space_with_model_shape2(samples, scale_method, upsca
         pixels = model_upscale.ImageUpscaleWithModel().upscale(upscale_model, pixels)[0]
         current_w = pixels.shape[2]
         if current_w == w:
-            print(f"[latent_upscale_on_pixel_space_with_model] x1 upscale model selected")
+            print("[latent_upscale_on_pixel_space_with_model] x1 upscale model selected")
             break
 
     # downscale to target scale
@@ -1483,7 +1479,7 @@ def latent_upscale_on_pixel_space_with_model2(samples, scale_method, upscale_mod
         pixels = model_upscale.ImageUpscaleWithModel().upscale(upscale_model, pixels)[0]
         current_w = pixels.shape[2]
         if current_w == w:
-            print(f"[latent_upscale_on_pixel_space_with_model] x1 upscale model selected")
+            print("[latent_upscale_on_pixel_space_with_model] x1 upscale model selected")
             break
 
     # downscale to target scale
@@ -1596,13 +1592,7 @@ class TwoSamplersForMaskUpscaler:
         elif sample_schedule == "last2":
             return cur_step >= total_step - 1
 
-        elif sample_schedule == "interleave1+last1":
-            return cur_step % 2 == 0 or cur_step >= total_step - 1
-
-        elif sample_schedule == "interleave2+last1":
-            return cur_step % 2 == 0 or cur_step >= total_step - 1
-
-        elif sample_schedule == "interleave3+last1":
+        elif sample_schedule == "interleave1+last1" or sample_schedule == "interleave2+last1" or sample_schedule == "interleave3+last1":
             return cur_step % 2 == 0 or cur_step >= total_step - 1
 
     def do_samples(self, step_info, base_sampler, mask_sampler, sample_schedule, mask, upscaled_latent):
@@ -1758,11 +1748,11 @@ class IPAdapterWrapper:
 
         if 'IPAdapterAdvanced' not in nodes.NODE_CLASS_MAPPINGS:
             if 'IPAdapterApply' in nodes.NODE_CLASS_MAPPINGS:
-                raise Exception(f"[ERROR] 'ComfyUI IPAdapter Plus' is outdated.")
+                raise Exception("[ERROR] 'ComfyUI IPAdapter Plus' is outdated.")
 
             utils.try_install_custom_node('https://github.com/cubiq/ComfyUI_IPAdapter_plus',
                                           "To use 'IPAdapterApplySEGS' node, 'ComfyUI IPAdapter Plus' extension is required.")
-            raise Exception(f"[ERROR] To use IPAdapterApplySEGS, you need to install 'ComfyUI IPAdapter Plus'")
+            raise Exception("[ERROR] To use IPAdapterApplySEGS, you need to install 'ComfyUI IPAdapter Plus'")
 
         obj = nodes.NODE_CLASS_MAPPINGS['IPAdapterAdvanced']
 
@@ -1896,7 +1886,7 @@ class ControlNetAdvancedWrapper:
                 if 'vae' in signature.parameters:
                     positive, negative = nodes.ControlNetApplyAdvanced().apply_controlnet(positive, negative, self.control_net, cnet_image, self.strength, self.start_percent, self.end_percent, vae=self.vae)
                 else:
-                    print(f"[Impact Pack] ERROR: The ComfyUI version is outdated. VAE cannot be used in ApplyControlNet.")
+                    print("[Impact Pack] ERROR: The ComfyUI version is outdated. VAE cannot be used in ApplyControlNet.")
                     raise Exception("[Impact Pack] ERROR: The ComfyUI version is outdated. VAE cannot be used in ApplyControlNet.")
             else:
                 positive, negative = nodes.ControlNetApplyAdvanced().apply_controlnet(positive, negative, self.control_net, cnet_image, self.strength, self.start_percent, self.end_percent)
@@ -2175,9 +2165,10 @@ class SafeToGPU:
                     print(f"WARN: The model is not moved to the '{device}' due to insufficient memory. [2]")
 
 
-from comfy.cli_args import args, LatentPreviewMethod
 import folder_paths
-from latent_preview import TAESD, TAESDPreviewerImpl, Latent2RGBPreviewer
+from comfy.cli_args import LatentPreviewMethod, args
+from latent_preview import TAESD, Latent2RGBPreviewer, TAESDPreviewerImpl
+
 
 try:
     import comfy.latent_formats as latent_formats
@@ -2214,6 +2205,6 @@ try:
         return previewer
 
 except:
-    print(f"#########################################################################")
-    print(f"[ERROR] ComfyUI-Impact-Pack: Please update ComfyUI to the latest version.")
-    print(f"#########################################################################")
+    print("#########################################################################")
+    print("[ERROR] ComfyUI-Impact-Pack: Please update ComfyUI to the latest version.")
+    print("#########################################################################")

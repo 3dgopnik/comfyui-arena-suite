@@ -1,7 +1,8 @@
 """Tests for Arena AutoCache node."""
 
+
 import pytest
-from unittest.mock import Mock, patch
+
 
 # Note: Import will be available after proper package structure is set up
 # from custom_nodes.ComfyUI_Arena.autocache.arena_auto_cache_simple import ArenaAutoCacheSimple
