@@ -1,0 +1,126 @@
+---
+type: Manual
+name: Release Notes & Changelog
+description: Шаблон генерации релизных заметок и блока changelog.
+---
+
+## Процесс релиза
+
+При запуске этого правила:
+
+1. **Анализ изменений**: Прочитать заголовки PR/коммитов (если доступны) и сгруппировать по типам
+2. **Формирование changelog**: Создать запись в `/docs/changelog.md` с категориями (Added/Changed/Fixed)
+3. **Обновление документации**: При изменении интерфейсов — обновить `/docs/project.md` (API/диаграммы)
+4. **Генерация релизных заметок**: Создать PR-ready текст + чек-лист CR
+
+## Шаблон changelog
+
+```markdown
+## [YYYY-MM-DD] - Краткое описание релиза
+
+### Добавлено
+* Новые ноды: ArenaMathNode, ArenaImageNode
+* Поддержка batch processing для изображений
+* CLI команда для кэширования моделей
+
+### Изменено
+* Улучшена производительность ArenaCacheNode (на 40% быстрее)
+* Обновлен интерфейс ArenaConfigNode с новыми параметрами
+* Рефакторинг внутренней архитектуры кэширования
+
+### Исправлено
+* Исправлена утечка памяти в ArenaMemoryNode
+* Решена проблема с кодировкой путей в Windows
+* Устранен баг с обработкой пустых тензоров
+
+### Технические изменения
+* Добавлена типизация для всех публичных методов
+* Обновлены зависимости: torch 2.1.0, numpy 1.24.0
+* Улучшено покрытие тестами (с 75% до 90%)
+
+### Breaking Changes
+* Изменен формат конфигурации ArenaConfigNode (см. migration.md)
+* Удален устаревший параметр `legacy_mode` из ArenaCacheNode
+```
+
+## Шаблон релизных заметок
+
+```markdown
+# Release v1.2.0 - Enhanced Performance & New Features
+
+## 🚀 What's New
+
+### New Nodes
+- **ArenaMathNode**: Mathematical operations with full type safety
+- **ArenaImageNode**: Advanced image processing with batch support
+- **ArenaConfigNode**: Unified configuration management
+
+### Performance Improvements
+- 40% faster caching with ArenaCacheNode
+- Reduced memory usage by 25% across all nodes
+- Optimized tensor operations for better GPU utilization
+
+## 🔧 Changes
+
+- Updated internal architecture for better maintainability
+- Improved error handling and user feedback
+- Enhanced documentation with interactive examples
+
+## 🐛 Bug Fixes
+
+- Fixed memory leak in ArenaMemoryNode
+- Resolved Windows path encoding issues
+- Fixed empty tensor handling edge cases
+
+## 📚 Documentation
+
+- Added migration guide for breaking changes
+- Updated API documentation with examples
+- New troubleshooting section in docs
+
+## 🔄 Migration Notes
+
+If you're upgrading from v1.1.x, please check [migration.md](docs/migration.md) for breaking changes.
+
+## 🧪 Testing
+
+- Test coverage increased from 75% to 90%
+- Added integration tests for all new nodes
+- Performance benchmarks included
+
+---
+
+**Full Changelog**: https://github.com/3dgopnik/comfyui-arena-suite/compare/v1.1.0...v1.2.0
+```
+
+## Чек-лист для релиза
+
+### Перед релизом
+- [ ] Все тесты проходят (`pytest -v`)
+- [ ] Линтинг чистый (`ruff check .`)
+- [ ] Типизация корректная (`mypy .`)
+- [ ] Документация обновлена
+- [ ] Changelog заполнен
+- [ ] Breaking changes задокументированы
+
+### После релиза
+- [ ] Создан GitHub Release с заметками
+- [ ] Обновлены теги версий
+- [ ] Уведомления в Discord/Telegram (если есть)
+- [ ] Мониторинг ошибок после релиза
+
+## Автоматизация
+
+Для автоматизации процесса можно использовать:
+
+```bash
+# Скрипт для генерации changelog из git
+git log --oneline --since="2024-01-01" --grep="feat\|fix\|chore" | \
+  sed 's/^/- /' > temp_changelog.md
+
+# Проверка версии в pyproject.toml
+grep "version" pyproject.toml
+
+# Проверка покрытия тестами
+pytest --cov=. --cov-report=html
+```
