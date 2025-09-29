@@ -1,5 +1,9 @@
 """Tests for Arena AutoCache node."""
 
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -67,6 +71,115 @@ class TestArenaAutoCacheBase:
         # This test will be implemented once we have proper imports
         # from custom_nodes.ComfyUI_Arena.autocache import NODE_CLASS_MAPPINGS
         # assert 'ArenaAutoCacheBase' in NODE_CLASS_MAPPINGS
+        pass
+
+
+class TestEnvFileSupport:
+    """Test suite for .env file support functionality."""
+
+    def test_env_file_loading(self) -> None:
+        """Test loading settings from .env file."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_CACHE_ROOT=/test/cache
+        #     ARENA_CACHE_MIN_SIZE_MB=50.0
+        #     ARENA_CACHE_MAX_GB=256.0
+        #     ARENA_CACHE_VERBOSE=1
+        #     ARENA_CACHE_CATEGORIES=checkpoints,loras
+        #     ARENA_CACHE_CATEGORIES_MODE=override
+        #     ARENA_AUTO_CACHE_ENABLED=1
+        #     ARENA_AUTOCACHE_AUTOPATCH=1
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test loading
+        #     with patch('custom_nodes.ComfyUI_Arena.autocache._find_comfy_root') as mock_find:
+        #         mock_find.return_value = Path(temp_dir)
+        #         # Test the loading function
+        pass
+
+    def test_env_file_validation(self) -> None:
+        """Test validation of .env file values."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file with invalid values
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_CACHE_ROOT=/test/cache
+        #     ARENA_CACHE_MIN_SIZE_MB=invalid_number
+        #     ARENA_CACHE_MAX_GB=not_a_float
+        #     ARENA_CACHE_VERBOSE=maybe
+        #     UNKNOWN_KEY=should_warn
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test validation and warnings
+        pass
+
+    def test_env_file_priority(self) -> None:
+        """Test priority: node params > .env file > defaults."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_CACHE_MIN_SIZE_MB=50.0
+        #     ARENA_CACHE_MAX_GB=256.0
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test that node parameters override .env values
+        #     with patch('custom_nodes.ComfyUI_Arena.autocache._find_comfy_root') as mock_find:
+        #         mock_find.return_value = Path(temp_dir)
+        #         node = ArenaAutoCacheSimple()
+        #         # Test with explicit node parameters
+        pass
+
+    def test_env_file_fallback(self) -> None:
+        """Test fallback to .env when node params are defaults."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_CACHE_MIN_SIZE_MB=25.0
+        #     ARENA_CACHE_MAX_GB=128.0
+        #     ARENA_CACHE_VERBOSE=1
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test that .env values are used when node params are defaults
+        pass
+
+    def test_env_file_auto_cache_enabled(self) -> None:
+        """Test auto_cache_enabled setting from .env file."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_AUTO_CACHE_ENABLED=1
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test that auto_cache_enabled is read from .env
+        pass
+
+    def test_env_file_autopatch_setting(self) -> None:
+        """Test autopatch setting from .env file."""
+        # This test will be implemented once we have proper imports
+        # with tempfile.TemporaryDirectory() as temp_dir:
+        #     # Create test .env file
+        #     env_file = Path(temp_dir) / "arena_autocache.env"
+        #     env_content = """
+        #     ARENA_AUTOCACHE_AUTOPATCH=1
+        #     """
+        #     env_file.write_text(env_content.strip())
+        #     
+        #     # Test that autopatch setting is read from .env
         pass
 
 
