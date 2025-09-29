@@ -1057,7 +1057,15 @@ class ArenaAutoCacheSimple:
 
             # RU: Обновляем переменные окружения только если переданы явные значения из ноды
             # RU: Это позволяет .env файлу оставаться приоритетным для непереданных параметров
-            # RU: НЕ перезаписываем ARENA_CACHE_ROOT - путь из ноды используется только в памяти
+            if cache_root and cache_root.strip():
+                # RU: Если в ноде указан путь - перезаписываем переменную окружения
+                os.environ["ARENA_CACHE_ROOT"] = cache_root
+                if verbose:
+                    print(f"[ArenaAutoCache] Cache root from node overrides .env: {cache_root}")
+            else:
+                # RU: Если в ноде путь не указан - используем .env файл
+                if verbose:
+                    print(f"[ArenaAutoCache] Using cache root from .env file")
             # RU: НЕ перезаписываем cache_categories - приоритет .env файла
             if categories_mode != "extend":  # RU: Только если не значение по умолчанию
                 os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
@@ -1174,7 +1182,6 @@ class ArenaAutoCacheSimple:
             # RU: Сохраняем настройки в .env только если persist_env=True (НЕ автоматически)
             if persist_env:
                 env_data = {
-                    # RU: НЕ сохраняем ARENA_CACHE_ROOT - путь из ноды не должен перезаписывать .env
                     "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
                     "ARENA_CACHE_MAX_GB": str(max_cache_gb),
                     "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
@@ -1183,6 +1190,12 @@ class ArenaAutoCacheSimple:
                     "ARENA_CACHE_MODE": cache_mode,
                     "ARENA_AUTO_CACHE_ENABLED": "1" if auto_cache_enabled else "0",
                 }
+                
+                # RU: Сохраняем путь кэша в .env только если он указан в ноде
+                if cache_root and cache_root.strip():
+                    env_data["ARENA_CACHE_ROOT"] = cache_root
+                    if verbose:
+                        print(f"[ArenaAutoCache] Saving cache root from node to .env: {cache_root}")
 
                 # RU: Управляем автопатчем в .env
                 if auto_patch_on_start:
