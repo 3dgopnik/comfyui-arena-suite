@@ -21,36 +21,14 @@ wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
 # Virtual environments
-.env
-.venv
-env/
+.venv/
 venv/
 ENV/
-env.bak/
-venv.bak/
+env/
+.env
 
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -67,23 +45,20 @@ ehthumbs.db
 Thumbs.db
 
 # ComfyUI specific
-*.ckpt
-*.safetensors
-*.pt
-*.pth
-*.bin
-*.onnx
-*.tflite
-*.pb
-*.h5
-*.pkl
-*.pickle
+user/
+models/
+output/
+input/
+temp/
 
-# Cache directories
-cache/
-.cache/
-__pycache__/
-*.cache
+# Arena AutoCache specific
+arena_autocache.env
+ComfyUI-Cache/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Logs
 *.log
@@ -92,58 +67,3 @@ logs/
 # Temporary files
 *.tmp
 *.temp
-temp/
-tmp/
-
-# Cursor IDE
-.cursor/
-
-# Node.js (if using any JS tools)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/

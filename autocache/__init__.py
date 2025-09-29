@@ -5,6 +5,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 try:
     from .arena_auto_cache_simple import (
         NODE_CLASS_MAPPINGS as _map,
+    )
+    from .arena_auto_cache_simple import (
         NODE_DISPLAY_NAME_MAPPINGS as _names,
     )
     NODE_CLASS_MAPPINGS.update(_map)
