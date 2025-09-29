@@ -631,6 +631,7 @@ def _copy_worker():
 def _eager_cache_all_models():
     """RU: Eager режим - копирует все модели из эффективных категорий в кэш."""
     if not _settings:
+        print("[ArenaAutoCache] ERROR: Settings not initialized for eager caching")
         return
     
     try:
@@ -641,6 +642,12 @@ def _eager_cache_all_models():
         skipped_files = 0
         
         print(f"[ArenaAutoCache] Starting eager caching for {len(_settings.effective_categories)} categories...")
+        print(f"[ArenaAutoCache] Cache root: {_settings.root}")
+        
+        # RU: Проверяем, что корень кэша правильный
+        if not _settings.root or str(_settings.root) == ".":
+            print("[ArenaAutoCache] ERROR: Invalid cache root, skipping eager caching")
+            return
         
         for category in _settings.effective_categories:
             if not hasattr(folder_paths, 'folder_names_and_paths'):
@@ -1039,6 +1046,9 @@ class ArenaAutoCacheSimple:
             _settings = _init_settings(
                 cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode
             )
+            
+            if verbose:
+                print(f"[ArenaAutoCache] Settings initialized: root={_settings.root}, mode={cache_mode}")
 
             # RU: Обновляем переменные окружения только если переданы явные значения из ноды
             # RU: Это позволяет .env файлу оставаться приоритетным для непереданных параметров
@@ -1110,13 +1120,19 @@ class ArenaAutoCacheSimple:
                 if verbose:
                     print("[ArenaAutoCache] Started background copy thread")
             
-            # RU: Для eager режима запускаем массовое кэширование
+            # RU: Для eager режима запускаем массовое кэширование ТОЛЬКО если режим eager
             if cache_mode == "eager" and auto_cache_enabled:
                 if verbose:
                     print("[ArenaAutoCache] Starting eager caching in background...")
                 # RU: Запускаем eager кэширование в отдельном потоке
                 eager_thread = threading.Thread(target=_eager_cache_all_models, daemon=True)
                 eager_thread.start()
+            elif cache_mode == "ondemand":
+                if verbose:
+                    print("[ArenaAutoCache] OnDemand mode - caching only on first access")
+            elif cache_mode == "disabled":
+                if verbose:
+                    print("[ArenaAutoCache] Disabled mode - no caching")
 
             # RU: Очищаем кэш если запрошено
             clear_result = None
