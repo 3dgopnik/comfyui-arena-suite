@@ -438,8 +438,11 @@ def _init_settings(
         verbose = env_verbose.lower() in ("true", "1", "yes")
     
     # RU: Резолвим корень кэша (приоритет: параметр ноды > env переменная > default)
-    if cache_root:
+    if cache_root and cache_root.strip():
+        # RU: Если в ноде указан путь - используем его
         root = Path(cache_root)
+        if verbose:
+            print(f"[ArenaAutoCache] Using cache root from node: {root}")
     else:
         # RU: Определяем корень ComfyUI для относительных путей
         comfy_root = _find_comfy_root()
@@ -448,6 +451,8 @@ def _init_settings(
         else:
             default_root = Path.home() / "Documents" / "ComfyUI-Cache"
         root = Path(os.environ.get("ARENA_CACHE_ROOT", default_root))
+        if verbose:
+            print(f"[ArenaAutoCache] Using cache root from .env/default: {root}")
     
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
@@ -1129,10 +1134,13 @@ class ArenaAutoCacheSimple:
                 eager_thread.start()
             elif cache_mode == "ondemand":
                 if verbose:
-                    print("[ArenaAutoCache] OnDemand mode - caching only on first access")
+                    print("[ArenaAutoCache] OnDemand mode - caching only on first access, NO mass copying")
             elif cache_mode == "disabled":
                 if verbose:
                     print("[ArenaAutoCache] Disabled mode - no caching")
+            else:
+                if verbose:
+                    print(f"[ArenaAutoCache] Unknown cache mode: {cache_mode}, using ondemand behavior")
 
             # RU: Очищаем кэш если запрошено
             clear_result = None
