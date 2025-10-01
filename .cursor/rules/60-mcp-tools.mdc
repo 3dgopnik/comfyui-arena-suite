@@ -1,0 +1,206 @@
+# MCP Tools Rules
+
+## Обязательные правила использования MCP инструментов
+
+### Документация (ОБЯЗАТЕЛЬНО)
+- **ВСЕ операции с документацией** через MCP docs-manager
+- **ЗАПРЕЩЕНО** использовать `read_file`/`write`/`search_replace` для файлов в `docs/`
+- **ОБЯЗАТЕЛЬНО** использовать MCP инструменты:
+  - `mcp_docs-manager_read_document` - чтение документов
+  - `mcp_docs-manager_write_document` - создание/перезапись документов
+  - `mcp_docs-manager_edit_document` - редактирование документов
+  - `mcp_docs-manager_search_documents` - поиск по документации
+  - `mcp_docs-manager_check_documentation_health` - проверка здоровья документации
+  - `mcp_docs-manager_validate_documentation_links` - проверка ссылок
+
+### Changelog (ОБЯЗАТЕЛЬНО)
+- **ВСЕ изменения** в CHANGELOG.md через MCP changelog
+- **ЗАПРЕЩЕНО** ручное редактирование CHANGELOG.md
+- **ОБЯЗАТЕЛЬНО** использовать:
+  - `mcp_changelog_analyze-and-prepare-changelog` - анализ изменений
+  - `mcp_changelog_write-changelog-entry` - запись в CHANGELOG.md
+  - `mcp_changelog_changelog-status` - проверка статуса
+
+### Исключения для MCP changelog
+MCP changelog НЕ используется для:
+- Обновления правил процесса (.cursor/rules/*)
+- Мета-задач по настройке инструментов
+- Административных изменений не связанных с кодом
+
+### GitHub интеграция (ОБЯЗАТЕЛЬНО)
+- **Создание Issues**: `mcp_github_create_issue`
+- **Создание PR**: `mcp_github_create_pull_request`
+- **Поиск**: `mcp_github_search_issues`, `mcp_github_search_pull_requests`, `mcp_github_search_repositories`, `mcp_github_search_users`, `mcp_github_search_code`
+- **Управление Issues**: `mcp_github_update_issue`, `mcp_github_add_issue_comment`, `mcp_github_get_issue`
+- **Управление PR**: `mcp_github_get_pull_request`, `mcp_github_get_pull_request_diff`, `mcp_github_get_pull_request_files`, `mcp_github_merge_pull_request`, `mcp_github_update_pull_request`
+- **Ревью**: `mcp_github_submit_pending_pull_request_review`, `mcp_github_request_copilot_review`
+- **Файлы**: `mcp_github_create_or_update_file`, `mcp_github_push_files`
+- **Workflow**: `mcp_github_run_workflow`, `mcp_github_rerun_workflow_run`, `mcp_github_rerun_failed_jobs`, `mcp_github_cancel_workflow_run`
+- **Sub-issues**: `mcp_github_add_sub_issue`, `mcp_github_remove_sub_issue`, `mcp_github_reprioritize_sub_issue`
+- **Репозитории**: `mcp_github_star_repository`, `mcp_github_unstar_repository`
+- **Gists**: `mcp_github_update_gist`
+
+### Файловая система (ОБЯЗАТЕЛЬНО)
+- **Чтение файлов**: `mcp_filesystem_read_text_file`, `mcp_filesystem_read_file` (deprecated), `mcp_filesystem_read_media_file`, `mcp_filesystem_read_multiple_files`
+- **Запись файлов**: `mcp_filesystem_write_file`
+- **Редактирование**: `mcp_filesystem_edit_file`
+- **Поиск файлов**: `mcp_filesystem_search_files`
+- **Структура**: `mcp_filesystem_directory_tree`, `mcp_filesystem_list_directory`, `mcp_filesystem_list_directory_with_sizes`
+- **Управление**: `mcp_filesystem_create_directory`, `mcp_filesystem_move_file`, `mcp_filesystem_get_file_info`
+- **Разрешения**: `mcp_filesystem_list_allowed_directories`
+
+### Память и контекст (ОБЯЗАТЕЛЬНО)
+- **Создание сущностей**: `mcp_memory_create_entities`
+- **Связи**: `mcp_memory_create_relations`
+- **Поиск**: `mcp_memory_search_nodes`, `mcp_memory_open_nodes`
+- **Управление**: `mcp_memory_add_observations`, `mcp_memory_delete_entities`, `mcp_memory_delete_observations`, `mcp_memory_delete_relations`
+- **Граф**: `mcp_memory_read_graph`
+- **Управление задачами**: `mcp_cursor-task-master_cursor_task_loadTasks`, `mcp_cursor-task-master_cursor_task_getNextTask`, `mcp_cursor-task-master_cursor_task_setTaskStatus`, `mcp_cursor-task-master_cursor_task_createTask`, `mcp_cursor-task-master_cursor_task_updateTask`
+
+### Context7 - Внешние библиотеки (ОБЯЗАТЕЛЬНО)
+- **Поиск библиотек**: `mcp_context7_resolve-library-id` - поиск библиотек по названию
+- **Документация**: `mcp_context7_get-library-docs` - получение документации библиотек
+- **Использование**: Для работы с внешними библиотеками (ComfyUI, PyTorch, etc.)
+
+## Примеры использования
+
+### Чтение документации
+```python
+# ✅ ПРАВИЛЬНО - через MCP
+mcp_docs-manager_read_document(path="docs/ru/index.md")
+
+# ❌ НЕПРАВИЛЬНО - обычные инструменты
+read_file(target_file="docs/ru/index.md")
+```
+
+### Редактирование документации
+```python
+# ✅ ПРАВИЛЬНО - через MCP
+mcp_docs-manager_edit_document(
+    path="docs/ru/index.md",
+    edits=[{"oldText": "старый текст", "newText": "новый текст"}]
+)
+
+# ❌ НЕПРАВИЛЬНО - обычные инструменты
+search_replace(file_path="docs/ru/index.md", old_string="старый текст", new_string="новый текст")
+```
+
+### Обновление changelog
+```python
+# ✅ ПРАВИЛЬНО - через MCP
+mcp_changelog_analyze-and-prepare-changelog(userPrompt="Добавлена новая функция")
+mcp_changelog_write-changelog-entry(changelogEntry="...")
+
+# ❌ НЕПРАВИЛЬНО - ручное редактирование
+write(file_path="CHANGELOG.md", contents="...")
+```
+
+### Создание Issue
+```python
+# ✅ ПРАВИЛЬНО - через MCP
+mcp_github_create_issue(
+    owner="3dgopnik",
+    repo="comfyui-arena-suite",
+    title="Новая функция",
+    body="Описание задачи"
+)
+```
+
+### Поиск внешних библиотек
+```python
+# ✅ ПРАВИЛЬНО - через MCP Context7
+mcp_context7_resolve-library-id(libraryName="comfyui")
+mcp_context7_get-library-docs(
+    context7CompatibleLibraryID="/comfyanonymous/comfyui",
+    topic="nodes",
+    tokens=2000
+)
+```
+
+### Управление памятью
+```python
+# ✅ ПРАВИЛЬНО - через MCP Memory
+mcp_memory_create_entities(entities=[...])
+mcp_memory_search_nodes(query="...")
+mcp_memory_read_graph()
+```
+
+### Управление задачами
+```python
+# ✅ ПРАВИЛЬНО - через MCP Task Master
+mcp_cursor-task-master_cursor_task_loadTasks()
+mcp_cursor-task-master_cursor_task_createTask(title="...", description="...")
+```
+
+## Контроль качества
+
+### Обязательные проверки
+1. **Перед коммитом**: Все изменения через MCP инструменты
+2. **Документация**: Проверка через `mcp_docs-manager_check_documentation_health`
+3. **Ссылки**: Валидация через `mcp_docs-manager_validate_documentation_links`
+4. **Changelog**: Статус через `mcp_changelog_changelog-status`
+
+### Автоматизация
+- Pre-commit hooks проверяют использование MCP инструментов
+- CI/CD пайплайн валидирует MCP compliance
+- Автоматические уведомления при нарушении правил
+
+## Troubleshooting
+
+### Проблемы с MCP docs-manager
+```bash
+# Проверка доступности MCP инструментов
+mcp_docs-manager_list_documents(path="docs", recursive=true)
+
+# Проверка здоровья документации
+mcp_docs-manager_check_documentation_health(path="docs")
+```
+
+### Проблемы с MCP changelog
+```bash
+# Проверка статуса changelog
+mcp_changelog_changelog-status()
+
+# Инициализация проекта
+mcp_changelog_initialize-project()
+```
+
+### Откат к обычным инструментам
+**ТОЛЬКО в экстренных случаях** и с обязательным комментарием:
+```python
+# ВРЕМЕННО: MCP недоступен, используем обычные инструменты
+read_file(target_file="docs/ru/index.md")
+```
+
+## Интеграция с правилами процесса
+
+### 00-process.mdc
+- Документация обновляется через MCP docs-manager
+- Changelog ведется через MCP changelog
+- Все изменения фиксируются в Issues
+
+### 30-release.mdc
+- Релизные заметки генерируются через MCP changelog
+- Документация обновляется через MCP docs-manager
+- GitHub Release создается через MCP GitHub
+
+### 50-context.mdc
+- Изменения context.md через MCP filesystem
+- Создание Issues через MCP GitHub
+- Управление задачами через MCP task-master
+
+## Мониторинг и отчетность
+
+### Метрики MCP использования
+- Количество операций через MCP инструменты
+- Процент покрытия MCP инструментами
+- Время отклика MCP операций
+
+### Алерты
+- Нарушение правил MCP использования
+- Недоступность MCP инструментов
+- Ошибки в MCP операциях
+
+---
+
+**ВАЖНО**: Эти правила обязательны для всех участников проекта. Нарушение правил MCP использования может привести к проблемам с качеством кода и документации.

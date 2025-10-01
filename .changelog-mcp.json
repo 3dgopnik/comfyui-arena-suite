@@ -1,0 +1,52 @@
+{
+  "changelogPath": "CHANGELOG.md",
+  "currentVersion": "4.5.2",
+  "versionStrategy": "semver",
+  "minimumScore": 3,
+  "sessionTimeoutMinutes": 20,
+  "bundleRelatedChanges": true,
+  "watchedExtensions": [
+    ".py",
+    ".pyx",
+    ".pyi",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".cfg",
+    ".ini",
+    ".txt",
+    ".md",
+    ".rst"
+  ],
+  "ignoredPaths": [
+    "__pycache__",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".tox",
+    ".coverage",
+    ".venv",
+    "venv",
+    ".mypy_cache"
+  ],
+  "significantPaths": [
+    "src/",
+    "lib/",
+    "app/",
+    "tests/",
+    "docs/"
+  ],
+  "batchingEnabled": true,
+  "smartTriggers": true,
+  "enableCaching": true,
+  "cacheValidityMinutes": 5,
+  "enableRealTimeWatching": true,
+  "promptBasedAnalysis": true,
+  "inferChangesFromPrompts": true,
+  "realTimeDebounceMs": 1000,
+  "defaultModel": "auto",
+  "allowPaidModels": false,
+  "maxCostPerEntry": 0,
+  "versionFile": "pyproject.toml"
+}

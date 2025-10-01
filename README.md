@@ -1,4 +1,4 @@
-# ComfyUI Arena Suite v4.2.4
+# ComfyUI Arena Suite v4.5.2
 
 🚀 **Modern ComfyUI Custom Node Suite** - Automatic model caching and workflow optimization for ComfyUI.
 

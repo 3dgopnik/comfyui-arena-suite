@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 # Initialize mappings
 NODE_CLASS_MAPPINGS: dict[str, type] = {}
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {}
-WEB_DIRECTORY = None
+WEB_DIRECTORY = "web"
 
 # Add current directory to Python path for imports
 _current_dir = Path(__file__).parent
