@@ -8,6 +8,7 @@ import os
 import shutil
 import threading
 import time
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from queue import Queue
@@ -34,6 +35,10 @@ _scheduled_tasks: set[tuple[str, str]] = set()  # (category, filename)
 _patch_lock = threading.Lock()
 _scheduled_lock = threading.Lock()  # RU: Лок для дедупликации
 _env_loaded = False  # RU: Флаг загрузки .env файла
+
+# RU: Модели от JavaScript анализа workflow
+_workflow_models: set[tuple[str, str]] = set()  # (category, filename)
+_workflow_models_lock = threading.Lock()  # RU: Лок для моделей от workflow
 
 # RU: Whitelist категорий для кэширования - основные категории моделей
 DEFAULT_WHITELIST = [
@@ -255,37 +260,35 @@ def _find_comfy_root():
         ):
             return current_path
         current_path = current_path.parent
+    
+    # RU: Если не нашли, пробуем стандартные пути
+    standard_paths = [
+        Path("C:/ComfyUI"),
+        Path("F:/ComfyUI"),
+        Path("C:/Users/acherednikov/AppData/Local/Programs/@comfyorgcomfyui-electron/resources/ComfyUI")
+    ]
+    
+    for path in standard_paths:
+        if path.exists() and (path / "models").exists():
+            return path
+    
     return None
 
 
 def _load_env_file():
     """RU: Загружает настройки из user/arena_autocache.env если файл существует."""
     comfy_root = _find_comfy_root()
+    print(f"[ArenaAutoCache] DEBUG: Found ComfyUI root: {comfy_root}")
     if not comfy_root:
+        print("[ArenaAutoCache] DEBUG: ComfyUI root not found!")
         return
 
     env_file = comfy_root / "user" / "arena_autocache.env"
     
-    # RU: Автоматически создаем .env файл с полным списком категорий если файл не существует
+    # RU: НЕ создаем .env файл автоматически - только при включении переключателя в ноде
     if not env_file.exists():
-        try:
-            # RU: Создаем .env файл с полным списком категорий по умолчанию
-            default_categories = ",".join(DEFAULT_WHITELIST)
-            default_env_data = {
-                "ARENA_CACHE_ROOT": str(comfy_root / "models" / "arena_cache"),
-                "ARENA_CACHE_MIN_SIZE_MB": "10.0",
-                "ARENA_CACHE_MAX_GB": "512.0",
-                "ARENA_CACHE_VERBOSE": "1",
-                "ARENA_CACHE_CATEGORIES": default_categories,
-                "ARENA_CACHE_CATEGORIES_MODE": "extend",
-                "ARENA_AUTO_CACHE_ENABLED": "1",
-                "ARENA_AUTOCACHE_AUTOPATCH": "1",
-            }
-            _save_env_file(default_env_data)
-            print(f"[ArenaAutoCache] Auto-created .env file with full category list: {default_categories}")
-        except Exception as e:
-            print(f"[ArenaAutoCache] Error creating default .env file: {e}")
-            return
+        print(f"[ArenaAutoCache] No .env file found - caching disabled by default")
+        return
     
     if env_file.exists():
         try:
@@ -438,8 +441,11 @@ def _init_settings(
         verbose = env_verbose.lower() in ("true", "1", "yes")
     
     # RU: Резолвим корень кэша (приоритет: параметр ноды > env переменная > default)
-    if cache_root:
+    if cache_root and cache_root.strip():
+        # RU: Если в ноде указан путь - используем его
         root = Path(cache_root)
+        if verbose:
+            print(f"[ArenaAutoCache] Using cache root from node: {root}")
     else:
         # RU: Определяем корень ComfyUI для относительных путей
         comfy_root = _find_comfy_root()
@@ -448,6 +454,8 @@ def _init_settings(
         else:
             default_root = Path.home() / "Documents" / "ComfyUI-Cache"
         root = Path(os.environ.get("ARENA_CACHE_ROOT", default_root))
+        if verbose:
+            print(f"[ArenaAutoCache] Using cache root from .env/default: {root}")
     
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
@@ -496,18 +504,10 @@ def _apply_folder_paths_patch():
             folder_paths.get_full_path_origin = original_get_full_path
 
         def patched_get_folder_paths(folder_name: str) -> list[str]:
-            """RU: Патченная функция get_folder_paths с добавлением кэша."""
-            original_paths = original_get_folder_paths(folder_name)
-
-            # RU: Добавляем путь кэша только для эффективных категорий
-            if folder_name in _settings.effective_categories:
-                cache_path = str(_settings.root / folder_name)
-                if cache_path not in original_paths:
-                    original_paths = [cache_path] + original_paths
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Added cache path for {folder_name}: {cache_path}")
-
-            return original_paths
+            """RU: Патченная функция get_folder_paths БЕЗ добавления кэша."""
+            # RU: НЕ добавляем кеш-пути в список - это ломает логику!
+            # RU: ComfyUI должен искать в оригинальных путях, а мы перехватываем в get_full_path
+            return original_get_folder_paths(folder_name)
 
         def patched_get_full_path(folder_name: str, filename: str) -> str:
             """RU: Патченная функция get_full_path с кэшированием."""
@@ -631,6 +631,7 @@ def _copy_worker():
 def _eager_cache_all_models():
     """RU: Eager режим - копирует все модели из эффективных категорий в кэш."""
     if not _settings:
+        print("[ArenaAutoCache] ERROR: Settings not initialized for eager caching")
         return
     
     try:
@@ -641,6 +642,12 @@ def _eager_cache_all_models():
         skipped_files = 0
         
         print(f"[ArenaAutoCache] Starting eager caching for {len(_settings.effective_categories)} categories...")
+        print(f"[ArenaAutoCache] Cache root: {_settings.root}")
+        
+        # RU: Проверяем, что корень кэша правильный
+        if not _settings.root or str(_settings.root) == ".":
+            print("[ArenaAutoCache] ERROR: Invalid cache root, skipping eager caching")
+            return
         
         for category in _settings.effective_categories:
             if not hasattr(folder_paths, 'folder_names_and_paths'):
@@ -977,32 +984,372 @@ def get_env_default(key: str, default_value, value_type=str):
         return default_value
 
 
+def _cleanup_env_variables():
+    """RU: Очищает все переменные окружения ARENA_* при деактивации ноды."""
+    arena_vars = [key for key in os.environ.keys() if key.startswith("ARENA_")]
+    for var in arena_vars:
+        if var in os.environ:
+            del os.environ[var]
+    print(f"[ArenaAutoCache] Cleaned up {len(arena_vars)} environment variables")
+
+
+def _add_workflow_models(models: list[dict]):
+    """RU: Добавляет модели от JavaScript анализа workflow."""
+    global _workflow_models
+    
+    with _workflow_models_lock:
+        for model in models:
+            if isinstance(model, dict) and 'name' in model and 'type' in model:
+                category = model['type']
+                filename = model['name']
+                
+                # RU: Нормализуем категорию модели
+                normalized_category = _normalize_model_category(category)
+                if normalized_category:
+                    _workflow_models.add((normalized_category, filename))
+                    print(f"[ArenaAutoCache] Added workflow model: {normalized_category}/{filename}")
+                else:
+                    print(f"[ArenaAutoCache] Unknown model category: {category}")
+
+
+def _normalize_model_category(category: str) -> str:
+    """RU: Нормализует категорию модели для соответствия KNOWN_CATEGORIES."""
+    category_mapping = {
+        'checkpoint': 'checkpoints',
+        'lora': 'loras', 
+        'vae': 'vae',
+        'clip': 'clip',
+        'controlnet': 'controlnet',
+        'upscale': 'upscale_models',
+        'embedding': 'embeddings',
+        'hypernetwork': 'hypernetworks',
+        'model': 'checkpoints',  # RU: Общие модели обычно checkpoints
+        'ipadapter': 'ipadapter',
+        'gligen': 'gligen',
+        'animatediff': 'animatediff_models',
+        't2i_adapter': 't2i_adapter',
+        'gguf': 'gguf_models',
+        'unet': 'unet_models',
+        'diffusion': 'diffusion_models',
+    }
+    
+    normalized = category_mapping.get(category.lower(), category.lower())
+    
+    # RU: Проверяем, что категория входит в известные
+    if normalized in KNOWN_CATEGORIES:
+        return normalized
+    
+    # RU: Если не найдена точная категория, ищем похожую
+    for known_cat in KNOWN_CATEGORIES:
+        if normalized in known_cat or known_cat in normalized:
+            return known_cat
+    
+    return None
+
+
+def _get_workflow_models() -> set[tuple[str, str]]:
+    """RU: Получает модели от JavaScript анализа workflow."""
+    with _workflow_models_lock:
+        return _workflow_models.copy()
+
+
+def _clear_workflow_models():
+    """RU: Очищает модели от JavaScript анализа workflow."""
+    global _workflow_models
+    with _workflow_models_lock:
+        _workflow_models.clear()
+        print("[ArenaAutoCache] Cleared workflow models")
+
+
+def _get_source_path(category: str, filename: str) -> Path:
+    """RU: Получает исходный путь к модели."""
+    try:
+        import folder_paths
+        
+        # RU: Получаем оригинальный путь через folder_paths
+        original_path = folder_paths.get_full_path_origin(category, filename)
+        if original_path and os.path.exists(original_path):
+            return Path(original_path)
+        
+        # RU: Если не найден через folder_paths, ищем в стандартных путях
+        comfy_root = _find_comfy_root()
+        if comfy_root:
+            models_dir = comfy_root / "models" / category
+            if models_dir.exists():
+                model_path = models_dir / filename
+                if model_path.exists():
+                    return model_path
+        
+        return None
+    except Exception as e:
+        if _settings and _settings.verbose:
+            print(f"[ArenaAutoCache] Error getting source path for {category}/{filename}: {e}")
+        return None
+
+
+def _get_cache_path(category: str, filename: str) -> Path:
+    """RU: Получает путь к кешированной модели."""
+    if not _settings:
+        return None
+    return _settings.root / category / filename
+
+
+def _activate_workflow_analysis():
+    """RU: Активирует анализ workflow для автоматического определения моделей."""
+    try:
+        # RU: Отправляем команду активации анализа в JavaScript
+        import json
+        import urllib.request
+        import urllib.parse
+        
+        # RU: Подготавливаем данные для активации
+        data = {
+            "action": "activate_workflow_analysis",
+            "timestamp": time.time()
+        }
+        
+        # RU: Отправляем POST запрос к API
+        try:
+            req = urllib.request.Request(
+                'http://localhost:8188/arena/analyze_workflow',
+                data=json.dumps(data).encode('utf-8'),
+                headers={'Content-Type': 'application/json'}
+            )
+            response = urllib.request.urlopen(req, timeout=5)
+            if response.status == 200:
+                print("[ArenaAutoCache] Workflow analysis activated successfully")
+            else:
+                print(f"[ArenaAutoCache] Failed to activate workflow analysis: {response.status}")
+        except Exception as e:
+            print(f"[ArenaAutoCache] Could not activate workflow analysis: {e}")
+            
+    except Exception as e:
+        print(f"[ArenaAutoCache] Error activating workflow analysis: {e}")
+
+
+def _auto_extend_categories_from_workflow():
+    """RU: Автоматически расширяет категории кеширования на основе найденных в workflow моделей."""
+    global _settings, _workflow_models
+    
+    if not _settings:
+        return
+    
+    models = _get_workflow_models()
+    if not models:
+        return
+    
+    # RU: Получаем уникальные категории из найденных моделей
+    workflow_categories = set()
+    for category, filename in models:
+        if category in KNOWN_CATEGORIES:
+            workflow_categories.add(category)
+    
+    if not workflow_categories:
+        return
+    
+    # RU: Проверяем, какие категории уже есть в эффективных категориях
+    new_categories = workflow_categories - set(_settings.effective_categories)
+    
+    if new_categories:
+        print(f"[ArenaAutoCache] Auto-extending categories with workflow models: {', '.join(new_categories)}")
+        
+        # RU: Добавляем новые категории в эффективные
+        _settings.effective_categories.extend(new_categories)
+        _settings.effective_categories = list(set(_settings.effective_categories))  # RU: Убираем дубликаты
+        
+        # RU: Создаем папки для новых категорий
+        for category in new_categories:
+            (_settings.root / category).mkdir(exist_ok=True)
+        
+        # RU: Обновляем .env файл с новыми категориями
+        if _settings.verbose:
+            print(f"[ArenaAutoCache] Updated effective categories: {', '.join(_settings.effective_categories)}")
+        
+        # RU: Сохраняем обновленные категории в .env
+        env_data = {"ARENA_CACHE_CATEGORIES": ",".join(_settings.effective_categories)}
+        _save_env_file(env_data)
+        
+        print(f"[ArenaAutoCache] Auto-extended categories: {', '.join(new_categories)}")
+
+
+def _precache_workflow_models():
+    """RU: Предварительно кеширует модели от JavaScript анализа workflow."""
+    global _settings, _workflow_models
+    
+    if not _settings:
+        return
+    
+    models = _get_workflow_models()
+    if not models:
+        return
+    
+    print(f"[ArenaAutoCache] Precaching {len(models)} workflow models...")
+    
+    # RU: Сначала автоматически расширяем категории
+    _auto_extend_categories_from_workflow()
+    
+    for category, filename in models:
+        if category in _settings.effective_categories:
+            source_path = _get_source_path(category, filename)
+            if source_path and source_path.exists():
+                cache_path = _get_cache_path(category, filename)
+                if not cache_path.exists():
+                    _schedule_copy_task(category, filename, str(source_path), str(cache_path))
+                else:
+                    print(f"[ArenaAutoCache] Model already cached: {filename}")
+            else:
+                print(f"[ArenaAutoCache] Model not found: {filename}")
+        else:
+            print(f"[ArenaAutoCache] Category not in effective categories: {category}")
+
+
+def _setup_workflow_analysis_api():
+    """RU: Настраивает API endpoint для получения моделей от JavaScript."""
+    try:
+        # RU: Импортируем server только если доступен
+        from server import PromptServer
+        
+        # RU: Добавляем custom route для анализа workflow
+        @PromptServer.instance.routes.post("/arena/analyze_workflow")
+        async def analyze_workflow_endpoint(request):
+            try:
+                data = await request.json()
+                action = data.get('action', 'analyze')
+                
+                if action == "activate_workflow_analysis":
+                    # RU: Активация анализа workflow
+                    print("[ArenaAutoCache] Workflow analysis activation requested")
+                    return {"status": "success", "message": "Workflow analysis activated"}
+                
+                elif action == "analyze" or 'models' in data:
+                    # RU: Анализ workflow и получение моделей
+                    models = data.get('models', [])
+                    
+                    if models:
+                        _add_workflow_models(models)
+                        print(f"[ArenaAutoCache] Received {len(models)} models from JavaScript")
+                        
+                        # RU: Предварительно кешируем модели
+                        _precache_workflow_models()
+                        
+                        return {"status": "success", "models_count": len(models)}
+                    else:
+                        return {"status": "error", "message": "No models provided"}
+                else:
+                    return {"status": "error", "message": "Unknown action"}
+                    
+            except Exception as e:
+                print(f"[ArenaAutoCache] Workflow analysis API error: {e}")
+                return {"status": "error", "message": str(e)}
+        
+        print("[ArenaAutoCache] Workflow analysis API endpoint registered")
+        
+    except ImportError:
+        print("[ArenaAutoCache] Server not available - workflow analysis API not registered")
+    except Exception as e:
+        print(f"[ArenaAutoCache] Failed to setup workflow analysis API: {e}")
+
+
 class ArenaAutoCacheSimple:
     """RU: Простая нода Arena AutoCache для кэширования моделей."""
 
     def __init__(self):
         # RU: Гарантируем загрузку .env файла (идемпотентно)
         _ensure_env_loaded()
-        self.description = "Arena AutoCache (simple) v4.4.0 - Production-ready node with smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), automatic .env management, deferred autopatch, flexible caching modes (ondemand/eager/disabled), robust env handling, thread-safety, safe pruning, enhanced diagnostics, and proper .env loading architecture"
+        
+        # RU: Настраиваем API для анализа workflow
+        _setup_workflow_analysis_api()
+        
+        self.description = "Arena AutoCache (simple) v4.5.0 - Production-ready node with enable toggle: caching works only when enable_caching=True. Smart preset categories (checkpoints, loras, clip, vae, controlnet, upscale_models, embeddings, hypernetworks, gguf_models, unet_models, diffusion_models), automatic .env management, deferred autopatch, flexible caching modes (ondemand/eager/disabled), SAFE BY DEFAULT - caching disabled by default with activation toggle, instant .env updates, robust env handling, thread-safety, safe pruning, enhanced diagnostics, and proper .env loading architecture"
+    
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        # RU: Принудительно обновляем интерфейс при изменении enable_caching
+        # RU: .env файл создается при первом включении кеширования
+        
+        # RU: Проверяем, включено ли кеширование
+        enable_caching = kwargs.get("enable_caching", False)
+        if enable_caching:
+            # RU: Создаем .env файл при первом включении кеширования
+            comfy_root = _find_comfy_root()
+            if comfy_root:
+                env_file_path = comfy_root / "user" / "arena_autocache.env"
+                if not env_file_path.exists():
+                    print(f"[ArenaAutoCache] IS_CHANGED: First time enabling caching - creating .env file")
+                    
+                    # RU: Получаем параметры из kwargs
+                    cache_root = kwargs.get("cache_root", "")
+                    min_size_mb = kwargs.get("min_size_mb", 0.0)
+                    max_cache_gb = kwargs.get("max_cache_gb", 0.0)
+                    verbose = kwargs.get("verbose", False)
+                    cache_categories = kwargs.get("cache_categories", "")
+                    categories_mode = kwargs.get("categories_mode", "extend")
+                    cache_mode = kwargs.get("cache_mode", "disabled")
+                    auto_patch_on_start = kwargs.get("auto_patch_on_start", False)
+                    auto_cache_enabled = kwargs.get("auto_cache_enabled", False)
+                    
+                    # RU: Создаем .env файл с настройками из ноды
+                    cache_root_final = cache_root if cache_root and cache_root.strip() else str(comfy_root / "models" / "arena_cache")
+                    
+                    # RU: При режиме extend - базовые категории всегда + дополнительные
+                    base_categories = "checkpoints,loras,clip,vae,controlnet,upscale_models,embeddings,hypernetworks,gguf_models,unet_models,diffusion_models"
+                    if categories_mode == "extend":
+                        if cache_categories and cache_categories.strip():
+                            all_categories = f"{base_categories},{cache_categories}"
+                        else:
+                            all_categories = base_categories
+                    else:
+                        all_categories = cache_categories if cache_categories and cache_categories.strip() else base_categories
+                    
+                    env_data = {
+                        "ARENA_CACHE_ROOT": cache_root_final,
+                        "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
+                        "ARENA_CACHE_MAX_GB": str(max_cache_gb),
+                        "ARENA_CACHE_VERBOSE": "true" if verbose else "false",
+                        "ARENA_CACHE_CATEGORIES": all_categories,
+                        "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
+                        "ARENA_CACHE_MODE": cache_mode,
+                        "ARENA_AUTOCACHE_AUTOPATCH": "true" if auto_patch_on_start else "false",
+                        "ARENA_AUTO_CACHE_ENABLED": "true" if auto_cache_enabled else "false",
+                    }
+                    
+                    env_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(env_file_path, "w", encoding="utf-8") as f:
+                        f.write("# Arena AutoCache Environment Settings\n")
+                        f.write("# Created when enable_caching=True\n\n")
+                        for key, value in env_data.items():
+                            f.write(f"{key}={value}\n")
+                    
+                    print(f"[ArenaAutoCache] IS_CHANGED: Created .env file with node settings")
+                    
+                    # RU: Сразу активируем deferred autopatch для глобального кеширования
+                    os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+                    print(f"[ArenaAutoCache] IS_CHANGED: Activated deferred autopatch for global caching")
+                    
+                    # RU: Запускаем deferred autopatch сразу
+                    _start_deferred_autopatch()
+                    print(f"[ArenaAutoCache] IS_CHANGED: Started deferred autopatch worker")
+        
+        return float("inf")
 
     @classmethod
     def INPUT_TYPES(cls):
-        # RU: Гарантируем загрузку .env файла для получения динамических значений по умолчанию
-        _ensure_env_loaded()
-        
+        # RU: Безопасные значения по умолчанию - все выключено при первом запуске
+        # RU: При активации enable_caching=True будут загружены значения из .env файла
         return {
             "required": {
-                "cache_root": ("STRING", {"default": get_env_default("ARENA_CACHE_ROOT", ""), "multiline": False}),
-                "min_size_mb": ("FLOAT", {"default": get_env_default("ARENA_CACHE_MIN_SIZE_MB", 10.0, float), "min": 0.1, "max": 1000.0, "step": 0.1}),
-                "max_cache_gb": ("FLOAT", {"default": get_env_default("ARENA_CACHE_MAX_GB", 0.0, float), "min": 0.0, "max": 1000.0, "step": 1.0}),
-                "verbose": ("BOOLEAN", {"default": get_env_default("ARENA_CACHE_VERBOSE", True, bool)}),
-                "cache_categories": ("STRING", {"default": get_env_default("ARENA_CACHE_CATEGORIES", ""), "multiline": False}),
-                "categories_mode": (["extend", "override"], {"default": get_env_default("ARENA_CACHE_CATEGORIES_MODE", "extend")}),
-                "cache_mode": (["ondemand", "eager", "disabled"], {"default": get_env_default("ARENA_CACHE_MODE", "ondemand")}),
-                "auto_patch_on_start": ("BOOLEAN", {"default": get_env_default("ARENA_AUTOCACHE_AUTOPATCH", False, bool)}),
-                "auto_cache_enabled": ("BOOLEAN", {"default": get_env_default("ARENA_AUTO_CACHE_ENABLED", False, bool)}),
-                "persist_env": ("BOOLEAN", {"default": False}),
-                "clear_cache_now": ("BOOLEAN", {"default": False}),
+                "cache_root": ("STRING", {"default": "", "multiline": False, "label": "Cache Root Path"}),
+                "min_size_mb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 0.1, "label": "Min File Size (MB)"}),
+                "max_cache_gb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 1.0, "label": "Max Cache Size (GB)"}),
+                "verbose": ("BOOLEAN", {"default": False, "label": "Verbose Logging"}),
+                "cache_categories": ("STRING", {"default": "", "multiline": False, "label": "Additional Cache Categories (comma-separated, will be added to base categories in extend mode)"}),
+                "categories_mode": (["extend", "override"], {"default": "extend", "label": "Categories Mode"}),
+                "cache_mode": (["ondemand", "eager", "disabled"], {"default": "disabled", "label": "Cache Mode (ondemand=only when used)"}),
+                "auto_patch_on_start": ("BOOLEAN", {"default": False, "label": "Auto Patch on Start"}),
+                "auto_cache_enabled": ("BOOLEAN", {"default": False, "label": "Auto Cache Enabled"}),
+                "persist_env": ("BOOLEAN", {"default": True, "label": "Persist to .env File"}),
+                "clear_cache_now": ("BOOLEAN", {"default": False, "label": "Clear Cache Now"}),
+                "enable_caching": ("BOOLEAN", {"default": False, "label": "Enable Caching (creates .env and activates caching immediately)"}),
             }
         }
 
@@ -1014,89 +1361,57 @@ class ArenaAutoCacheSimple:
     def run(
         self,
         cache_root: str = "",
-        min_size_mb: float = 10.0,
+        min_size_mb: float = 0.0,
         max_cache_gb: float = 0.0,
-        verbose: bool = True,
+        verbose: bool = False,
         cache_categories: str = "",
         categories_mode: str = "extend",
-        cache_mode: str = "ondemand",
+        cache_mode: str = "disabled",
         auto_patch_on_start: bool = False,
         auto_cache_enabled: bool = False,
-        persist_env: bool = False,
+        persist_env: bool = True,
         clear_cache_now: bool = False,
+        enable_caching: bool = False,
     ):
         """RU: Основная функция ноды."""
         global _settings, _copy_thread_started
 
-        # RU: Гарантируем загрузку .env файла
+        # RU: Если кеширование не включено - очищаем переменные окружения и возвращаем статус
+        if not enable_caching:
+            _cleanup_env_variables()
+            status = "Arena AutoCache: Caching DISABLED - Enable caching to configure settings"
+            if verbose:
+                print(f"[ArenaAutoCache] {status}")
+            return (status,)
+        
+        # RU: .env файл уже создан в IS_CHANGED при включении enable_caching
+        # RU: Здесь только проверяем, что файл существует
+        comfy_root = _find_comfy_root()
+        if comfy_root:
+            env_file_path = comfy_root / "user" / "arena_autocache.env"
+            if env_file_path.exists():
+                print(f"[ArenaAutoCache] Found existing .env file - caching enabled")
+            else:
+                print(f"[ArenaAutoCache] No .env file found - caching will be disabled")
+        
+        # RU: Кеширование включено - загружаем .env файл если существует
         _ensure_env_loaded()
         
-        # RU: Fallback - применяем патч при первом использовании ноды
+        # RU: Применяем патч для кеширования
         _ensure_patch_applied()
 
         try:
-            # RU: Инициализируем настройки с правильными приоритетами: нода > .env > default
+            # RU: Инициализируем настройки из параметров ноды
             _settings = _init_settings(
                 cache_root, min_size_mb, max_cache_gb, verbose, cache_categories, categories_mode
             )
-
-            # RU: Обновляем переменные окружения только если переданы явные значения из ноды
-            # RU: Это позволяет .env файлу оставаться приоритетным для непереданных параметров
-            if cache_root:
-                os.environ["ARENA_CACHE_ROOT"] = cache_root
-            # RU: НЕ перезаписываем cache_categories - приоритет .env файла
-            if categories_mode != "extend":  # RU: Только если не значение по умолчанию
-                os.environ["ARENA_CACHE_CATEGORIES_MODE"] = categories_mode
-            if min_size_mb != 10.0:  # RU: Только если не значение по умолчанию
-                os.environ["ARENA_CACHE_MIN_SIZE_MB"] = str(min_size_mb)
-            if max_cache_gb != 0.0:  # RU: Только если не значение по умолчанию
-                os.environ["ARENA_CACHE_MAX_GB"] = str(max_cache_gb)
-            os.environ["ARENA_CACHE_VERBOSE"] = "1" if verbose else "0"
             
-            # RU: Управляем режимом кэширования (приоритет: нода > .env > default ondemand)
-            os.environ["ARENA_CACHE_MODE"] = cache_mode
+            if verbose:
+                print(f"[ArenaAutoCache] Settings initialized: root={_settings.root}, mode={cache_mode}")
             
-            # RU: Управляем авто-кешированием в зависимости от режима
-            if cache_mode == "disabled":
-                auto_cache_enabled = False
-                os.environ["ARENA_AUTO_CACHE_ENABLED"] = "0"
-                if verbose:
-                    print(f"[ArenaAutoCache] Cache mode: {cache_mode} - caching disabled")
-            elif cache_mode == "eager":
-                auto_cache_enabled = True
-                os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1"
-                if verbose:
-                    print(f"[ArenaAutoCache] Cache mode: {cache_mode} - eager caching enabled")
-            else:  # ondemand
-                # RU: Для ondemand режима проверяем auto_cache_enabled из ноды или .env
-                if auto_cache_enabled:
-                    os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1"
-                else:
-                    # RU: Проверяем .env файл если в ноде не указано явно
-                    env_auto_cache = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "")
-                    if env_auto_cache:
-                        auto_cache_enabled = env_auto_cache.lower() in ("true", "1", "yes")
-                        if verbose and auto_cache_enabled:
-                            print(f"[ArenaAutoCache] Auto-caching enabled from .env file")
-                    else:
-                        # RU: Для ondemand режима по умолчанию включаем кэширование
-                        auto_cache_enabled = True
-                        os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1"
-                
-                if verbose:
-                    print(f"[ArenaAutoCache] Cache mode: {cache_mode} - ondemand caching {'enabled' if auto_cache_enabled else 'disabled'}")
-
-            # RU: Управляем автопатчем (приоритет: нода > .env > default False)
-            if auto_patch_on_start:
-                os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-            else:
-                # RU: Проверяем .env файл если в ноде не указано явно
-                env_autopatch = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "")
-                if not env_autopatch:
-                    # RU: Значение по умолчанию - отключено
-                    os.environ.pop("ARENA_AUTOCACHE_AUTOPATCH", None)
-                elif verbose:
-                    print(f"[ArenaAutoCache] Auto-patch setting from .env: {env_autopatch}")
+            # RU: Устанавливаем переменные окружения для кеширования
+            os.environ["ARENA_AUTO_CACHE_ENABLED"] = "1" if auto_cache_enabled else "0"
+            os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1" if auto_patch_on_start else "0"
 
             # RU: Применяем патч folder_paths (только один раз)
             if not _folder_paths_patched:
@@ -1110,13 +1425,29 @@ class ArenaAutoCacheSimple:
                 if verbose:
                     print("[ArenaAutoCache] Started background copy thread")
             
-            # RU: Для eager режима запускаем массовое кэширование
+            # RU: Для eager режима запускаем массовое кэширование ТОЛЬКО если режим eager
             if cache_mode == "eager" and auto_cache_enabled:
                 if verbose:
                     print("[ArenaAutoCache] Starting eager caching in background...")
                 # RU: Запускаем eager кэширование в отдельном потоке
                 eager_thread = threading.Thread(target=_eager_cache_all_models, daemon=True)
                 eager_thread.start()
+            elif cache_mode == "ondemand":
+                if verbose:
+                    print("[ArenaAutoCache] OnDemand mode - smart caching on first access")
+                    print("[ArenaAutoCache] Models will be cached automatically when first used")
+                
+                # RU: Предварительно кешируем модели от JavaScript анализа workflow
+                _precache_workflow_models()
+                
+                # RU: Активируем анализ workflow для автоматического определения моделей
+                _activate_workflow_analysis()
+            elif cache_mode == "disabled":
+                if verbose:
+                    print("[ArenaAutoCache] Disabled mode - no caching")
+            else:
+                if verbose:
+                    print(f"[ArenaAutoCache] Unknown cache mode: {cache_mode}, using ondemand behavior")
 
             # RU: Очищаем кэш если запрошено
             clear_result = None
@@ -1150,24 +1481,44 @@ class ArenaAutoCacheSimple:
             
             # RU: Сохраняем настройки в .env только если persist_env=True (НЕ автоматически)
             if persist_env:
+                # RU: При режиме extend - базовые категории всегда + дополнительные из ноды
+                base_categories = "checkpoints,loras,clip,vae,controlnet,upscale_models,embeddings,hypernetworks,gguf_models,unet_models,diffusion_models"
+                
+                if categories_mode == "extend":
+                    # RU: Режим extend - базовые + дополнительные
+                    if cache_categories and cache_categories.strip():
+                        all_categories = f"{base_categories},{cache_categories}"
+                    else:
+                        all_categories = base_categories
+                else:
+                    # RU: Режим override - только то, что указал пользователь
+                    all_categories = cache_categories if cache_categories and cache_categories.strip() else base_categories
+                
                 env_data = {
-                    "ARENA_CACHE_ROOT": cache_root,
                     "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
                     "ARENA_CACHE_MAX_GB": str(max_cache_gb),
                     "ARENA_CACHE_VERBOSE": "1" if verbose else "0",
-                    "ARENA_CACHE_CATEGORIES": cache_categories,
+                    "ARENA_CACHE_CATEGORIES": all_categories,  # RU: Базовые + дополнительные категории
                     "ARENA_CACHE_CATEGORIES_MODE": categories_mode,
                     "ARENA_CACHE_MODE": cache_mode,
                     "ARENA_AUTO_CACHE_ENABLED": "1" if auto_cache_enabled else "0",
                 }
+                
+                # RU: Сохраняем путь кэша в .env только если он указан в ноде
+                if cache_root and cache_root.strip():
+                    env_data["ARENA_CACHE_ROOT"] = cache_root
+                    if verbose:
+                        print(f"[ArenaAutoCache] Saving cache root from node to .env: {cache_root}")
 
-                # RU: Управляем автопатчем в .env
-                if auto_patch_on_start:
-                    env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-                    _save_env_file(env_data)
-                else:
-                    # RU: Удаляем ключ автопатча при persist_env=True и auto_patch_on_start=False
-                    _save_env_file(env_data, remove_keys=["ARENA_AUTOCACHE_AUTOPATCH"])
+                # RU: Всегда включаем автопатч для глобальной работы
+                env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+                _save_env_file(env_data)
+                
+                # RU: Запускаем deferred autopatch если еще не запущен
+                if not _deferred_autopatch_started:
+                    _start_deferred_autopatch()
+                    if verbose:
+                        print(f"[ArenaAutoCache] Started deferred autopatch worker")
                 
                 if verbose:
                     print(f"[ArenaAutoCache] Settings saved to .env file (persist_env=True)")
@@ -1193,13 +1544,17 @@ class ArenaAutoCacheSimple:
             return (error_msg,)
 
 
+# RU: Упрощенный подход - кеширование только при реальном использовании
+# RU: Анализ workflow удален как неработающий в ComfyUI
+
+
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
     "ArenaAutoCache (simple)": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ArenaAutoCache (simple)": "Arena AutoCache (simple) v4.4.0",
+    "ArenaAutoCache (simple)": "Arena AutoCache (simple) v4.5.0",
 }
 
 print("[ArenaAutoCache] Loaded production-ready node with smart preset categories and OnDemand caching")
@@ -1208,6 +1563,15 @@ print("[ArenaAutoCache] Loaded production-ready node with smart preset categorie
 # RU: Загружаем .env файл идемпотентно для deferred autopatch
 _ensure_env_loaded()
 
+# RU: Проверяем, есть ли .env файл с настройками
+comfy_root = _find_comfy_root()
+if comfy_root:
+    env_file_path = comfy_root / "user" / "arena_autocache.env"
+    if env_file_path.exists():
+        print("[ArenaAutoCache] Found .env file - enabling global caching")
+        # RU: Принудительно включаем автопатч для глобальной работы
+        os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+
 autopatch_env = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH")
 print(f"[ArenaAutoCache] Module loaded - ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env}")
 
@@ -1215,4 +1579,4 @@ if autopatch_env == "1":
     print("[ArenaAutoCache] Starting deferred autopatch from module load...")
     _start_deferred_autopatch()
 else:
-        print(f"[ArenaAutoCache] Deferred autopatch disabled (ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env})")
+    print(f"[ArenaAutoCache] Deferred autopatch disabled (ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env})")

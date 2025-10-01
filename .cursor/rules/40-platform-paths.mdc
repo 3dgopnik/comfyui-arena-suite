@@ -23,8 +23,14 @@ description: Справочник путей и артефактов для ва
 
 ### Web Extensions
 - **Основной путь**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\`
-- **Альтернативный путь**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web_custom_versions\\desktop_app\\extensions\\`
 - **Arena Extension**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena\\`
+- **Development JS**: `c:\\ComfyUI\\custom_nodes\\ComfyUI-Arena\\web\\extensions\\`
+
+### JavaScript Files Logic
+- **ЕДИНСТВЕННОЕ МЕСТО**: JavaScript файлы должны быть ТОЛЬКО в `web/extensions/arena/`
+- **НЕ ДОЛЖНО БЫТЬ**: файлов в `web/arena/`, `web/js/`, `web_custom_versions/` - это вызывает конфликты
+- **Синхронизация**: файлы копируются из dev в production через `sync_web_extension.ps1`
+- **Загрузка**: ComfyUI загружает JS файлы из `web/extensions/arena/` через `WEB_DIRECTORY = "web"`
 
 ### Custom Nodes
 - **Custom Nodes Directory**: `c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\`
@@ -63,8 +69,21 @@ Get-ChildItem "c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\logs\\" | Sor
 # Копирование файлов из dev в production
 Copy-Item "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\*" -Destination "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\" -Recurse -Force
 
-# Копирование web extensions
-Copy-Item "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\web\\*" -Destination "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena\\" -Recurse -Force
+# Синхронизация JavaScript файлов (используйте скрипт)
+powershell -ExecutionPolicy Bypass -File custom_nodes/ComfyUI-Arena/scripts/sync_web_extension.ps1
+```
+
+### JavaScript Files Management
+```powershell
+# Проверка JavaScript файлов
+Get-ChildItem "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\" -Recurse -Name "*arena*"
+
+# Очистка дубликатов (если есть)
+Remove-Item "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena_autocache.js" -Force -ErrorAction SilentlyContinue
+Remove-Item "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena_workflow_analyzer.js" -Force -ErrorAction SilentlyContinue
+
+# Проверка правильного места
+Get-ChildItem "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\web\\extensions\\arena\\"
 ```
 
 ## Переменные окружения
@@ -75,7 +94,28 @@ $env:ARENA_DEV_ROOT = "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\"
 $env:ARENA_CACHE_DIR = "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\arena_cache\\"
 ```
 
-## Отладка путей
+## JavaScript Files Logic
+
+### Правильная структура:
+```
+Development:
+c:\ComfyUI\custom_nodes\ComfyUI-Arena\web\extensions\
+├── arena_autocache.js
+└── arena_workflow_analyzer.js
+
+Production:
+c:\Users\acherednikov\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\web\extensions\arena\
+├── arena_autocache.js
+└── arena_workflow_analyzer.js
+```
+
+### Критические правила:
+1. **ЕДИНСТВЕННОЕ МЕСТО**: JS файлы только в `web/extensions/arena/`
+2. **НЕТ ДУБЛИКАТОВ**: не должно быть файлов в корне `web/extensions/`
+3. **СИНХРОНИЗАЦИЯ**: используйте `sync_web_extension.ps1`
+4. **WEB_DIRECTORY**: в `__init__.py` должно быть `WEB_DIRECTORY = "web"`
+
+### Отладка путей
 ```python
 # Python скрипт для проверки путей
 import os
@@ -83,7 +123,7 @@ import sys
 
 paths_to_check = [
     r"c:\Users\acherednikov\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\",
-    r"c:\ComfyUI\custom_nodes\СomfyUI-Arena\",
+    r"c:\ComfyUI\custom_nodes\ComfyUI-Arena\",
     r"c:\Users\acherednikov\AppData\Roaming\ComfyUI\logs\",
 ]
 
