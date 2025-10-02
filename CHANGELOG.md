@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.13.0] - Wed Oct 02 2025 10:00:00 GMT+0300 (Москва, стандартное время)
+
+### Удалено
+- **Упрощенный интерфейс**: Удалены поля `cache_categories` и `categories_mode` из Python ноды
+- **Ручное управление категориями**: Убрана необходимость вручную указывать категории моделей
+- **Сложная логика категорий**: Удалены функции `_compute_effective_categories`, константы `DEFAULT_WHITELIST` и `KNOWN_CATEGORIES`
+
+### Изменено
+- **Автоматическое определение моделей**: Категории моделей теперь определяются автоматически через JavaScript анализ workflow
+- **Упрощенная архитектура**: Убрана сложная логика взаимодействия между Python и .env файлами для категорий
+- **Чистый интерфейс**: Нода стала проще и понятнее - JS автоматически анализирует workflow и определяет нужные модели
+
+### Исправлено
+- **Консистентность**: Приведена в соответствие концепция, где JS отвечает за анализ workflow
+- **Упрощение**: Убрана дублирующая логика между Python и JavaScript
+
+---
+
 ## [4.5.2] - 2025-09-30
 
 ### Added
