@@ -210,8 +210,8 @@ def _load_env_file():
                         
                         # RU: Валидация режима кэширования
                         if key == "ARENA_CACHE_MODE":
-                            if value.lower() not in ("ondemand", "eager", "disabled"):
-                                print(f"[ArenaAutoCache] Warning: Invalid cache mode '{value}' for {key} in {env_file}:{line_num} (valid: ondemand, eager, disabled)")
+                            if value.lower() not in ("ondemand", "disabled"):
+                                print(f"[ArenaAutoCache] Warning: Invalid cache mode '{value}' for {key} in {env_file}:{line_num} (valid: ondemand, disabled)")
                         
                         os.environ[key] = value
                         loaded_count += 1
@@ -508,94 +508,7 @@ def _copy_worker():
             continue
 
 
-def _eager_cache_all_models():
-    """RU: Eager режим - копирует все модели из эффективных категорий в кэш."""
-    if not _settings:
-        print("[ArenaAutoCache] ERROR: Settings not initialized for eager caching")
-        return
-    
-    try:
-        import folder_paths
-        
-        total_files = 0
-        cached_files = 0
-        skipped_files = 0
-        
-        print(f"[ArenaAutoCache] Starting eager caching for {len(_settings.effective_categories)} categories...")
-        print(f"[ArenaAutoCache] Cache root: {_settings.root}")
-        
-        # RU: Проверяем, что корень кэша правильный
-        if not _settings.root or str(_settings.root) == ".":
-            print("[ArenaAutoCache] ERROR: Invalid cache root, skipping eager caching")
-            return
-        
-        for category in _settings.effective_categories:
-            if not hasattr(folder_paths, 'folder_names_and_paths'):
-                continue
-                
-            # RU: Получаем все пути для категории
-            category_paths = folder_paths.folder_names_and_paths.get(category, [])
-            if not category_paths:
-                continue
-                
-            print(f"[ArenaAutoCache] Eager caching category '{category}' from {len(category_paths)} paths...")
-            
-            for source_path in category_paths:
-                source_path = Path(source_path)
-                if not source_path.exists():
-                    continue
-                    
-                # RU: Сканируем все файлы в папке
-                for file_path in source_path.rglob("*"):
-                    if not file_path.is_file():
-                        continue
-                        
-                    total_files += 1
-                    filename = file_path.name
-                    cache_path = _settings.root / category / filename
-                    
-                    # RU: Проверяем размер файла
-                    try:
-                        file_size = file_path.stat().st_size
-                        if file_size < _settings.min_size_mb * 1024 * 1024:
-                            skipped_files += 1
-                            if _settings.verbose:
-                                print(f"[ArenaAutoCache] Skipping {filename}: too small ({file_size / 1024 / 1024:.1f}MB)")
-                            continue
-                    except Exception:
-                        skipped_files += 1
-                        continue
-                    
-                    # RU: Проверяем, не существует ли уже в кэше
-                    if cache_path.exists():
-                        cached_files += 1
-                        if _settings.verbose:
-                            print(f"[ArenaAutoCache] Already cached: {filename}")
-                        continue
-                    
-                    # RU: Копируем файл
-                    try:
-                        cache_path.parent.mkdir(parents=True, exist_ok=True)
-                        temp_path = cache_path.with_suffix(cache_path.suffix + ".part")
-                        shutil.copy2(file_path, temp_path)
-                        temp_path.rename(cache_path)
-                        cached_files += 1
-                        
-                        if _settings.verbose:
-                            print(f"[ArenaAutoCache] Eager cached: {filename}")
-                        
-                        # RU: Проверяем размер кэша и очищаем при необходимости
-                        _prune_cache_if_needed()
-                        
-                    except Exception as e:
-                        skipped_files += 1
-                        if _settings.verbose:
-                            print(f"[ArenaAutoCache] Error eager caching {filename}: {e}")
-        
-        print(f"[ArenaAutoCache] Eager caching completed: {cached_files} cached, {skipped_files} skipped, {total_files} total files")
-        
-    except Exception as e:
-        print(f"[ArenaAutoCache] Error in eager caching: {e}")
+# RU: Функция _eager_cache_all_models удалена - режим eager опасен для дискового пространства
 
 
 def _prune_cache_if_needed():
@@ -1140,7 +1053,7 @@ class ArenaAutoCacheSimple:
         # RU: Настраиваем API для анализа workflow
         _setup_workflow_analysis_api()
         
-        self.description = "🅰️ Arena AutoCache v4.13.0 - БЕЗОПАСНО ПО УМОЛЧАНИЮ: Кеширование ОТКЛЮЧЕНО по умолчанию для предотвращения проблем с дисковым пространством. Включайте кеширование вручную через интерфейс ноды. Умный анализ workflow через JavaScript, автоматическое управление .env, гибкие режимы кеширования (ondemand/disabled), мгновенные обновления .env, надежная обработка env, потокобезопасность, безопасная очистка, улучшенная диагностика, правильная архитектура загрузки .env и автоматическая загрузка параметров из .env файла. РУЧНОЕ УПРАВЛЕНИЕ: кеширование работает только при активной ноде на канвасе. УПРОЩЕННЫЙ ИНТЕРФЕЙС: категории моделей определяются автоматически через JS анализ workflow."
+        self.description = "🅰️ Arena AutoCache v4.13.0 - БЕЗОПАСНО ПО УМОЛЧАНИЮ: Кеширование ОТКЛЮЧЕНО по умолчанию для предотвращения проблем с дисковым пространством. Включайте кеширование вручную через интерфейс ноды. Умный анализ workflow через JavaScript, автоматическое управление .env, безопасные режимы кеширования (ondemand/disabled), мгновенные обновления .env, надежная обработка env, потокобезопасность, безопасная очистка, улучшенная диагностика, правильная архитектура загрузки .env и автоматическая загрузка параметров из .env файла. РУЧНОЕ УПРАВЛЕНИЕ: кеширование работает только при активной ноде на канвасе. УПРОЩЕННЫЙ ИНТЕРФЕЙС: категории моделей определяются автоматически через JS анализ workflow. БЕЗОПАСНОСТЬ: убран опасный режим eager для защиты дискового пространства."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -1210,7 +1123,7 @@ class ArenaAutoCacheSimple:
                 "min_size_mb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 0.1, "label": "Min File Size (MB)"}),
                 "max_cache_gb": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1000.0, "step": 1.0, "label": "Max Cache Size (GB)"}),
                 "verbose": ("BOOLEAN", {"default": False, "label": "Verbose Logging"}),
-                "cache_mode": (["ondemand", "eager", "disabled"], {"default": "disabled", "label": "Cache Mode (ondemand=only when used)"}),
+                "cache_mode": (["ondemand", "disabled"], {"default": "disabled", "label": "Cache Mode (ondemand=only when used)"}),
                 "auto_patch_on_start": ("BOOLEAN", {"default": False, "label": "Auto Patch on Start"}),
                 "auto_cache_enabled": ("BOOLEAN", {"default": False, "label": "Auto Cache Enabled"}),
                 "persist_env": ("BOOLEAN", {"default": True, "label": "Persist to .env File"}),
@@ -1289,14 +1202,8 @@ class ArenaAutoCacheSimple:
                 if verbose:
                     print("[ArenaAutoCache] Started background copy thread")
             
-            # RU: Для eager режима запускаем массовое кэширование ТОЛЬКО если режим eager
-            if cache_mode == "eager" and auto_cache_enabled:
-                if verbose:
-                    print("[ArenaAutoCache] Starting eager caching in background...")
-                # RU: Запускаем eager кэширование в отдельном потоке
-                eager_thread = threading.Thread(target=_eager_cache_all_models, daemon=True)
-                eager_thread.start()
-            elif cache_mode == "ondemand":
+            # RU: Только ondemand режим - кэширование только при использовании моделей
+            if cache_mode == "ondemand":
                 if verbose:
                     print("[ArenaAutoCache] OnDemand mode - smart caching on first access")
                     print("[ArenaAutoCache] Models will be cached automatically when first used")
