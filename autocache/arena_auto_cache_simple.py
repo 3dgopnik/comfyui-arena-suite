@@ -1294,23 +1294,27 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 print("[ArenaAutoCache] Loaded production-ready node with smart preset categories and OnDemand caching")
 
 # RU: Отложенный автопатч - ждем готовности ComfyUI
-# RU: Загружаем .env файл идемпотентно для deferred autopatch
-_ensure_env_loaded()
+# RU: НЕ загружаем .env файл автоматически - только по запросу из ноды
+# _ensure_env_loaded()  # УБРАНО - не загружаем .env автоматически
 
-# RU: Проверяем, есть ли .env файл с настройками
-comfy_root = _find_comfy_root()
-if comfy_root:
-    env_file_path = comfy_root / "user" / "arena_autocache.env"
-    if env_file_path.exists():
-        print("[ArenaAutoCache] Found .env file - enabling global caching")
-        # RU: Принудительно включаем автопатч для глобальной работы
-        os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+# RU: НЕ проверяем .env файл автоматически - только через ноду
+# comfy_root = _find_comfy_root()
+# if comfy_root:
+#     env_file_path = comfy_root / "user" / "arena_autocache.env"
+#     if env_file_path.exists():
+#         print("[ArenaAutoCache] Found .env file - enabling global caching")
+#         # RU: Принудительно включаем автопатч для глобальной работы
+# RU: НЕ устанавливаем переменные окружения автоматически
+# os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
 
-autopatch_env = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH")
-print(f"[ArenaAutoCache] Module loaded - ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env}")
+# RU: НЕ запускаем автопатч автоматически - только через ноду
+# autopatch_env = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH")
+# print(f"[ArenaAutoCache] Module loaded - ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env}")
 
-if autopatch_env == "1":
-    print("[ArenaAutoCache] Starting deferred autopatch from module load...")
-    _start_deferred_autopatch()
-else:
-    print(f"[ArenaAutoCache] Deferred autopatch disabled (ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env})")
+# if autopatch_env == "1":
+#     print("[ArenaAutoCache] Starting deferred autopatch from module load...")
+#     _start_deferred_autopatch()
+# else:
+#     print(f"[ArenaAutoCache] Deferred autopatch disabled (ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env})")
+
+print("[ArenaAutoCache] Module loaded - NO automatic caching, only through node interface")
