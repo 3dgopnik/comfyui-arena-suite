@@ -5,6 +5,218 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.13.0] - Wed Oct 01 2025 19:00:00 GMT+0300 (Москва, стандартное время)
+
+### Удалено
+- **Упрощенный интерфейс**: Удалены поля `cache_categories` и `categories_mode` из Python ноды
+- **Ручное управление категориями**: Убрана необходимость вручную указывать категории моделей
+- **Сложная логика категорий**: Удалены функции `_compute_effective_categories`, константы `DEFAULT_WHITELIST` и `KNOWN_CATEGORIES`
+
+### Изменено
+- **Автоматическое определение моделей**: Категории моделей теперь определяются автоматически через JavaScript анализ workflow
+- **Упрощенная архитектура**: Убрана сложная логика взаимодействия между Python и .env файлами для категорий
+- **Чистый интерфейс**: Нода стала проще и понятнее - JS автоматически анализирует workflow и определяет нужные модели
+
+### Исправлено
+- **Консистентность**: Приведена в соответствие концепция, где JS отвечает за анализ workflow
+- **Упрощение**: Убрана дублирующая логика между Python и JavaScript
+
+---
+
+## [4.12.0] - Wed Oct 01 2025 18:00:00 GMT+0300 (Москва, стандартное время)
+
+### Изменено
+- **Режим ручного управления**: Отключен глобальный автопатч из .env файла - кеширование теперь работает только при активном использовании ноды Arena на канвасе
+- **Только ручное управление**: Убрано автоматическое кеширование без присутствия ноды для лучшего контроля пользователя
+- **Улучшение интерфейса**: Добавлен переключатель "Разрешить глобальный автопатч" для продвинутых пользователей
+
+### Добавлено
+- **Переключатель глобального автопатча**: Добавлен опциональный UI флаг `allow_global_autopatch` (по умолчанию: False) для включения глобального кеширования при необходимости
+- **Документация ручного управления**: Обновлено поведение для требования явного использования ноды для операций кеширования
+
+### Исправлено
+- **Контроль пользователя**: Обеспечено кеширование только при явном размещении и запуске ноды Arena на канвасе
+- **Никаких сюрпризов с кешированием**: Предотвращено автоматическое кеширование из .env файла без взаимодействия пользователя
+
+### Удалено
+- **Глобальный автопатч**: Убран автоматический отложенный автопатч при загрузке модуля
+- **Автоматическая активация .env**: Убрана автоматическая активация кеширования из .env файла
+
+---
+
+## [4.11.0] - Wed Oct 01 2025 17:31:02 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Extended Node Type Support**: Added 20+ new node types for comprehensive model detection including Flux, SD3, SDXL, and Florence2 models
+- **File Extension Filtering**: Implemented intelligent filtering by file extensions to cache only model files (.safetensors, .ckpt, .pt, .bin, .onnx, .gguf, etc.)
+- **Flux Model Support**: Added specific support for FluxLoader, FluxCLIPLoader, FluxVAELoader, FluxUNETLoader and their variants
+- **SD3/SDXL Integration**: Added support for SD3Loader, SD3CLIPLoader, SD3VAELoader, SDXLCLIPLoader, SDXLVAELoader and related nodes
+- **Florence2 Model Detection**: Added support for Get FLORENCE, Florence2Loader, and LoadFlorence2Model nodes
+
+### Changed
+- **Enhanced JavaScript Analysis**: Expanded modelNodeTypes mapping to include all major AI model frameworks
+- **Smart File Filtering**: Added comprehensive model file extension detection in Python caching logic
+- **Improved Model Detection**: Enhanced node input field mapping for better model name extraction
+
+### Fixed
+- **DualCLIPLoader Caching**: Fixed DualCLIPLoader to properly cache BOTH CLIP models instead of just one
+- **Model Detection Coverage**: Significantly improved workflow analysis to catch previously missed model loading nodes
+- **File Type Safety**: Prevented caching of non-model files (images, configs, metadata) through extension filtering
+
+---
+
+## [4.10.0] - Wed Oct 01 2025 17:25:58 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Cache Modes**: Reduced available cache modes from 3 to 2: only "ondemand" and "disabled" remain
+- **Safe Caching**: Ensured all caching operations are now safe and only cache models actually used in workflows
+- **UI Simplification**: Streamlined cache mode selection to prevent accidental disk space issues
+
+### Fixed
+- **Disk Space Protection**: Prevented users from accidentally enabling aggressive caching that copies all NAS models
+- **Smart Caching Only**: Ensured caching system only processes models identified through JavaScript workflow analysis
+
+### Removed
+- **Eager Caching Mode**: Eliminated the "eager" cache mode that was copying ALL models from NAS directories to cache
+- **Disk Space Risk**: Removed aggressive caching behavior that could fill disk with unnecessary models
+
+---
+
+## [4.9.0] - Wed Oct 01 2025 17:18:33 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Simplified .env Structure**: Environment files now only contain cache root, size limits, verbosity, and mode settings
+- **Cleaner Configuration**: Removed category computation and management from initial setup process
+
+### Fixed
+- **Environment File Creation**: Removed category-related settings from .env file generation in IS_CHANGED function
+- **Clean Configuration**: .env files now contain only essential settings without category filtering logic
+
+### Removed
+- **Category Logic from .env**: Eliminated `ARENA_CACHE_CATEGORIES` and `ARENA_CACHE_CATEGORIES_MODE` from environment file creation
+- **Complex Category Handling**: Simplified .env file structure to focus on core caching parameters
+
+---
+
+## [4.8.0] - Wed Oct 01 2025 17:05:06 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Simplified Caching**: Arena AutoCache now relies purely on JavaScript workflow analysis to determine which models to cache
+- **Cleaner UI**: Removed unnecessary category configuration options from the node interface
+- **Default Values**: Updated default values for `min_size_mb` (10.0) and `max_cache_gb` (512.0) to more practical settings
+
+### Removed
+- **Category Filtering**: Eliminated `cache_categories` and `categories_mode` parameters that were causing confusion between JavaScript analysis and Python filtering
+- **Complex Category Logic**: Removed `DEFAULT_WHITELIST`, `KNOWN_CATEGORIES`, and `effective_categories` logic that was overcomplicating the caching system
+
+---
+
+## [4.7.0] - Wed Oct 01 2025 16:51:06 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Caching Approach**: Switched to intelligent on-demand caching that only processes models identified through JavaScript workflow analysis
+- **Memory Efficiency**: Improved caching strategy to prevent disk space waste by avoiding unnecessary model duplication
+
+### Fixed
+- **Arena AutoCache Disk Usage**: Removed aggressive model scanning function that would have filled disk with unnecessary models from NAS
+- **Smart Caching Strategy**: Fixed caching logic to only cache models actually used in workflows, not all available models
+
+### Removed
+- **`_scan_and_cache_all_models()` Function**: Eliminated function that would scan and cache ALL models from effective categories regardless of workflow usage
+- **Background Model Scanning**: Removed automatic scanning that could consume excessive disk space with unused models
+
+---
+
+## [4.6.1] - Wed Oct 01 2025 16:48:38 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Background Model Scanning**: New `_scan_and_cache_all_models()` function that proactively scans and caches all models from effective categories
+- **Extended Model Support**: Added support for Power Lora Loader, LoadDiffusionModel, DualCLIPLoader, and 20+ additional model node types
+- **Automatic Workflow Detection**: JavaScript now automatically analyzes workflows on page load and graph changes
+
+### Changed
+- **Arena AutoCache Performance**: Significantly improved model caching logic with proactive background scanning
+- **Workflow Analysis**: Enhanced JavaScript workflow analysis to support 29 model node types (previously 5)
+- **Caching Strategy**: Implemented early-stage model caching that starts during ComfyUI initialization instead of waiting for node activation
+
+### Fixed
+- **Incomplete Caching**: Resolved issue where only 2 models were cached instead of all workflow models
+- **Timing Issues**: Fixed caching to occur during ComfyUI startup rather than waiting for specific node activation
+
+---
+
+## [4.6.0] - Wed Oct 01 2025 16:35:13 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **File Management Rules**: Добавлены строгие правила управления файлами в процессе разработки
+- **Temporary File Cleanup**: Автоматическая очистка временных файлов после завершения работы
+- **Test File Management**: Удаление отработанных тестовых файлов для поддержания чистоты проекта
+- **Documentation Standards**: Правила создания только необходимых документов
+
+### Changed
+- **Development Workflow**: Улучшен процесс разработки с фокусом на чистоту кодовой базы
+- **File Organization**: Оптимизирована организация файлов проекта
+- **Quality Control**: Усилен контроль качества через управление файлами
+
+---
+
+## [4.5.4] - Wed Oct 01 2025 16:29:11 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **MCP Documentation Analysis**: Полная проверка документации проекта ComfyUI-Arena с использованием MCP инструментов
+- **Context7 Integration**: Получение актуальной документации ComfyUI для анализа custom nodes
+- **Memory System**: Сохранение знаний о проекте и результатах анализа
+- **Documentation Health Check**: Анализ состояния документации (Health Score: 100/100)
+
+### Changed
+- **Documentation Workflow**: Улучшен процесс анализа документации с использованием MCP инструментов
+- **Project Analysis**: Расширен анализ проекта с интеграцией внешних источников информации
+- **Knowledge Management**: Улучшено сохранение контекста и знаний о проекте
+
+---
+
+## [4.5.3] - Wed Oct 01 2025 16:15:11 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **MCP Integration**: Полная интеграция MCP инструментов для автоматизации документации ComfyUI нод
+- **Task Management**: Внедрение task manager для отслеживания задач по актуализации документации
+- **Documentation Health**: Автоматическая проверка состояния документации через docs-manager
+- **Context7 Integration**: Получение актуальной документации ComfyUI через Context7 API
+- **Memory System**: Сохранение знаний о проекте в knowledge graph
+- **Changelog Automation**: Автоматическое создание changelog entries для отслеживания изменений
+
+### Changed
+- **Documentation Workflow**: Переработан процесс актуализации документации с использованием MCP инструментов
+- **Project Management**: Улучшено управление задачами через интегрированный task manager
+- **Knowledge Base**: Расширена база знаний о ComfyUI нодах с актуальной информацией
+
+---
+
+## [0.2.1] - 2025-01-30
+
+### Added
+* **Complete English Documentation** - создана полная документация на английском языке
+  * **Node Reference** - подробное описание всех нод
+  * **Configuration Guide** - руководство по настройке
+  * **User Manual** - полное руководство пользователя
+  * **Troubleshooting Guide** - решение проблем
+  * **CLI Tools** - документация по командным инструментам
+* **Workflow Analyzer Documentation** - добавлена документация по JavaScript расширению
+* **Unified Version Management** - унифицированы версии во всех документах
+
+### Enhanced
+* **Documentation Structure** - улучшена структура документации
+  * **Consistent Versioning** - единая версия v0.2.1 во всех файлах
+  * **Updated Installation Paths** - обновлены пути установки (ComfyUI-Arena)
+  * **Complete Feature Coverage** - покрыты все функции проекта
+* **Cross-Reference Links** - обновлены все ссылки между документами
+* **Multilingual Support** - полная поддержка русского и английского языков
+
+### Fixed
+* **Version Inconsistencies** - исправлены несоответствия версий в документации
+* **Outdated Installation Instructions** - обновлены инструкции по установке
+* **Missing Documentation Files** - созданы недостающие разделы документации
+
 ## [4.5.2] - 2025-09-30
 
 ### Added
