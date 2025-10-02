@@ -1126,7 +1126,7 @@ class ArenaAutoCacheSimple:
                 "cache_mode": (["ondemand", "disabled"], {"default": "disabled", "label": "Cache Mode (ondemand=only when used)"}),
                 "auto_patch_on_start": ("BOOLEAN", {"default": False, "label": "Auto Patch on Start"}),
                 "auto_cache_enabled": ("BOOLEAN", {"default": False, "label": "Auto Cache Enabled"}),
-                "persist_env": ("BOOLEAN", {"default": True, "label": "Persist to .env File"}),
+                "persist_env": ("BOOLEAN", {"default": False, "label": "Persist to .env File (WARNING: enables global caching on restart)"}),
                 "clear_cache_now": ("BOOLEAN", {"default": False, "label": "Clear Cache Now"}),
                 "enable_caching": ("BOOLEAN", {"default": False, "label": "Enable Caching (creates .env and activates caching immediately)"}),
             }
@@ -1146,7 +1146,7 @@ class ArenaAutoCacheSimple:
         cache_mode: str = "disabled",
         auto_patch_on_start: bool = False,
         auto_cache_enabled: bool = False,
-        persist_env: bool = True,
+        persist_env: bool = False,
         clear_cache_now: bool = False,
         enable_caching: bool = False,
     ):
@@ -1229,6 +1229,7 @@ class ArenaAutoCacheSimple:
             # RU: Не нужно управлять категориями вручную - JS анализирует workflow и определяет нужные модели
             
             # RU: Сохраняем настройки в .env только если persist_env=True (НЕ автоматически)
+            # RU: ВНИМАНИЕ: persist_env=True включает глобальное кеширование при перезагрузке!
             if persist_env:
                 env_data = {
                     "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
