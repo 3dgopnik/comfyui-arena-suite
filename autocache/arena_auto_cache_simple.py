@@ -1060,56 +1060,14 @@ class ArenaAutoCacheSimple:
         # RU: Принудительно обновляем интерфейс при изменении enable_caching
         # RU: .env файл создается при первом включении кеширования
         
-        # RU: Проверяем, включено ли кеширование
+        # RU: НЕ создаем .env файл автоматически - только через persist_env=True
+        # RU: Кеширование работает только во время сессии ComfyUI
         enable_caching = kwargs.get("enable_caching", False)
         if enable_caching:
-            # RU: Создаем .env файл при первом включении кеширования
-            comfy_root = _find_comfy_root()
-            if comfy_root:
-                env_file_path = comfy_root / "user" / "arena_autocache.env"
-                if not env_file_path.exists():
-                    print(f"[ArenaAutoCache] IS_CHANGED: First time enabling caching - creating .env file")
-                    
-                    # RU: Получаем параметры из kwargs
-                    cache_root = kwargs.get("cache_root", "")
-                    min_size_mb = kwargs.get("min_size_mb", 0.0)
-                    max_cache_gb = kwargs.get("max_cache_gb", 0.0)
-                    verbose = kwargs.get("verbose", False)
-                    cache_mode = kwargs.get("cache_mode", "disabled")
-                    auto_patch_on_start = kwargs.get("auto_patch_on_start", False)
-                    auto_cache_enabled = kwargs.get("auto_cache_enabled", False)
-                    
-                    # RU: Создаем .env файл с настройками из ноды
-                    cache_root_final = cache_root if cache_root and cache_root.strip() else str(comfy_root / "models" / "arena_cache")
-                    
-                    # RU: Категории определяются автоматически через JS анализ workflow
-                    
-                    env_data = {
-                        "ARENA_CACHE_ROOT": cache_root_final,
-                        "ARENA_CACHE_MIN_SIZE_MB": str(min_size_mb),
-                        "ARENA_CACHE_MAX_GB": str(max_cache_gb),
-                        "ARENA_CACHE_VERBOSE": "true" if verbose else "false",
-                        "ARENA_CACHE_MODE": cache_mode,
-                        "ARENA_AUTOCACHE_AUTOPATCH": "true" if auto_patch_on_start else "false",
-                        "ARENA_AUTO_CACHE_ENABLED": "true" if auto_cache_enabled else "false",
-                    }
-                    
-                    env_file_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(env_file_path, "w", encoding="utf-8") as f:
-                        f.write("# Arena AutoCache Environment Settings\n")
-                        f.write("# Created when enable_caching=True\n\n")
-                        for key, value in env_data.items():
-                            f.write(f"{key}={value}\n")
-                    
-                    print(f"[ArenaAutoCache] IS_CHANGED: Created .env file with node settings")
-                    
-                    # RU: Сразу активируем deferred autopatch для глобального кеширования
-                    os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-                    print(f"[ArenaAutoCache] IS_CHANGED: Activated deferred autopatch for global caching")
-                    
-                    # RU: Запускаем deferred autopatch сразу
-                    _start_deferred_autopatch()
-                    print(f"[ArenaAutoCache] IS_CHANGED: Started deferred autopatch worker")
+            print(f"[ArenaAutoCache] IS_CHANGED: Caching enabled for current session only (no .env file created)")
+            # RU: Запускаем deferred autopatch сразу
+            _start_deferred_autopatch()
+            print(f"[ArenaAutoCache] IS_CHANGED: Started deferred autopatch worker")
         
         return float("inf")
 
