@@ -1,6 +1,6 @@
 // Arena Settings Panel Extension - TEST VERSION
 // Simple test to check if Settings Panel loads
-import { app } from "../../../scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 console.log("[Arena Settings Panel TEST] Loading...");
 

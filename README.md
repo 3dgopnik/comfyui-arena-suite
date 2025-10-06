@@ -30,9 +30,23 @@
    cp -r web /path/to/ComfyUI/
    ```
 
-4. **Restart ComfyUI** and find "🅰️ Arena AutoCache v4.13.0" in the node menu.
+4. **Sync JavaScript files** (if using ComfyUI Desktop):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/sync_js_files.ps1
+   ```
+
+5. **Restart ComfyUI** and find "🅰️ Arena AutoCache v4.15.0" in the node menu.
 
 ### Usage
+
+#### Quick Start (Global Toggle)
+
+1. **Look for 🅰️ indicator** in ComfyUI header
+2. **Click to enable** - one-click caching activation
+3. **Configure settings** - Right-click → Settings → Arena section
+4. **Run workflows** - automatic model caching without canvas nodes
+
+#### Advanced (Canvas Node)
 
 1. Add **🅰️ Arena AutoCache v4.13.0** node to your workflow
 2. Configure cache settings (optional)

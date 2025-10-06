@@ -1,4 +1,4 @@
-// Arena Workflow Analyzer Extension v1.0
+// Arena Workflow Analyzer Extension v1.2
 // Analyzes ComfyUI workflow to extract model information for smart caching
 // Location: web/extensions/arena_workflow_analyzer.js
 
@@ -8,9 +8,16 @@ console.log("[Arena Workflow Analyzer] Loading...");
 let extensionRegistered = false;
 function waitForApp() {
     if (typeof app !== 'undefined' && app.registerExtension && !extensionRegistered) {
+        // Check if extension is already registered
+        if (window.arenaWorkflowAnalyzerExtensionRegistered) {
+            console.log("[Arena Workflow Analyzer] Extension already registered, skipping...");
+            return;
+        }
+        
         console.log("[Arena Workflow Analyzer] App is ready, registering extension...");
         registerWorkflowAnalyzer();
         extensionRegistered = true;
+        window.arenaWorkflowAnalyzerExtensionRegistered = true;
     } else if (!extensionRegistered) {
         console.log("[Arena Workflow Analyzer] App not ready, waiting...");
         setTimeout(waitForApp, 100);
@@ -202,16 +209,97 @@ app.registerExtension({
             
             // Get model type from field name and class type
             nodeType.prototype.getModelType = function(field, classType) {
+                // RU: Специальная логика для различных загрузчиков моделей
+                const specialClassTypes = {
+                    // RU: Text encoders
+                    'DualCLIPLoader': 'text_encoders',
+                    'FluxClipModel': 'text_encoders',
+                    'QuadrupleCLIPLoader': 'text_encoders',
+                    'T5TextEncoder': 'text_encoders',
+                    'CLIPTextEncoder': 'text_encoders',
+                    
+                    // RU: CLIP Vision
+                    'CLIPVisionLoader': 'clip_vision',
+                    'CLIPVisionLoaderModelOnly': 'clip_vision',
+                    
+                    // RU: Embeddings
+                    'EmbeddingLoader': 'embeddings',
+                    'EmbeddingLoaderModelOnly': 'embeddings',
+                    
+                    // RU: Hypernetworks
+                    'HypernetworkLoader': 'hypernetworks',
+                    'HypernetworkLoaderModelOnly': 'hypernetworks',
+                    
+                    // RU: IPAdapter
+                    'IPAdapterLoader': 'ipadapter',
+                    'IPAdapterLoaderModelOnly': 'ipadapter',
+                    
+                    // RU: GLIGEN
+                    'GLIGENLoader': 'gligen',
+                    'GLIGENLoaderModelOnly': 'gligen',
+                    
+                    // RU: AnimateDiff
+                    'AnimateDiffLoader': 'animatediff_models',
+                    'AnimateDiffLoaderModelOnly': 'animatediff_models',
+                    
+                    // RU: T2I Adapter
+                    'T2IAdapterLoader': 't2i_adapter',
+                    'T2IAdapterLoaderModelOnly': 't2i_adapter',
+                    
+                    // RU: GGUF
+                    'GGUFLoader': 'gguf_models',
+                    'UNetLoaderGGUF': 'gguf_models',
+                    'CLIPLoaderGGUF': 'gguf_models',
+                    
+                    // RU: UNet
+                    'UNetLoader': 'unet_models',
+                    'UNetLoaderModelOnly': 'unet_models',
+                    
+                    // RU: Diffusion
+                    'DiffusionLoader': 'diffusion_models',
+                    'DiffusionLoaderModelOnly': 'diffusion_models',
+                    
+                    // RU: Upscale
+                    'UpscaleLoader': 'upscale_models',
+                    'UpscaleLoaderModelOnly': 'upscale_models',
+                    
+                    // RU: ControlNet
+                    'ControlNetLoader': 'controlnet',
+                    'ControlNetLoaderModelOnly': 'controlnet',
+                    
+                    // RU: VAE
+                    'VAELoader': 'vae',
+                    'VAELoaderModelOnly': 'vae',
+                    
+                    // RU: LoRA
+                    'LoraLoader': 'loras',
+                    'LoraLoaderModelOnly': 'loras',
+                    
+                    // RU: Checkpoints
+                    'CheckpointLoader': 'checkpoints',
+                    'CheckpointLoaderSimple': 'checkpoints',
+                    'CheckpointLoaderModelOnly': 'checkpoints',
+                    
+                    // RU: CLIP
+                    'CLIPLoader': 'clip',
+                    'CLIPLoaderModelOnly': 'clip'
+                };
+                
+                // RU: Проверяем специальные типы классов
+                if (specialClassTypes[classType]) {
+                    return specialClassTypes[classType];
+                }
+                
                 // RU: Расширенный маппинг полей на типы моделей
                 const typeMap = {
                     // RU: Основные модели
-                    'ckpt_name': 'checkpoint',
-                    'model_name': 'checkpoint',
-                    'checkpoint_name': 'checkpoint',
+                    'ckpt_name': 'checkpoints',
+                    'model_name': 'checkpoints',
+                    'checkpoint_name': 'checkpoints',
                     // RU: LoRA модели
-                    'lora_name': 'lora',
-                    'lora_model': 'lora',
-                    'lora_file': 'lora',
+                    'lora_name': 'loras',
+                    'lora_model': 'loras',
+                    'lora_file': 'loras',
                     // RU: VAE модели
                     'vae_name': 'vae',
                     'vae_model': 'vae',
@@ -225,17 +313,17 @@ app.registerExtension({
                     'controlnet_name': 'controlnet',
                     'control_net_model': 'controlnet',
                     // RU: Upscale модели
-                    'upscale_model_name': 'upscale',
-                    'upscale_model': 'upscale',
-                    'upscale_file': 'upscale',
+                    'upscale_model_name': 'upscale_models',
+                    'upscale_model': 'upscale_models',
+                    'upscale_file': 'upscale_models',
                     // RU: Embeddings
-                    'embeddings': 'embedding',
-                    'embedding_name': 'embedding',
-                    'embedding_file': 'embedding',
+                    'embeddings': 'embeddings',
+                    'embedding_name': 'embeddings',
+                    'embedding_file': 'embeddings',
                     // RU: Hypernetworks
-                    'hypernetwork_name': 'hypernetwork',
-                    'hypernetwork_model': 'hypernetwork',
-                    'hypernetwork_file': 'hypernetwork',
+                    'hypernetwork_name': 'hypernetworks',
+                    'hypernetwork_model': 'hypernetworks',
+                    'hypernetwork_file': 'hypernetworks',
                     // RU: IPAdapter модели
                     'ipadapter_name': 'ipadapter',
                     'ipadapter_model': 'ipadapter',
@@ -245,25 +333,33 @@ app.registerExtension({
                     'gligen_model': 'gligen',
                     'gligen_file': 'gligen',
                     // RU: AnimateDiff модели
-                    'motion_model': 'animatediff',
-                    'motion_file': 'animatediff',
-                    'temporal_model': 'animatediff',
+                    'motion_model': 'animatediff_models',
+                    'motion_file': 'animatediff_models',
+                    'temporal_model': 'animatediff_models',
                     // RU: T2I Adapter модели
                     't2i_adapter_name': 't2i_adapter',
                     't2i_adapter_model': 't2i_adapter',
                     't2i_adapter_file': 't2i_adapter',
                     // RU: GGUF модели
-                    'gguf_model': 'gguf',
-                    'gguf_file': 'gguf',
-                    'gguf_name': 'gguf',
+                    'gguf_model': 'gguf_models',
+                    'gguf_file': 'gguf_models',
+                    'gguf_name': 'gguf_models',
                     // RU: UNet модели
-                    'unet_model': 'unet',
-                    'unet_file': 'unet',
-                    'unet_name': 'unet',
+                    'unet_model': 'unet_models',
+                    'unet_file': 'unet_models',
+                    'unet_name': 'unet_models',
                     // RU: Diffusion модели
-                    'diffusion_model': 'diffusion',
-                    'diffusion_file': 'diffusion',
-                    'diffusion_name': 'diffusion'
+                    'diffusion_model': 'diffusion_models',
+                    'diffusion_file': 'diffusion_models',
+                    'diffusion_name': 'diffusion_models',
+                    // RU: CLIP Vision модели
+                    'clip_vision_name': 'clip_vision',
+                    'clip_vision_model': 'clip_vision',
+                    'clip_vision_file': 'clip_vision',
+                    // RU: Text encoders
+                    'text_encoder_name': 'text_encoders',
+                    'text_encoder_model': 'text_encoders',
+                    'text_encoder_file': 'text_encoders'
                 };
                 
                 // RU: Сначала проверяем маппинг полей
@@ -476,17 +572,100 @@ window.ArenaWorkflowAnalyzer = {
     },
     
     // Get model type from field
-    getModelType: function(field) {
+    getModelType: function(field, classType) {
+        // RU: Специальная логика для различных загрузчиков моделей
+        const specialClassTypes = {
+            // RU: Text encoders
+            'DualCLIPLoader': 'text_encoders',
+            'FluxClipModel': 'text_encoders',
+            'QuadrupleCLIPLoader': 'text_encoders',
+            'T5TextEncoder': 'text_encoders',
+            'CLIPTextEncoder': 'text_encoders',
+            
+            // RU: CLIP Vision
+            'CLIPVisionLoader': 'clip_vision',
+            'CLIPVisionLoaderModelOnly': 'clip_vision',
+            
+            // RU: Embeddings
+            'EmbeddingLoader': 'embeddings',
+            'EmbeddingLoaderModelOnly': 'embeddings',
+            
+            // RU: Hypernetworks
+            'HypernetworkLoader': 'hypernetworks',
+            'HypernetworkLoaderModelOnly': 'hypernetworks',
+            
+            // RU: IPAdapter
+            'IPAdapterLoader': 'ipadapter',
+            'IPAdapterLoaderModelOnly': 'ipadapter',
+            
+            // RU: GLIGEN
+            'GLIGENLoader': 'gligen',
+            'GLIGENLoaderModelOnly': 'gligen',
+            
+            // RU: AnimateDiff
+            'AnimateDiffLoader': 'animatediff_models',
+            'AnimateDiffLoaderModelOnly': 'animatediff_models',
+            
+            // RU: T2I Adapter
+            'T2IAdapterLoader': 't2i_adapter',
+            'T2IAdapterLoaderModelOnly': 't2i_adapter',
+            
+            // RU: GGUF
+            'GGUFLoader': 'gguf_models',
+            'UNetLoaderGGUF': 'gguf_models',
+            'CLIPLoaderGGUF': 'gguf_models',
+            
+            // RU: UNet
+            'UNetLoader': 'unet_models',
+            'UNetLoaderModelOnly': 'unet_models',
+            
+            // RU: Diffusion
+            'DiffusionLoader': 'diffusion_models',
+            'DiffusionLoaderModelOnly': 'diffusion_models',
+            
+            // RU: Upscale
+            'UpscaleLoader': 'upscale_models',
+            'UpscaleLoaderModelOnly': 'upscale_models',
+            
+            // RU: ControlNet
+            'ControlNetLoader': 'controlnet',
+            'ControlNetLoaderModelOnly': 'controlnet',
+            
+            // RU: VAE
+            'VAELoader': 'vae',
+            'VAELoaderModelOnly': 'vae',
+            
+            // RU: LoRA
+            'LoraLoader': 'loras',
+            'LoraLoaderModelOnly': 'loras',
+            
+            // RU: Checkpoints
+            'CheckpointLoader': 'checkpoints',
+            'CheckpointLoaderSimple': 'checkpoints',
+            'CheckpointLoaderModelOnly': 'checkpoints',
+            
+            // RU: CLIP
+            'CLIPLoader': 'clip',
+            'CLIPLoaderModelOnly': 'clip'
+        };
+        
+        // RU: Проверяем специальные типы классов
+        if (specialClassTypes[classType]) {
+            return specialClassTypes[classType];
+        }
+        
         const typeMap = {
-            'ckpt_name': 'checkpoint',
+            'ckpt_name': 'checkpoints',
             'vae_name': 'vae',
-            'lora_name': 'lora',
+            'lora_name': 'loras',
             'clip_name': 'clip',
-            'model_name': 'model',
+            'model_name': 'checkpoints',
             'control_net_name': 'controlnet',
-            'upscale_model_name': 'upscale',
-            'embeddings': 'embedding',
-            'hypernetwork_name': 'hypernetwork'
+            'upscale_model_name': 'upscale_models',
+            'embeddings': 'embeddings',
+            'hypernetwork_name': 'hypernetworks',
+            'clip_vision_name': 'clip_vision',
+            'text_encoder_name': 'text_encoders'
         };
         return typeMap[field] || 'unknown';
     }

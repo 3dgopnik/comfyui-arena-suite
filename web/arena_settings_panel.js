@@ -1,6 +1,6 @@
 // Arena Settings Panel Extension
 // Adds Arena section to ComfyUI Settings dialog
-import { app } from "../../../scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 console.log("[Arena Settings Panel] Loading...");
 

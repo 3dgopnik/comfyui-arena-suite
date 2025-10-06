@@ -5,6 +5,144 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.2] - Fri Oct 03 2025 15:54:59 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Global UI Integration**: Arena AutoCache теперь интегрирован непосредственно в интерфейс ComfyUI без необходимости добавления ноды на канвас
+- **Floating Actionbar**: Плавающая кнопка Arena с возможностью перетаскивания и автоматического встраивания в хедер ComfyUI
+- **Settings Panel**: Полная панель настроек Arena в разделе ComfyUI Settings с управлением всеми параметрами кеширования
+- **Persistent State**: Сохранение позиции и состояния (docked/floating) в localStorage для восстановления при перезапуске
+
+### Changed
+- **API Registration**: Глобальная регистрация API endpoints при загрузке модуля, обеспечивающая доступность без ноды на канвасе
+- **Docking Mechanism**: Умная логика автовстраивания при перетаскивании кнопки в область хедера (верхние 80px экрана)
+- **User Experience**: Упрощенный доступ к функциям Arena AutoCache через интерфейс ComfyUI
+
+---
+
+## [4.16.0] - Fri Oct 03 2025 13:46:21 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Global UI Toggle**: Arena AutoCache can now be enabled directly from ComfyUI header without adding nodes to canvas
+- **Header Indicator**: Added 🅰️ button in ComfyUI header with color-coded status (blue=ON, gray=OFF)
+- **Settings Panel**: New "Arena" section in ComfyUI Settings for comprehensive cache configuration
+- **Status API**: New `/arena/status` endpoint providing real-time cache status and configuration
+- **Right-click Context**: Right-click header button opens Settings → Arena section for quick access
+
+### Changed
+- **User Experience**: Simplified activation workflow - one-click caching enable/disable from header
+- **Documentation**: Updated manual and README with global toggle instructions as primary method
+- **Integration**: Enhanced ComfyUI integration with seamless UI controls
+
+---
+
+## [4.12.1] - Fri Oct 03 2025 13:41:51 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Global UI Toggle**: Arena AutoCache can now be enabled directly from ComfyUI header without adding nodes to canvas
+- **Header Indicator**: Added 🅰️ button in ComfyUI header with color-coded status (blue=ON, gray=OFF)
+- **Settings Panel**: New "Arena" section in ComfyUI Settings for comprehensive cache configuration
+- **Status API**: New `/arena/status` endpoint providing real-time cache status and configuration
+- **Right-click Context**: Right-click header button opens Settings → Arena section for quick access
+
+### Changed
+- **User Experience**: Simplified activation workflow - one-click caching enable/disable from header
+- **Documentation**: Updated manual and README with global toggle instructions as primary method
+- **Integration**: Enhanced ComfyUI integration with seamless UI controls
+
+---
+
+## [4.12.0] - Fri Oct 03 2025 12:16:04 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Model Type Sorting**: Automatic model sorting in cache by type (SDXL, SD1.5, Flux, etc.) with subfolder creation for better file organization
+- **Smart Model Detection**: New `_detect_model_type()` function that intelligently identifies model types from filenames using pattern matching
+- **Enhanced Cache Structure**: Updated cache path structure to `cache_root/category/model_type/filename` for improved organization
+- **Backward Compatibility**: Seamless support for existing cached models in old locations without breaking functionality
+
+---
+
+## [4.15.0] - 2025-01-27
+
+### Fixed
+- **Button Reset Issue**: Fixed JavaScript buttons not resetting after click - now `save_env_now`, `sync_from_env` buttons properly reset after action
+- **Auto-load .env**: Added automatic loading of settings from .env file when node is created (if .env exists)
+- **Comprehensive Model Loader Support**: Added comprehensive JavaScript logic to detect all ComfyUI model loaders and map them to correct categories
+- **All Model Categories**: Enhanced `getModelType()` function to handle all ComfyUI model types including:
+  - Text encoders: `DualCLIPLoader`, `FluxClipModel`, `QuadrupleCLIPLoader`, `T5TextEncoder`, `CLIPTextEncoder`
+  - CLIP Vision: `CLIPVisionLoader`, `CLIPVisionLoaderModelOnly`
+  - Embeddings: `EmbeddingLoader`, `EmbeddingLoaderModelOnly`
+  - Hypernetworks: `HypernetworkLoader`, `HypernetworkLoaderModelOnly`
+  - IPAdapter: `IPAdapterLoader`, `IPAdapterLoaderModelOnly`
+  - GLIGEN: `GLIGENLoader`, `GLIGENLoaderModelOnly`
+  - AnimateDiff: `AnimateDiffLoader`, `AnimateDiffLoaderModelOnly`
+  - T2I Adapter: `T2IAdapterLoader`, `T2IAdapterLoaderModelOnly`
+  - GGUF: `GGUFLoader`, `UNetLoaderGGUF`, `CLIPLoaderGGUF`
+  - UNet: `UNetLoader`, `UNetLoaderModelOnly`
+  - Diffusion: `DiffusionLoader`, `DiffusionLoaderModelOnly`
+  - Upscale: `UpscaleLoader`, `UpscaleLoaderModelOnly`
+  - ControlNet: `ControlNetLoader`, `ControlNetLoaderModelOnly`
+  - VAE: `VAELoader`, `VAELoaderModelOnly`
+  - LoRA: `LoraLoader`, `LoraLoaderModelOnly`
+  - Checkpoints: `CheckpointLoader`, `CheckpointLoaderSimple`, `CheckpointLoaderModelOnly`
+  - CLIP: `CLIPLoader`, `CLIPLoaderModelOnly`
+
+### Technical Details
+- Updated `arena_autocache.js` v4.1 with button reset functionality and auto-load from .env
+- Updated `arena_workflow_analyzer.js` v1.2 with comprehensive model loader detection
+- JavaScript now correctly identifies all ComfyUI model types and sends them to Python with proper categories
+- Python automatically extends `effective_categories` when new categories are detected from workflow analysis
+- No static categories needed - all determined dynamically through JavaScript analysis
+
+## [4.14.0] - 2025-01-27
+
+### Added
+- **Bidirectional .env Sync**: Real-time synchronization between node UI and .env file
+- **New UI Controls**: 
+  - `Save to .env Now` button - instantly writes current settings to .env file
+  - `Sync from .env` button - loads settings from .env file into UI
+  - `Live .env Sync` toggle - enables automatic file watching and reloading
+- **REST API Endpoints**: 
+  - `GET /arena/env` - retrieve current ARENA_* environment variables
+  - `POST /arena/env` - save environment variables to .env file
+- **File Watcher**: Background monitoring of .env file changes with automatic reloading
+
+### Fixed
+- **.env Creation**: Fixed issue where .env file wasn't created when changing node parameters without running
+- **.env Loading**: Fixed "cannot access local variable 'os'" error in _load_env_file()
+- **Caching Blocking**: Resolved issue where scheduled caching was blocked by overly aggressive system scan detection
+- **Default Values**: Aligned ARENA_AUTO_CACHE_ENABLED default to "false" across all components
+
+### Changed
+- **System Scan Detection**: Refined detection to use exact function name matching instead of substring matching
+- **Environment Loading**: _load_env_file() now returns boolean indicating success/failure
+- **Reload Logic**: Removed dependency on _env_loaded flag for file reloading
+- **UI Parameters**: Added new boolean controls for .env synchronization
+
+### Technical Details
+- Enhanced _ensure_env_loaded() to only set _env_loaded flag on successful file loading
+- Improved _reload_settings_if_needed() to reload .env file whenever it exists
+- Updated IS_CHANGED() to handle new UI buttons and live sync functionality
+- Added background thread for .env file monitoring with 1-second polling interval
+- Implemented proper API validation for environment variable keys
+
+## [4.11.1] - Thu Oct 02 2025 13:18:00 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Copy Task Filtering**: Enhanced `_schedule_copy_task()` with multiple safety checks:
+- System scan detection via call stack analysis
+- Startup phase protection (first 30 seconds)
+- Active Arena node verification
+- Copy frequency limiting (1-second intervals)
+- **Performance Optimization**: Significantly reduced system load during ComfyUI startup by eliminating unnecessary background copy operations
+
+### Fixed
+- **Mass Copying Issue**: Resolved critical problem where Arena AutoCache was triggering thousands of unnecessary copy tasks during ComfyUI's system scanning phase
+- **System Scan Detection**: Added intelligent filtering to distinguish between system initialization and actual workflow usage
+- **Startup Phase Protection**: Implemented 30-second startup delay to prevent caching during ComfyUI's initial model scanning
+
+---
+
 ## [4.13.0] - Wed Oct 02 2025 10:00:00 GMT+0300 (Москва, стандартное время)
 
 ### Удалено

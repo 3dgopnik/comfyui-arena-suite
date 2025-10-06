@@ -1,6 +1,6 @@
 {
   "changelogPath": "CHANGELOG.md",
-  "currentVersion": "4.5.2",
+  "currentVersion": "4.12.2",
   "versionStrategy": "semver",
   "minimumScore": 3,
   "sessionTimeoutMinutes": 20,
