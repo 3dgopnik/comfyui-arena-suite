@@ -14,12 +14,12 @@ app.registerExtension({
         setTimeout(() => {
             console.log("[Arena Settings Panel] Adding Arena section to settings...");
             
-            // Helper function to save all settings to .env
-            const saveAllSettingsToEnv = async () => {
+            // Helper function to save all settings to .env (ONLY when user explicitly enables Arena)
+            const saveAllSettingsToEnv = async (enableArena = false) => {
                 try {
-                    // RU: Используем значения по умолчанию, так как ComfyUI Settings API работает по-другому
+                    // RU: Сохраняем настройки ТОЛЬКО при явной активации пользователем
                     const allSettings = {
-                        ARENA_AUTO_CACHE_ENABLED: '1',
+                        ARENA_AUTO_CACHE_ENABLED: enableArena ? '1' : '0',
                         ARENA_CACHE_MODE: "ondemand",
                         ARENA_CACHE_ROOT: "D:/ArenaCache",
                         ARENA_CACHE_MIN_SIZE_MB: "50",
@@ -28,10 +28,10 @@ app.registerExtension({
                         ARENA_CACHE_DISCOVERY: "workflow_only",
                         ARENA_CACHE_PREFETCH_STRATEGY: "lazy",
                         ARENA_CACHE_MAX_CONCURRENCY: "2",
-                        ARENA_AUTOCACHE_AUTOPATCH: '1'
+                        ARENA_AUTOCACHE_AUTOPATCH: enableArena ? '1' : '0'
                     };
                     
-                    console.log("[Arena Settings Panel] Saving all settings to .env:", allSettings);
+                    console.log("[Arena Settings Panel] Saving settings to .env (enableArena:", enableArena, "):", allSettings);
                     
                     await fetch('/arena/env', {
                         method: 'POST',
@@ -39,9 +39,9 @@ app.registerExtension({
                         body: JSON.stringify({ env: allSettings })
                     });
                     
-                    console.log("[Arena Settings Panel] All settings saved successfully");
+                    console.log("[Arena Settings Panel] Settings saved successfully");
                 } catch (error) {
-                    console.error("[Arena Settings Panel] Error saving all settings:", error);
+                    console.error("[Arena Settings Panel] Error saving settings:", error);
                 }
             };
             
@@ -56,8 +56,8 @@ app.registerExtension({
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] AutoCache enabled: ${value}`);
                     try {
-                        // RU: Сохраняем ВСЕ настройки при изменении главного переключателя
-                        await saveAllSettingsToEnv();
+                        // RU: Сохраняем настройки ТОЛЬКО при явной активации пользователем
+                        await saveAllSettingsToEnv(value);
                         
                         if (value) {
                             // Start autopatch when enabled
@@ -86,7 +86,7 @@ app.registerExtension({
                 tooltip: "Select caching mode for Arena AutoCache",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Cache mode: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
@@ -99,7 +99,7 @@ app.registerExtension({
                 tooltip: "Directory for Arena AutoCache storage",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Cache root: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
@@ -112,7 +112,7 @@ app.registerExtension({
                 tooltip: "Minimum file size to cache (in MB)",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Min size: ${value}MB`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
@@ -125,7 +125,7 @@ app.registerExtension({
                 tooltip: "Maximum cache size (0 = unlimited)",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Max cache: ${value}GB`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
@@ -138,7 +138,7 @@ app.registerExtension({
                 tooltip: "Enable verbose logging for Arena AutoCache",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Verbose logging: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
@@ -155,7 +155,7 @@ app.registerExtension({
                 tooltip: "How to discover models for caching",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Discovery mode: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
 
@@ -172,7 +172,7 @@ app.registerExtension({
                 tooltip: "When to download models",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Prefetch strategy: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
 
@@ -185,7 +185,7 @@ app.registerExtension({
                 tooltip: "Maximum parallel downloads",
                 onChange: async (value) => {
                     console.log(`[Arena Settings Panel] Max concurrency: ${value}`);
-                    await saveAllSettingsToEnv();
+                    // RU: НЕ сохраняем автоматически - только при явной активации Arena
                 }
             });
             
