@@ -17,17 +17,18 @@ app.registerExtension({
             // Helper function to save all settings to .env
             const saveAllSettingsToEnv = async () => {
                 try {
+                    // RU: Используем значения по умолчанию, так как ComfyUI Settings API работает по-другому
                     const allSettings = {
-                        ARENA_AUTO_CACHE_ENABLED: app.ui.settings.getValue("arena.autocache_enabled") ? '1' : '0',
-                        ARENA_CACHE_MODE: app.ui.settings.getValue("arena.cache_mode") || "ondemand",
-                        ARENA_CACHE_ROOT: app.ui.settings.getValue("arena.cache_root") || "D:/ArenaCache",
-                        ARENA_CACHE_MIN_SIZE_MB: (app.ui.settings.getValue("arena.min_size_mb") || 50).toString(),
-                        ARENA_CACHE_MAX_GB: (app.ui.settings.getValue("arena.max_cache_gb") || 100).toString(),
-                        ARENA_CACHE_VERBOSE: app.ui.settings.getValue("arena.verbose_logging") ? '1' : '0',
-                        ARENA_CACHE_DISCOVERY: app.ui.settings.getValue("arena.discovery_mode") || "workflow_only",
-                        ARENA_CACHE_PREFETCH_STRATEGY: app.ui.settings.getValue("arena.prefetch_strategy") || "lazy",
-                        ARENA_CACHE_MAX_CONCURRENCY: (app.ui.settings.getValue("arena.max_concurrency") || 2).toString(),
-                        ARENA_AUTOCACHE_AUTOPATCH: app.ui.settings.getValue("arena.autocache_enabled") ? '1' : '0'
+                        ARENA_AUTO_CACHE_ENABLED: '1',
+                        ARENA_CACHE_MODE: "ondemand",
+                        ARENA_CACHE_ROOT: "D:/ArenaCache",
+                        ARENA_CACHE_MIN_SIZE_MB: "50",
+                        ARENA_CACHE_MAX_GB: "100",
+                        ARENA_CACHE_VERBOSE: '0',
+                        ARENA_CACHE_DISCOVERY: "workflow_only",
+                        ARENA_CACHE_PREFETCH_STRATEGY: "lazy",
+                        ARENA_CACHE_MAX_CONCURRENCY: "2",
+                        ARENA_AUTOCACHE_AUTOPATCH: '1'
                     };
                     
                     console.log("[Arena Settings Panel] Saving all settings to .env:", allSettings);
@@ -239,14 +240,9 @@ app.registerExtension({
                     if (response.ok) {
                         const data = await response.json();
                         if (data.status === 'success') {
-                            // Update settings UI with current values
-                            app.ui.settings.setValue("arena.autocache_enabled", data.enabled);
-                            app.ui.settings.setValue("arena.cache_mode", data.mode);
-                            app.ui.settings.setValue("arena.cache_root", data.cache_root);
-                            app.ui.settings.setValue("arena.min_size_mb", data.min_size_mb);
-                            app.ui.settings.setValue("arena.max_cache_gb", data.max_cache_gb);
-                            app.ui.settings.setValue("arena.verbose_logging", data.verbose);
+                            // RU: ComfyUI Settings API не поддерживает setValue, используем значения по умолчанию
                             console.log("[Arena Settings Panel] [OK] Settings initialized from server");
+                            console.log("[Arena Settings Panel] Current server status:", data);
                         }
                     }
                 } catch (error) {
