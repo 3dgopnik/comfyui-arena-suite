@@ -132,8 +132,8 @@ app.registerExtension({
 								return;
 							}
 							
-							// Force enabled = true (user confirmed)
-							const enabled = true;
+							// Default to disabled (user must explicitly enable via Arena button)
+							const enabled = false;
 							
 							// Collect ALL text inputs from Settings dialog (fallback method)
 							const allInputs = Array.from(document.querySelectorAll('.comfy-settings-dialog input[type="text"], input[type="text"]'));
@@ -155,8 +155,8 @@ app.registerExtension({
 							
 							// ALL values converted to strings for backend
 							const env = {
-								ARENA_AUTO_CACHE_ENABLED: String(enabled ? 1 : 0),
-								ARENA_AUTOCACHE_AUTOPATCH: String(enabled ? 1 : 0),
+								ARENA_AUTO_CACHE_ENABLED: "0", // Always disabled by default
+								ARENA_AUTOCACHE_AUTOPATCH: "0", // Always disabled by default
 								ARENA_CACHE_MODE: String(getSettingValue("arena.cache_mode") || "ondemand"),
 								ARENA_CACHE_ROOT: String(cacheRoot),
 								ARENA_CACHE_MIN_SIZE_MB: String(getSettingValue("arena.min_size_mb") ?? 10),

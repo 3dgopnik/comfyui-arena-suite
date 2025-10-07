@@ -1,10 +1,10 @@
-# ComfyUI Arena Suite v5.0.0
+# ComfyUI Arena Suite v5.1.0
 
 🚀 **Modern ComfyUI Custom Node Suite** - Automatic model caching and workflow optimization for ComfyUI.
 
 ## ✨ Features
 
-- **🅰️ Arena AutoCache v5.0.0** - Settings UI with "💾 Save to .env", OnDemand caching, safer defaults
+- **🅰️ Arena AutoCache v5.1.0** - Three Arena button modes (Gray/Red/Green), Settings UI with "💾 Save to .env", OnDemand caching, safer defaults
 - **Web Extensions** - Seamless ComfyUI integration
 - **Modern Architecture** - Clean, maintainable codebase
 - **CI/CD Ready** - GitHub Actions workflow included
@@ -127,6 +127,8 @@ When reporting issues, please include:
 
 ## 📚 Documentation
 
+- **[Arena AutoCache v5.0.0 (RU)](docs/ru/arena_autocache.md)** — актуальное руководство
+- **[Arena AutoCache v5.0.0 (EN)](docs/en/arena_autocache.md)** — quick guide
 - **[Quick Start Guide](docs/ru/quickstart.md)** - Get up and running quickly
 - **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
 - **[Configuration](docs/ru/config.md)** - Configuration options

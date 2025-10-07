@@ -4,6 +4,13 @@ import { app } from "../../scripts/app.js";
 
 console.log("[Arena Simple Header] Loading...");
 
+// RU: Cache modes for Arena button
+                const CACHE_MODES = {
+                    GRAY: 'gray',   // ARENA_AUTO_CACHE_ENABLED=0, ARENA_AUTOCACHE_AUTOPATCH=0
+                    RED: 'red',     // ARENA_AUTO_CACHE_ENABLED=1, ARENA_AUTOCACHE_AUTOPATCH=1  
+                    GREEN: 'green'  // ARENA_AUTO_CACHE_ENABLED=1, ARENA_AUTOCACHE_AUTOPATCH=0
+                };
+
 app.registerExtension({
     name: "ArenaSimple.Header",
     
@@ -69,16 +76,16 @@ app.registerExtension({
                     border-right: 1px solid #555;
                 `;
 
-                // Dropdown arrow button (like Run button)
-                const dropdownButton = document.createElement('button');
-                dropdownButton.className = 'arena-dropdown-button';
-                dropdownButton.innerHTML = `
+                // Settings button (opens ComfyUI settings)
+                const settingsButton = document.createElement('button');
+                settingsButton.className = 'arena-settings-button';
+                settingsButton.innerHTML = `
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M7 10l5 5 5-5z"/>
+                        <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
                     </svg>
                 `;
-                dropdownButton.title = 'Arena Options';
-                dropdownButton.style.cssText = `
+                settingsButton.title = 'Открыть настройки Arena AutoCache';
+                settingsButton.style.cssText = `
                     background: transparent;
                     color: #e0e0e0;
                     border: none;
@@ -93,39 +100,178 @@ app.registerExtension({
                     height: 30px;
                 `;
 
+                // RU: Add settings button click handler
+                settingsButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    console.log("[Arena Simple Header] Settings button clicked!");
+                    
+                    // RU: Try to find and click existing settings button in ComfyUI
+                    try {
+                        // Method 1: Look for settings button by various selectors
+                        const selectors = [
+                            '[title*="Settings"]',
+                            '[title*="settings"]', 
+                            '.settings-btn',
+                            '#settings-btn',
+                            'button[aria-label*="settings"]',
+                            'button[aria-label*="Settings"]',
+                            '.comfy-settings-btn',
+                            '[data-tooltip*="settings"]',
+                            '[data-tooltip*="Settings"]'
+                        ];
+                        
+                        let foundButton = null;
+                        for (const selector of selectors) {
+                            foundButton = document.querySelector(selector);
+                            if (foundButton) {
+                                console.log(`[Arena Simple Header] Found settings button with selector: ${selector}`);
+                                break;
+                            }
+                        }
+                        
+                        if (foundButton) {
+                            console.log("[Arena Simple Header] Clicking existing settings button");
+                            foundButton.click();
+                            
+                            // RU: Try to navigate to Arena section after settings open
+                            setTimeout(() => {
+                                try {
+                                    // Method 1: Look for Arena section/tab
+                                    const arenaSection = document.querySelector('[data-id="arena"], .arena-section, #arena, [href*="arena"]');
+                                    if (arenaSection) {
+                                        console.log("[Arena Simple Header] Found Arena section, clicking it");
+                                        arenaSection.click();
+                                        return;
+                                    }
+                                    
+                                    // Method 2: Look for Arena in settings list (more specific)
+                                    const settingsElements = document.querySelectorAll('div, span, button, a, li, td, th');
+                                    for (const item of settingsElements) {
+                                        if (item.textContent && 
+                                            item.textContent.toLowerCase().includes('arena') && 
+                                            !item.textContent.includes('@layer') &&
+                                            !item.textContent.includes('CSS') &&
+                                            item.textContent.length < 100) { // Avoid long CSS/text content
+                                            console.log("[Arena Simple Header] Found Arena item:", item.textContent.trim());
+                                            if (item.click) {
+                                                item.click();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Method 3: Look for specific Arena settings patterns
+                                    const arenaPatterns = [
+                                        'Arena AutoCache',
+                                        'Arena Settings', 
+                                        'Arena Configuration',
+                                        'Arena',
+                                        'arena'
+                                    ];
+                                    
+                                    for (const pattern of arenaPatterns) {
+                                        const elements = document.querySelectorAll('*');
+                                        for (const elem of elements) {
+                                            if (elem.textContent && 
+                                                elem.textContent.trim() === pattern &&
+                                                elem.click) {
+                                                console.log(`[Arena Simple Header] Found exact match: "${pattern}"`);
+                                                elem.click();
+                                                return;
+                                            }
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.error("[Arena Simple Header] Error navigating to Arena section:", error);
+                                }
+                            }, 500); // Wait for settings to fully load
+                            
+                            return;
+                        }
+                        
+                        // Method 2: Try to trigger via keyboard shortcut (Ctrl+,)
+                        console.log("[Arena Simple Header] Trying keyboard shortcut Ctrl+,");
+                        const ctrlCommaEvent = new KeyboardEvent('keydown', {
+                            key: ',',
+                            code: 'Comma',
+                            ctrlKey: true,
+                            bubbles: true
+                        });
+                        document.dispatchEvent(ctrlCommaEvent);
+                        
+                        // Method 3: Try app.ui.settings if available
+                        if (app && app.ui && app.ui.settings && typeof app.ui.settings.show === 'function') {
+                            console.log("[Arena Simple Header] Using app.ui.settings.show()");
+                            app.ui.settings.show();
+                            
+                            // RU: Try to navigate to Arena section
+                            setTimeout(() => {
+                                try {
+                                    const arenaSection = document.querySelector('[data-id="arena"], .arena-section, #arena, [href*="arena"]');
+                                    if (arenaSection) {
+                                        console.log("[Arena Simple Header] Found Arena section, clicking it");
+                                        arenaSection.click();
+                                    } else {
+                                        // Look for Arena text and click it (more specific)
+                                        const arenaPatterns = [
+                                            'Arena AutoCache',
+                                            'Arena Settings', 
+                                            'Arena Configuration',
+                                            'Arena',
+                                            'arena'
+                                        ];
+                                        
+                                        for (const pattern of arenaPatterns) {
+                                            const elements = document.querySelectorAll('div, span, button, a, li, td, th');
+                                            for (const elem of elements) {
+                                                if (elem.textContent && 
+                                                    elem.textContent.trim() === pattern &&
+                                                    !elem.textContent.includes('@layer') &&
+                                                    elem.click) {
+                                                    console.log(`[Arena Simple Header] Found exact match: "${pattern}"`);
+                                                    elem.click();
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.error("[Arena Simple Header] Error navigating to Arena section:", error);
+                                }
+                            }, 500);
+                            
+                            return;
+                        }
+                        
+                        console.warn("[Arena Simple Header] No settings button or API found");
+                        
+                    } catch (error) {
+                        console.error("[Arena Simple Header] Failed to open settings:", error);
+                    }
+                });
+
                 // Hover effects
                 buttonGroup.addEventListener('mouseenter', () => {
                     buttonGroup.style.background = '#4a4a4a';
                     buttonGroup.style.borderColor = '#666';
                     mainButton.style.background = '#4a4a4a';
-                    dropdownButton.style.background = '#4a4a4a';
+                    settingsButton.style.background = '#4a4a4a';
                 });
 
                 buttonGroup.addEventListener('mouseleave', () => {
                     buttonGroup.style.background = '#3a3a3a';
                     buttonGroup.style.borderColor = '#555';
                     mainButton.style.background = 'transparent';
-                    dropdownButton.style.background = 'transparent';
+                    settingsButton.style.background = 'transparent';
                 });
 
-                // Active state
-                mainButton.addEventListener('mousedown', () => {
-                    buttonGroup.style.background = '#2a2a2a';
-                    buttonGroup.style.transform = 'scale(0.98)';
-                });
-
-                dropdownButton.addEventListener('mousedown', () => {
-                    buttonGroup.style.background = '#2a2a2a';
-                    buttonGroup.style.transform = 'scale(0.98)';
-                });
-
-                document.addEventListener('mouseup', () => {
-                    buttonGroup.style.transform = 'scale(1)';
-                });
+                // RU: No active state animations to prevent header jerking
 
                 // Add buttons to group
                 buttonGroup.appendChild(mainButton);
-                buttonGroup.appendChild(dropdownButton);
+                buttonGroup.appendChild(settingsButton);
+                
+                // RU: No dropdown menu functionality for now
 
                 // Use mainButton for compatibility with existing code
                 const button = mainButton;
@@ -660,91 +806,167 @@ app.registerExtension({
                 document.addEventListener('mousemove', doDrag);
                 document.addEventListener('mouseup', endDrag);
                 
-                // Add click handler with proper toggle logic
+                // RU: Add click handler with three-mode logic
                 button.addEventListener('click', async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log("[Arena Simple Header] Button clicked!");
                     
-                    // Show loading state
-                    const originalText = button.innerHTML;
-                    button.innerHTML = '...';
-                    button.style.background = '#666';
+                    // RU: No loading state to prevent header jerking
                     
                     try {
-                        // Try to get current state from localStorage first
-                        let currentEnabled = false;
-                        try {
-                            const stored = localStorage.getItem('Arena.AutoCache.Enabled');
-                            currentEnabled = stored === 'true';
-                        } catch {}
-                        
-                        // Try to get from API if available
-                        try {
-                            const response = await fetch('/arena/env');
-                            if (response.ok) {
-                                const data = await response.json();
-                                currentEnabled = data.env?.ARENA_AUTO_CACHE_ENABLED === '1';
-                                console.log("[Arena Simple Header] Got state from API:", currentEnabled);
-                            }
-                        } catch (apiError) {
-                            console.warn("[Arena Simple Header] API not available, using localStorage:", apiError);
+                        // RU: Determine next mode based on current mode
+                        let nextMode;
+                        switch (currentCacheMode) {
+                            case CACHE_MODES.GRAY:
+                                // White → Red (enable caching)
+                                nextMode = CACHE_MODES.RED;
+                                break;
+                            case CACHE_MODES.RED:
+                                // Red → Green (disable autopatch, keep enabled)
+                                nextMode = CACHE_MODES.GREEN;
+                                break;
+                            case CACHE_MODES.GREEN:
+                                // Green → White (disable everything)
+                                nextMode = CACHE_MODES.GRAY;
+                                break;
+                            default:
+                                nextMode = CACHE_MODES.GRAY;
                         }
                         
-                        const newEnabled = !currentEnabled;
-                        console.log(`[Arena Simple Header] Current: ${currentEnabled}, New: ${newEnabled}`);
+                        console.log(`[Arena Simple Header] Switching from ${currentCacheMode} to ${nextMode}`);
                         
-                        // Save to localStorage immediately
-                        try {
-                            localStorage.setItem('Arena.AutoCache.Enabled', newEnabled.toString());
-                        } catch (storageError) {
-                            console.warn("[Arena Simple Header] Failed to save to localStorage:", storageError);
-                        }
+                        // RU: Set new cache mode
+                        await setCacheMode(nextMode);
                         
-                        // RU: Кнопка ARENA только переключает enable/disable, НЕ создает .env файл
-                        try {
-                            // RU: Только обновляем переменные окружения, НЕ создаем .env файл
-                            const updateResponse = await fetch('/arena/env', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                    env: {
-                                        ARENA_AUTO_CACHE_ENABLED: newEnabled ? '1' : '0',
-                                        ARENA_AUTOCACHE_AUTOPATCH: newEnabled ? '1' : '0'
-                                    },
-                                    update_only: true  // RU: Только обновляем переменные, не создаем файл
-                                })
-                            });
-                            
-                            if (updateResponse.ok) {
-                                console.log("[Arena Simple Header] Environment variables updated successfully");
+                        // RU: No need to restore button text
+                        
+                        console.log(`[Arena Simple Header] Cache mode switched to ${nextMode} successfully`);
+                        
+                    } catch (error) {
+                        console.error("[Arena Simple Header] Error:", error);
+                        // RU: No need to restore button text
+                        buttonGroup.style.background = '#dc2626'; // Red for error
+                        mainButton.title = `Error: ${error.message}`;
+                        
+                        // RU: Reset after 3 seconds
+                        setTimeout(() => {
+                            updateButtonAppearance();
+                        }, 3000);
+                    }
+                });
+                
+                // Add button group to floating toolbar (вместо кнопки)
+                targetContainer.appendChild(buttonGroup);
+                console.log("[Arena Simple Header] Button group added to floating toolbar");
+                console.log("[Arena Simple Header] Button group element:", buttonGroup);
+                console.log("[Arena Simple Header] Button group visible:", buttonGroup.offsetWidth > 0 && buttonGroup.offsetHeight > 0);
+                console.log("[Arena Simple Header] Button group parent:", buttonGroup.parentElement);
+                
+                // RU: Initialize cache mode state
+                let currentCacheMode = CACHE_MODES.GRAY;
+                let uncachedModelsCount = 0;
+                
+                // RU: Functions for cache mode management
+                async function checkUncachedModels() {
+                    try {
+                        const response = await fetch('/arena/uncached_models');
+                        const data = await response.json();
+                        uncachedModelsCount = data.uncached_count || 0;
+                        return uncachedModelsCount;
+                    } catch (error) {
+                        console.warn("[Arena Simple Header] Failed to check uncached models:", error);
+                        uncachedModelsCount = 0;
+                        return 0;
+                    }
+                }
+                
+                function updateButtonAppearance() {
+                    // RU: Reset button group appearance to default
+                    buttonGroup.style.background = '#3a3a3a';
+                    buttonGroup.style.borderColor = '#555';
+                    settingsButton.style.color = '#e0e0e0';
+                    
+                    // RU: Keep text color white, change only icon color
+                    mainButton.style.color = '#e0e0e0'; // Always white text
+                    
+                    // RU: Change only the icon color in the circle
+                    const iconPath = mainButton.querySelector('svg path');
+                    
+                    switch (currentCacheMode) {
+                        case CACHE_MODES.GRAY:
+                            if (iconPath) iconPath.style.fill = '#e0e0e0'; // White icon
+                            mainButton.title = 'Arena AutoCache: Выключено (клик для включения)';
+                            break;
+                        case CACHE_MODES.RED:
+                            if (iconPath) iconPath.style.fill = '#ff6b6b'; // Red icon
+                            mainButton.title = 'Arena AutoCache: Активное кеширование (клик для выключения)';
+                            break;
+                        case CACHE_MODES.GREEN:
+                            if (iconPath) iconPath.style.fill = '#51cf66'; // Green icon
+                            if (uncachedModelsCount > 0) {
+                                mainButton.title = `Arena AutoCache: Только использование\n${uncachedModelsCount} моделей не в кеше\n(клик для перехода в режим кеширования)`;
                             } else {
-                                console.warn("[Arena Simple Header] Environment update failed:", updateResponse.status);
+                                mainButton.title = 'Arena AutoCache: Только использование (все модели в кеше)';
                             }
-                        } catch (apiError) {
-                            console.warn("[Arena Simple Header] Environment update failed:", apiError);
-                        }
+                            break;
+                    }
+                }
+                
+                async function setCacheMode(mode) {
+                    console.log(`[Arena Simple Header] Setting cache mode to: ${mode}`);
+                    currentCacheMode = mode;
+                    
+                    let enabled, autopatch;
+                    switch (mode) {
+                        case CACHE_MODES.GRAY:
+                            enabled = false;
+                            autopatch = false;
+                            break;
+                        case CACHE_MODES.RED:
+                            enabled = true;
+                            autopatch = true;
+                            break;
+                        case CACHE_MODES.GREEN:
+                            enabled = true;
+                            autopatch = false; // Only read from cache, don't cache new models
+                            break;
+                        default:
+                            console.error(`[Arena Simple Header] Unknown cache mode: ${mode}`);
+                            return;
+                    }
+                    
+                    try {
+                        // RU: Update environment variables
+                        const updateResponse = await fetch('/arena/env', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                env: {
+                                    ARENA_AUTO_CACHE_ENABLED: enabled ? '1' : '0',
+                                    ARENA_AUTOCACHE_AUTOPATCH: autopatch ? '1' : '0'
+                                },
+                                update_only: true
+                            })
+                        });
                         
-                        // Update button group appearance
-                        mainButton.innerHTML = originalText;
-                        if (newEnabled) {
-                            buttonGroup.style.background = '#2a5a2a';
-                            buttonGroup.style.borderColor = '#4a9a4a';
-                            mainButton.style.color = '#90ee90';
-                            dropdownButton.style.color = '#90ee90';
-                            mainButton.title = 'Arena AutoCache: ON (Click to disable)';
+                        if (updateResponse.ok) {
+                            console.log(`[Arena Simple Header] Cache mode updated successfully: ${mode}`);
                         } else {
-                            buttonGroup.style.background = '#3a3a3a';
-                            buttonGroup.style.borderColor = '#555';
-                            mainButton.style.color = '#e0e0e0';
-                            dropdownButton.style.color = '#e0e0e0';
-                            mainButton.title = 'Arena AutoCache: OFF (Click to enable)';
+                            console.warn(`[Arena Simple Header] Failed to update cache mode: ${updateResponse.status}`);
                         }
                         
-                        console.log(`[Arena Simple Header] Cache ${newEnabled ? 'enabled' : 'disabled'} successfully`);
+                        // RU: Update button appearance
+                        updateButtonAppearance();
                         
-                        // If enabling, try to start autopatch
-                        if (newEnabled) {
+                        // RU: Check uncached models for green mode
+                        if (mode === CACHE_MODES.GREEN) {
+                            await checkUncachedModels();
+                            updateButtonAppearance();
+                        }
+                        
+                        // RU: Start autopatch if needed
+                        if (mode === CACHE_MODES.RED) {
                             try {
                                 await fetch('/arena/autopatch', {
                                     method: 'POST',
@@ -758,93 +980,57 @@ app.registerExtension({
                         }
                         
                     } catch (error) {
-                        console.error("[Arena Simple Header] Error:", error);
-                        button.innerHTML = originalText;
-                        button.style.background = '#dc2626'; // Red for error
-                        button.title = `Error: ${error.message}`;
-                        
-                        // Reset after 3 seconds
-                        setTimeout(() => {
-                            // Try to get saved state
-                            try {
-                                const stored = localStorage.getItem('Arena.AutoCache.Enabled');
-                                const isEnabled = stored === 'true';
-                                if (isEnabled) {
-                                    buttonGroup.style.background = '#2a5a2a';
-                                    buttonGroup.style.borderColor = '#4a9a4a';
-                                    mainButton.style.color = '#90ee90';
-                                    dropdownButton.style.color = '#90ee90';
-                                } else {
-                                    buttonGroup.style.background = '#3a3a3a';
-                                    buttonGroup.style.borderColor = '#555';
-                                    mainButton.style.color = '#e0e0e0';
-                                    dropdownButton.style.color = '#e0e0e0';
-                                }
-                                mainButton.title = `Arena AutoCache: ${isEnabled ? 'ON' : 'OFF'}`;
-                            } catch {
-                                buttonGroup.style.background = '#3a3a3a';
-                                buttonGroup.style.borderColor = '#555';
-                                mainButton.style.color = '#e0e0e0';
-                                dropdownButton.style.color = '#e0e0e0';
-                                mainButton.title = 'Arena AutoCache (Click to toggle)';
-                            }
-                        }, 3000);
+                        console.error("[Arena Simple Header] Error setting cache mode:", error);
                     }
-                });
+                }
                 
-                // Add button group to floating toolbar (вместо кнопки)
-                targetContainer.appendChild(buttonGroup);
-                console.log("[Arena Simple Header] Button group added to floating toolbar");
-                console.log("[Arena Simple Header] Button group element:", buttonGroup);
-                console.log("[Arena Simple Header] Button group visible:", buttonGroup.offsetWidth > 0 && buttonGroup.offsetHeight > 0);
-                console.log("[Arena Simple Header] Button group parent:", buttonGroup.parentElement);
-                
-                // Initialize button state
+                // RU: Initialize button state with three-mode logic
                 setTimeout(async () => {
                     try {
-                        // Try localStorage first
+                        // RU: Try API to get current state
                         let enabled = false;
-                        try {
-                            const stored = localStorage.getItem('Arena.AutoCache.Enabled');
-                            enabled = stored === 'true';
-                        } catch {}
+                        let autopatch = false;
                         
-                        // Try API if available
                         try {
                             const response = await fetch('/arena/env');
                             if (response.ok) {
                                 const data = await response.json();
                                 enabled = data.env?.ARENA_AUTO_CACHE_ENABLED === '1';
-                                // Update localStorage with API value
-                                localStorage.setItem('Arena.AutoCache.Enabled', enabled.toString());
+                                autopatch = data.env?.ARENA_AUTOCACHE_AUTOPATCH === '1';
+                                console.log(`[Arena Simple Header] Got state from API: enabled=${enabled}, autopatch=${autopatch}`);
                             }
                         } catch (apiError) {
-                            console.warn("[Arena Simple Header] API not available for initial state, using localStorage");
+                            console.warn("[Arena Simple Header] API not available for initial state, using defaults");
                         }
                         
-                        // Set button group appearance
-                        if (enabled) {
-                            buttonGroup.style.background = '#2a5a2a';
-                            buttonGroup.style.borderColor = '#4a9a4a';
-                            mainButton.style.color = '#90ee90';
-                            dropdownButton.style.color = '#90ee90';
+                        // RU: Determine initial cache mode
+                        // If .env file exists, default to GREEN mode, otherwise GRAY (white icon)
+                        if (!enabled && !autopatch) {
+                            currentCacheMode = CACHE_MODES.GRAY; // White icon (no .env)
+                        } else if (autopatch) {
+                            currentCacheMode = CACHE_MODES.RED; // Red icon (active caching)
+                        } else if (enabled && !autopatch) {
+                            currentCacheMode = CACHE_MODES.GREEN; // Green icon (.env exists, default)
                         } else {
-                            buttonGroup.style.background = '#3a3a3a';
-                            buttonGroup.style.borderColor = '#555';
-                            mainButton.style.color = '#e0e0e0';
-                            dropdownButton.style.color = '#e0e0e0';
+                            currentCacheMode = CACHE_MODES.GRAY; // Fallback to white
                         }
                         
-                        mainButton.title = `Arena AutoCache: ${enabled ? 'ON' : 'OFF'} (Click to toggle)`;
-                        console.log(`[Arena Simple Header] Initial state: ${enabled ? 'ON' : 'OFF'}`);
+                        console.log(`[Arena Simple Header] Initial cache mode: ${currentCacheMode}`);
+                        
+                        // RU: Update button appearance based on mode
+                        updateButtonAppearance();
+                        
+                        // RU: Check uncached models for green mode
+                        if (currentCacheMode === CACHE_MODES.GREEN) {
+                            await checkUncachedModels();
+                            updateButtonAppearance();
+                        }
+                        
                     } catch (error) {
                         console.error("[Arena Simple Header] Failed to get initial state:", error);
-                        // Default to off state
-                        buttonGroup.style.background = '#3a3a3a';
-                        buttonGroup.style.borderColor = '#555';
-                        mainButton.style.color = '#e0e0e0';
-                        dropdownButton.style.color = '#e0e0e0';
-                        mainButton.title = 'Arena AutoCache: OFF';
+                        // RU: Default to gray state
+                        currentCacheMode = CACHE_MODES.GRAY;
+                        updateButtonAppearance();
                     }
                 }, 1000);
                 

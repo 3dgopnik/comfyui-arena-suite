@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - Tue Oct 07 2025 12:42:58 GMT+0300 (Москва, стандартное время)
+
+### Added
+- Settings UI for Arena AutoCache with a dedicated "💾 Save to .env" button at the top of the Arena section. One-click save creates/updates `user/arena_autocache.env` with all settings.
+- Robust DOM value reading with fallbacks to ensure settings are reliably captured from the ComfyUI dialog.
+
+### Changed
+- Consolidated all Arena settings UI logic into a single script `web/arena_settings_save_button.js` for stability and ease of maintenance.
+- Documentation consolidated to a single `docs/` root with language folders `docs/ru` and `docs/en`. All documentation filenames unified to lowercase for consistency.
+- README updated to v5.0.0 with the new primary flow (Settings UI + Save to .env).
+- Sync scripts simplified for ComfyUI Desktop environments.
+
+### Fixed
+- Auto-creation and reliable updating of `.env` now works consistently; all values are sent as strings to the backend to avoid type errors.
+- Button rendering and ordering issues resolved by registering the Save button as a setting row and pinning it to the top.
+- pyproject.toml restored to valid TOML with project metadata and tooling sections.
+
+### Removed
+- 19 outdated scripts and test files removed to avoid conflicts and reduce maintenance burden.
+- Legacy/duplicate documentation folders removed (migrated to unified `docs/`).
+
+---
+
 ## [5.0.0] - Tue Oct 07 2025 11:43:53 GMT+0300 (Москва, стандартное время)
 
 ### Added

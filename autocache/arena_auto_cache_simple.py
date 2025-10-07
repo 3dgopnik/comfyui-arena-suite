@@ -1674,6 +1674,35 @@ def _setup_workflow_analysis_api():
         
         print("[ArenaAutoCache] Resolve API endpoint registered")
         
+        # RU: Добавляем API для подсчета некешированных моделей
+        @PromptServer.instance.routes.get("/arena/uncached_models")
+        async def get_uncached_models_endpoint(request):
+            """RU: Подсчитывает количество некешированных моделей из workflow."""
+            try:
+                from aiohttp import web
+                
+                # RU: Получаем модели из workflow
+                workflow_models = _get_workflow_models()
+                uncached_count = 0
+                
+                if _settings:
+                    for category, filename in workflow_models:
+                        cache_path = _get_cache_path(category, filename)
+                        if not cache_path.exists():
+                            uncached_count += 1
+                
+                return web.json_response({
+                    "status": "success",
+                    "uncached_count": uncached_count,
+                    "total_workflow_models": len(workflow_models)
+                })
+            except Exception as e:
+                from aiohttp import web
+                print(f"[ArenaAutoCache] Uncached models API error: {e}")
+                return web.json_response({"status": "error", "message": str(e)})
+        
+        print("[ArenaAutoCache] Uncached models API endpoint registered")
+        
     except ImportError:
         print("[ArenaAutoCache] Server not available - workflow analysis API not registered")
     except Exception as e:
