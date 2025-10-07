@@ -134,6 +134,8 @@ When reporting issues, please include:
 - **[Configuration](docs/ru/config.md)** - Configuration options
 - **[Troubleshooting](docs/ru/troubleshooting.md)** - Common issues and solutions
 
+> Docs are managed via MCP Docs Service (`mcp-docs-service`).
+
 ## 📦 Scripts
 
 - **`scripts/arena_bootstrap_cache_v2.bat`** - Windows batch installer
