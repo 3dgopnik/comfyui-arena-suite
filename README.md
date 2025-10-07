@@ -97,7 +97,7 @@ We welcome contributions! Please follow these guidelines:
 4. **Run linting:** `ruff check .` (optional)
 5. **Commit changes:** `git commit -m "Add your feature"`
 6. **Push to branch:** `git push origin feature/your-feature`
-7. **Create a Pull Request**
+7. **Create a Pull Request`
 
 ### Code Style
 
@@ -127,6 +127,8 @@ When reporting issues, please include:
 
 ## 📚 Documentation
 
+- **[Arena AutoCache v5.0.0 (RU)](docs/ru/arena_autocache.md)** — актуальное руководство
+- **[Arena AutoCache v5.0.0 (EN)](docs/en/arena_autocache.md)** — quick guide
 - **[Quick Start Guide](docs/ru/quickstart.md)** - Get up and running quickly
 - **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
 - **[Configuration](docs/ru/config.md)** - Configuration options
