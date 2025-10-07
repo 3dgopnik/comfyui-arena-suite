@@ -1,10 +1,10 @@
-# ComfyUI Arena Suite v4.13.0
+# ComfyUI Arena Suite v5.0.0
 
 🚀 **Modern ComfyUI Custom Node Suite** - Automatic model caching and workflow optimization for ComfyUI.
 
 ## ✨ Features
 
-- **🅰️ Arena AutoCache v4.13.0** - Production-ready automatic model caching with simplified interface and JS workflow analysis
+- **🅰️ Arena AutoCache v5.0.0** - Settings UI with "💾 Save to .env", OnDemand caching, safer defaults
 - **Web Extensions** - Seamless ComfyUI integration
 - **Modern Architecture** - Clean, maintainable codebase
 - **CI/CD Ready** - GitHub Actions workflow included
@@ -35,7 +35,7 @@
    powershell -ExecutionPolicy Bypass -File scripts/sync_js_files.ps1
    ```
 
-5. **Restart ComfyUI** and find "🅰️ Arena AutoCache v4.15.0" in the node menu.
+5. **Restart ComfyUI** and find "🅰️ Arena AutoCache v5.0.0" in the node menu.
 
 ### Usage
 
@@ -48,7 +48,7 @@
 
 #### Advanced (Canvas Node)
 
-1. Add **🅰️ Arena AutoCache v4.13.0** node to your workflow
+1. Add **🅰️ Arena AutoCache v5.0.0** node to your workflow
 2. Configure cache settings (optional)
 3. Run your workflow - models will be automatically cached
 4. Subsequent runs will use cached models for faster execution

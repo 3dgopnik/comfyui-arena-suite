@@ -1,1 +1,26 @@
-4.15.0
+[project]
+name = "comfyui-arena-suite"
+version = "5.0.0"
+description = "ComfyUI Arena Suite: AutoCache and UI extensions for ComfyUI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Alexey" }]
+dependencies = [
+  "pydantic-settings>=2.0.0",
+  "aiohttp>=3.8.0",
+  "pathlib2>=2.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+select = ["E","F","I","UP","B"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
