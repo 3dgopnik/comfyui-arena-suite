@@ -28,8 +28,8 @@
 
 ### 4. Документация
 
-- **`docs/tasktracker.md`** - отслеживание задач
-- **`docs/DEVELOPMENT.md`** - руководство разработчика
+- **`docs/task-tracker.md`** - отслеживание задач
+- **`docs/development.md`** - руководство разработчика
 - **`CHANGELOG.md`** - обновлен с новой записью
 
 ### 5. MCP инструменты
@@ -106,7 +106,7 @@ pre-commit run --all-files
 
 ### 1. Создание задачи
 - Создайте Issue в GitHub
-- Обновите `docs/tasktracker.md`
+- Обновите `docs/task-tracker.md`
 - Создайте ветку
 
 ### 2. Разработка
@@ -159,8 +159,8 @@ cursor .
 └── 60-mcp-tools.mdc       # Правила MCP инструментов
 
 docs/                       # Документация
-├── tasktracker.md         # Отслеживание задач
-├── DEVELOPMENT.md         # Руководство разработчика
+├── task-tracker.md        # Отслеживание задач
+├── development.md         # Руководство разработчика
 └── ru/                    # Русская документация
 
 tests/                      # Тесты
@@ -213,7 +213,7 @@ mcp_changelog_changelog-status()
 
 - **GitHub Issues**: https://github.com/3dgopnik/comfyui-arena-suite/issues
 - **Документация**: `docs/ru/` (русский) / `docs/en/` (английский)
-- **Development Guide**: `docs/DEVELOPMENT.md`
+- **Development Guide**: `docs/development.md`
 
 ---
 

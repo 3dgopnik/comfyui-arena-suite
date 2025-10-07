@@ -173,7 +173,7 @@ Nodes work with standard ComfyUI workflows:
 - [Configuration Guide](config.md) - Detailed configuration options
 - [User Manual](manual.md) - Complete usage guide
 - [Troubleshooting](troubleshooting.md) - Problem solving
-- [Workflow Analyzer](../ARENA_WORKFLOW_ANALYZER.md) - JavaScript extension docs
+- [Workflow Analyzer](../arena_workflow_analyzer.md) - JavaScript extension docs
 
 ---
 

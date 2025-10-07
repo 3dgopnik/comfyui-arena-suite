@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Упрощена активация кеширования** - теперь не требуется добавлять ноду на canvas
 - **Улучшен UX** - кнопка Save всегда видна в начале списка настроек
-- **Обновлена документация** - context.md и DEVELOPMENT.md отражают новую архитектуру
+- **Обновлена документация** - context.md и development.md отражают новую архитектуру
 
 ### Fixed
 - **Исправлен pyproject.toml** - корректная TOML структура вместо одной строки с версией

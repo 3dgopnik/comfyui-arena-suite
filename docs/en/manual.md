@@ -274,7 +274,7 @@ C:\Users\username\AppData\Roaming\ComfyUI\logs\comfyui.log
 - [Node Reference](nodes.md) - Detailed node documentation
 - [Configuration Guide](config.md) - Advanced configuration
 - [Troubleshooting Guide](troubleshooting.md) - Problem solving
-- [Workflow Analyzer](../ARENA_WORKFLOW_ANALYZER.md) - JavaScript extension
+- [Workflow Analyzer](../arena_workflow_analyzer.md) - JavaScript extension
 
 ## 🆘 Getting Help
 
