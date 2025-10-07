@@ -97,7 +97,7 @@ We welcome contributions! Please follow these guidelines:
 4. **Run linting:** `ruff check .` (optional)
 5. **Commit changes:** `git commit -m "Add your feature"`
 6. **Push to branch:** `git push origin feature/your-feature`
-7. **Create a Pull Request**
+7. **Create a Pull Request`
 
 ### Code Style
 
@@ -133,6 +133,8 @@ When reporting issues, please include:
 - **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
 - **[Configuration](docs/ru/config.md)** - Configuration options
 - **[Troubleshooting](docs/ru/troubleshooting.md)** - Common issues and solutions
+
+> Docs are managed via MCP Docs Service (`mcp-docs-service`).
 
 ## 📦 Scripts
 
