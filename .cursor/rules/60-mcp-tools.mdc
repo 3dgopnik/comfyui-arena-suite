@@ -59,7 +59,6 @@ MCP changelog НЕ используется для:
 - **Поиск**: `mcp_memory_search_nodes`, `mcp_memory_open_nodes`
 - **Управление**: `mcp_memory_add_observations`, `mcp_memory_delete_entities`, `mcp_memory_delete_observations`, `mcp_memory_delete_relations`
 - **Граф**: `mcp_memory_read_graph`
-- **Управление задачами**: `mcp_cursor-task-master_cursor_task_loadTasks`, `mcp_cursor-task-master_cursor_task_getNextTask`, `mcp_cursor-task-master_cursor_task_setTaskStatus`, `mcp_cursor-task-master_cursor_task_createTask`, `mcp_cursor-task-master_cursor_task_updateTask`
 
 ### Context7 - Внешние библиотеки (ОБЯЗАТЕЛЬНО)
 - **Поиск библиотек**: `mcp_context7_resolve-library-id` - поиск библиотек по названию
@@ -129,12 +128,6 @@ mcp_memory_search_nodes(query="...")
 mcp_memory_read_graph()
 ```
 
-### Управление задачами
-```python
-# ✅ ПРАВИЛЬНО - через MCP Task Master
-mcp_cursor-task-master_cursor_task_loadTasks()
-mcp_cursor-task-master_cursor_task_createTask(title="...", description="...")
-```
 
 ## Контроль качества
 
@@ -191,7 +184,6 @@ read_file(target_file="docs/ru/index.md")
 ### 50-context.mdc
 - Изменения context.md через MCP filesystem
 - Создание Issues через MCP GitHub
-- Управление задачами через MCP task-master
 
 ## Мониторинг и отчетность
 
@@ -264,7 +256,6 @@ MCP changelog НЕ используется для:
 - **Поиск**: `mcp_memory_search_nodes`, `mcp_memory_open_nodes`
 - **Управление**: `mcp_memory_add_observations`, `mcp_memory_delete_entities`, `mcp_memory_delete_observations`, `mcp_memory_delete_relations`
 - **Граф**: `mcp_memory_read_graph`
-- **Управление задачами**: `mcp_cursor-task-master_cursor_task_loadTasks`, `mcp_cursor-task-master_cursor_task_getNextTask`, `mcp_cursor-task-master_cursor_task_setTaskStatus`, `mcp_cursor-task-master_cursor_task_createTask`, `mcp_cursor-task-master_cursor_task_updateTask`
 
 ### Context7 - Внешние библиотеки (ОБЯЗАТЕЛЬНО)
 - **Поиск библиотек**: `mcp_context7_resolve-library-id` - поиск библиотек по названию
@@ -334,12 +325,6 @@ mcp_memory_search_nodes(query="...")
 mcp_memory_read_graph()
 ```
 
-### Управление задачами
-```python
-# ✅ ПРАВИЛЬНО - через MCP Task Master
-mcp_cursor-task-master_cursor_task_loadTasks()
-mcp_cursor-task-master_cursor_task_createTask(title="...", description="...")
-```
 
 ## Контроль качества
 
@@ -396,7 +381,6 @@ read_file(target_file="docs/ru/index.md")
 ### 50-context.mdc
 - Изменения context.md через MCP filesystem
 - Создание Issues через MCP GitHub
-- Управление задачами через MCP task-master
 
 ## Мониторинг и отчетность
 

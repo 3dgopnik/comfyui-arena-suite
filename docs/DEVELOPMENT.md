@@ -1,244 +1,152 @@
-# Development Guide
+# 🛠️ Arena Suite - Development Guide
 
-## Быстрый старт
-
-### 1. Установка зависимостей
-
-```bash
-# Клонируйте репозиторий
-git clone https://github.com/3dgopnik/comfyui-arena-suite.git
-cd comfyui-arena-suite
-
-# Создайте виртуальное окружение
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# или
-.venv\Scripts\activate     # Windows
-
-# Установите зависимости для разработки
-pip install -r requirements-dev.txt
-
-# Настройте pre-commit hooks
-pre-commit install
-```
-
-### 2. Настройка Cursor IDE
-
-Проект настроен для работы с Cursor IDE. Правила автоматически загружаются из `.cursor/rules/`:
-
-- `00-process.mdc` - основной процесс разработки
-- `10-comfyui-node.mdc` - стандарты для ComfyUI нод
-- `20-tests-tooling.mdc` - тестирование и инструменты
-- `30-release.mdc` - релизы и changelog
-- `40-platform-paths.mdc` - пути ComfyUI Desktop
-
-### 3. Проверка качества кода
-
-```bash
-# Линтинг и форматирование
-ruff check .
-ruff format .
-
-# Типизация
-mypy .
-
-# Тесты
-pytest
-
-# Все проверки сразу
-pre-commit run --all-files
-```
-
-## Структура проекта
+## 📁 Структура проекта
 
 ```
-.cursor/rules/          # Правила Cursor IDE
-docs/                   # Документация
-├── ru/                # Русская документация
-├── en/                # Английская документация
-├── tasktracker.md     # Отслеживание задач
-└── DEVELOPMENT.md     # Этот файл
-tests/                 # Тесты
-├── conftest.py       # Конфигурация pytest
-├── test_nodes/       # Тесты нод
-└── fixtures/         # Тестовые данные
-autocache/            # Модули автокэширования
-legacy/               # Устаревшие модули
-updater/              # Модули обновления
-web/                  # Web расширения
+ComfyUI-Arena/
+├── __init__.py                    # Точка входа с WEB_DIRECTORY = "web"
+├── autocache/                     # Python модули кеширования
+│   └── arena_auto_cache_simple.py
+├── web/                          # JavaScript файлы для ComfyUI
+│   ├── arena_settings_save_button.js # Settings UI с кнопкой Save
+│   ├── arena_simple_header.js    # Floating Arena button
+│   ├── arena_autocache.js        # AutoCache extension
+│   └── arena_workflow_analyzer.js # Workflow analysis
+├── scripts/                      # Утилиты разработки
+│   ├── sync_js_files.ps1         # Синхронизация JS файлов
+│   └── sync_js_files.bat         # Bat-файл для запуска
+└── docs/                         # Документация
 ```
 
-## Стандарты разработки
+## 🔄 Синхронизация JavaScript файлов
 
-### ComfyUI Node Contract
+### Проблема
+ComfyUI Desktop загружает JavaScript файлы из внутренней установки, а не из папки разработки:
 
-Каждая нода должна соответствовать контракту:
+- **Папка разработки**: `C:\ComfyUI\custom_nodes\ComfyUI-Arena\web\`
+- **Папка ComfyUI Desktop**: `C:\Users\[USER]\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\custom_nodes\ComfyUI-Arena\web\`
 
-```python
-class ExampleNode:
-    """Описание ноды."""
-
-    @classmethod
-    def INPUT_TYPES(cls) -> Dict[str, Dict[str, Any]]:
-        return {
-            "required": {
-                "input_param": ("STRING", {"default": "value"}),
-            }
-        }
-
-    RETURN_TYPES = ("STRING",)
-    FUNCTION = "compute"
-    CATEGORY = "Arena/Example"
-
-    def compute(self, input_param: str) -> Tuple[str]:
-        """Вычислительная функция ноды."""
-        return (input_param,)
-
-# Регистрация ноды
-NODE_CLASS_MAPPINGS = {"ExampleNode": ExampleNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"ExampleNode": "Arena — Example"}
-```
-
-### Типизация
-
-- Все функции должны иметь type hints
-- Используйте `from __future__ import annotations` для forward references
-- Документируйте сложные типы
-
-### Тестирование
-
-```python
-import pytest
-from unittest.mock import Mock, patch
-
-class TestExampleNode:
-    def test_basic_functionality(self) -> None:
-        """Test basic node functionality."""
-        node = ExampleNode()
-        result = node.compute("test")
-        assert result == ("test",)
-
-    @pytest.mark.slow
-    def test_slow_operation(self) -> None:
-        """Test slow operation."""
-        pass
-
-    @pytest.mark.integration
-    def test_comfyui_integration(self) -> None:
-        """Test ComfyUI integration."""
-        pass
-```
-
-## Workflow разработки
-
-### 1. Создание задачи
-
-- Создайте Issue в GitHub
-- Обновите `docs/tasktracker.md`
-- Создайте ветку для задачи
-
-### 2. Разработка
-
-- Следуйте стандартам из `.cursor/rules/`
-- Пишите тесты для новой функциональности
-- Обновляйте документацию
-
-### 3. Проверка качества
-
-```bash
-# Автоматические проверки при коммите
-git commit -m "feat: add new feature"
-
-# Ручные проверки
-ruff check .
-mypy .
-pytest
-```
-
-### 4. Code Review
-
-- Создайте Pull Request
-- Привяжите к Issue (Closes #номер)
-- Укажите Summary, Changes, Docs, Changelog, Test Plan
-
-### 5. Релиз
-
-- Обновите версию в `pyproject.toml`
-- Заполните changelog
-- Создайте GitHub Release
-
-## Отладка
-
-### Логи ComfyUI
-
-```bash
-# Windows
-tail -f "c:\\Users\\acherednikov\\AppData\\Roaming\\ComfyUI\\logs\\comfyui.log"
-
-# Linux/Mac
-tail -f ~/.local/share/ComfyUI/logs/comfyui.log
-```
-
-### Тестирование в ComfyUI
-
-1. Скопируйте файлы в ComfyUI custom_nodes
-2. Перезапустите ComfyUI
-3. Проверьте в UI
-
-### Синхронизация разработки
+### Решение
+Используйте скрипт синхронизации после каждого изменения JavaScript файлов:
 
 ```powershell
-# Windows - скопировать из dev в production
-Copy-Item "c:\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\*" -Destination "c:\\Users\\acherednikov\\AppData\\Local\\Programs\\@comfyorgcomfyui-electron\\resources\\ComfyUI\\custom_nodes\\СomfyUI-Arena\\" -Recurse -Force
+# Обычная синхронизация (только измененные файлы)
+.\scripts\sync_js_files.ps1
+
+# Принудительная синхронизация всех файлов
+.\scripts\sync_js_files.ps1 -Force
+
+# Подробный вывод
+.\scripts\sync_js_files.ps1 -Verbose
+
+# Или используйте bat-файл
+.\scripts\sync_js_files.bat
 ```
 
-## Полезные команды
+### Функции скрипта
+- ✅ Проверка существования папок
+- ✅ Сравнение MD5 хешей файлов
+- ✅ Копирование только измененных файлов
+- ✅ Цветовой вывод с эмодзи
+- ✅ Обработка ошибок
+- ✅ Статистика синхронизации
+
+## 🎯 Workflow разработки
+
+### 1. Изменение JavaScript файлов
+```bash
+# Редактируйте файлы в папке web/
+code web/arena_settings_panel.js
+```
+
+### 2. Синхронизация
+```powershell
+.\scripts\sync_js_files.ps1 -Verbose
+```
+
+### 3. Тестирование
+```bash
+# Перезапустите ComfyUI Desktop
+# Проверьте работу Settings Panel
+# Убедитесь в корректности поведения
+```
+
+## 🔧 Настройка окружения
+
+### ComfyUI Desktop
+- Установлен в: `C:\Users\[USER]\AppData\Local\Programs\@comfyorgcomfyui-electron\`
+- Кастомные ноды в: `resources\ComfyUI\custom_nodes\`
+
+### Права доступа
+Убедитесь, что у вас есть права на запись в папку ComfyUI Desktop:
+```powershell
+# Проверка прав
+Test-Path "C:\Users\[USER]\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\custom_nodes\ComfyUI-Arena\web\"
+```
+
+## 🐛 Troubleshooting
+
+### Проблема: Скрипт не находит папку разработки
+**Решение**: Запускайте скрипт из корня проекта `ComfyUI-Arena/`
+
+### Проблема: Ошибка доступа к файлам
+**Решение**: Запустите PowerShell от имени администратора
+
+### Проблема: JavaScript изменения не применяются
+**Решение**: 
+1. Убедитесь, что файлы синхронизированы
+2. Перезапустите ComfyUI Desktop
+3. Проверьте консоль браузера на ошибки
+
+## 📋 Чек-лист разработки
+
+- [ ] Изменены JavaScript файлы в `web/`
+- [ ] Запущен скрипт синхронизации `sync_js_files.ps1`
+- [ ] ComfyUI Desktop перезапущен
+- [ ] Settings → arena работает корректно
+- [ ] Кнопка **💾 Save to .env** создает файл
+- [ ] .env файл содержит все настройки
+- [ ] Кнопка ARENA в header работает
+- [ ] Нет ошибок в DevTools Console
+
+## 🚀 Автоматизация
+
+### Pre-commit hook
+Можно добавить автоматическую синхронизацию в git hooks:
 
 ```bash
-# Форматирование кода
-ruff format .
-
-# Проверка безопасности
-bandit -r .
-
-# Проверка зависимостей
-safety check
-
-# Генерация документации
-sphinx-build docs/ docs/_build/
-
-# Очистка кэша
-find . -type d -name "__pycache__" -exec rm -rf {} +
-find . -type f -name "*.pyc" -delete
+# .git/hooks/pre-commit
+#!/bin/bash
+echo "🔄 Синхронизация JavaScript файлов..."
+powershell.exe -ExecutionPolicy Bypass -File "scripts/sync_js_files.ps1"
 ```
 
-## Troubleshooting
+### VS Code Task
+Создайте `.vscode/tasks.json`:
 
-### Ошибки импорта
-
-```python
-# Добавьте в начало файла для отладки
-import sys
-print("Python path:", sys.path)
-print("Current working directory:", os.getcwd())
+```json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Sync JS Files",
+            "type": "shell",
+            "command": "powershell.exe",
+            "args": ["-ExecutionPolicy", "Bypass", "-File", "scripts/sync_js_files.ps1"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            }
+        }
+    ]
+}
 ```
 
-### Проблемы с путями
+## 📚 Дополнительные ресурсы
 
-Проверьте `40-platform-paths.mdc` для актуальных путей ComfyUI Desktop.
-
-### Проблемы с типизацией
-
-```bash
-# Подробный вывод mypy
-mypy --show-error-codes --show-column-numbers .
-
-# Проверка конкретного файла
-mypy autocache/arena_auto_cache_simple.py
-```
-
-## Контакты
-
-- GitHub: https://github.com/3dgopnik/comfyui-arena-suite
-- Issues: https://github.com/3dgopnik/comfyui-arena-suite/issues
-- Documentation: `docs/ru/` (русский) / `docs/en/` (английский)
+- [ComfyUI Custom Node Development](https://github.com/comfyanonymous/comfyui)
+- [ComfyUI Manager Documentation](https://github.com/comfy-org/comfyui-manager)
+- [Arena Suite Documentation](./docs/)

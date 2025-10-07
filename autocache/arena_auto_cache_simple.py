@@ -1418,9 +1418,10 @@ def _auto_extend_categories_from_workflow():
         if _settings.verbose:
             print(f"[ArenaAutoCache] Updated effective categories: {', '.join(_settings.effective_categories)}")
         
-        # RU: Сохраняем обновленные категории в .env
-        env_data = {"ARENA_CACHE_CATEGORIES": ",".join(_settings.effective_categories)}
-        _save_env_file(env_data)
+        # RU: НЕ создаем .env файл автоматически - только через Settings Panel
+        print(f"[ArenaAutoCache] IS_CHANGED: .env file creation disabled in _auto_extend_categories")
+        # env_data = {"ARENA_CACHE_CATEGORIES": ",".join(_settings.effective_categories)}
+        # _save_env_file(env_data)
         
         print(f"[ArenaAutoCache] Auto-extended categories: {', '.join(new_categories)}")
 
@@ -1521,6 +1522,7 @@ def _setup_workflow_analysis_api():
                 from aiohttp import web
                 data = await request.json()
                 env_data = data.get("env", {})
+                update_only = data.get("update_only", False)
                 
                 # RU: Валидируем ключи
                 valid_keys = {
@@ -1535,12 +1537,16 @@ def _setup_workflow_analysis_api():
                 filtered_env = {k: v for k, v in env_data.items() if k in valid_keys}
                 
                 if filtered_env:
-                    _save_env_file(filtered_env)
                     # RU: Обновляем os.environ
                     for key, value in filtered_env.items():
                         os.environ[key] = value
                     
-                    return web.json_response({"status": "success", "message": f"Updated {len(filtered_env)} environment variables"})
+                    # RU: Сохраняем в .env файл только если НЕ update_only
+                    if not update_only:
+                        _save_env_file(filtered_env)
+                        return web.json_response({"status": "success", "message": f"Updated {len(filtered_env)} environment variables and saved to .env file"})
+                    else:
+                        return web.json_response({"status": "success", "message": f"Updated {len(filtered_env)} environment variables (no .env file created)"})
                 else:
                     return web.json_response({"status": "error", "message": "No valid ARENA_* variables provided"})
                     
@@ -1707,21 +1713,9 @@ class ArenaAutoCacheSimple:
         else:
             _stop_env_watcher()
         
-        # RU: Создаем .env файл СРАЗУ при изменении параметров (не ждем run)
-        if (enable_caching and persist_env) or save_env_now:
-            print(f"[ArenaAutoCache] IS_CHANGED: Creating/updating .env file immediately")
-            # RU: Создаем .env файл с настройками из ноды
-            env_data = {
-                "ARENA_CACHE_ROOT": kwargs.get("cache_root", ""),
-                "ARENA_CACHE_MIN_SIZE_MB": str(kwargs.get("min_size_mb", 10.0)),
-                "ARENA_CACHE_MAX_GB": str(kwargs.get("max_cache_gb", 512.0)),
-                "ARENA_CACHE_VERBOSE": "1" if kwargs.get("verbose", False) else "0",
-                "ARENA_CACHE_MODE": kwargs.get("cache_mode", "ondemand"),
-                "ARENA_AUTO_CACHE_ENABLED": "1" if enable_caching else "0",
-                "ARENA_AUTOCACHE_AUTOPATCH": "1" if enable_caching else "0",
-            }
-            _save_env_file(env_data)
-            print(f"[ArenaAutoCache] IS_CHANGED: .env file created/updated successfully")
+        # RU: НЕ создаем .env файл автоматически - только через Settings Panel или кнопку ARENA
+        print(f"[ArenaAutoCache] IS_CHANGED: Node initialized - enable_caching={enable_caching}, persist_env={persist_env}, save_env_now={save_env_now}")
+        print(f"[ArenaAutoCache] IS_CHANGED: .env file creation disabled - use Settings Panel or ARENA button instead")
         
         if enable_caching:
             print(f"[ArenaAutoCache] IS_CHANGED: Caching enabled")
@@ -1888,9 +1882,10 @@ class ArenaAutoCacheSimple:
                     if verbose:
                         print(f"[ArenaAutoCache] Saving cache root from node to .env: {cache_root}")
 
-                # RU: Всегда включаем автопатч для глобальной работы
-                env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-                _save_env_file(env_data)
+                # RU: НЕ создаем .env файл автоматически - только через Settings Panel
+                print(f"[ArenaAutoCache] IS_CHANGED: .env file creation disabled in _precache_workflow_models")
+                # env_data["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
+                # _save_env_file(env_data)
                 
                 # RU: Запускаем deferred autopatch если еще не запущен
                 if not _deferred_autopatch_started:

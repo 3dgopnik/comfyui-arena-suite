@@ -6,8 +6,8 @@ console.log("[Arena Simple Header] Loading...");
 
 app.registerExtension({
     name: "ArenaSimple.Header",
-        
-        setup() {
+    
+    setup() {
             console.log("[Arena Simple Header] Setting up simple header button...");
             
             // Wait for DOM to be ready
@@ -701,23 +701,28 @@ app.registerExtension({
                             console.warn("[Arena Simple Header] Failed to save to localStorage:", storageError);
                         }
                         
-                        // Try to update via API if available
+                        // RU: Кнопка ARENA только переключает enable/disable, НЕ создает .env файл
                         try {
+                            // RU: Только обновляем переменные окружения, НЕ создаем .env файл
                             const updateResponse = await fetch('/arena/env', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ 
-                                    env: { ARENA_AUTO_CACHE_ENABLED: newEnabled ? '1' : '0' }
+                                    env: {
+                                        ARENA_AUTO_CACHE_ENABLED: newEnabled ? '1' : '0',
+                                        ARENA_AUTOCACHE_AUTOPATCH: newEnabled ? '1' : '0'
+                                    },
+                                    update_only: true  // RU: Только обновляем переменные, не создаем файл
                                 })
                             });
                             
                             if (updateResponse.ok) {
-                                console.log("[Arena Simple Header] API update successful");
+                                console.log("[Arena Simple Header] Environment variables updated successfully");
                             } else {
-                                console.warn("[Arena Simple Header] API update failed:", updateResponse.status);
+                                console.warn("[Arena Simple Header] Environment update failed:", updateResponse.status);
                             }
                         } catch (apiError) {
-                            console.warn("[Arena Simple Header] API update failed:", apiError);
+                            console.warn("[Arena Simple Header] Environment update failed:", apiError);
                         }
                         
                         // Update button group appearance
