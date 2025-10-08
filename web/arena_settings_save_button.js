@@ -22,62 +22,202 @@ async function waitFor(predicate, timeout = 10000, interval = 100) {
 	throw new Error("waitFor timeout");
 }
 
-// Read setting value directly from DOM (Settings dialog)
-function getSettingValue(settingId) {
+// Helpers
+function sanitizeNumber(value) {
+    // Accept numbers with spaces or commas: "1 000", "1,000", "512".
+    // Empty/invalid → null (fallback to defaults later).
+    if (value === null || value === undefined) return null;
+    const strRaw = String(value);
+    const stripped = strRaw
+        .replace(/[\u202F\u00A0\s]/g, "")
+        .replace(/,/g, ".");
+    if (stripped === "") return null;
+    const num = Number(stripped);
+    return Number.isFinite(num) ? num : null;
+}
+
+function getFromSettingsStore(settingId) {
+    try {
+        const s = app?.ui?.settings;
+        // Try common getters used by ComfyUI
+        if (typeof s?.get === 'function') {
+            const v = s.get(settingId);
+            if (v !== undefined && v !== null && v !== '') return v;
+        }
+        if (typeof s?.value === 'function') {
+            const v = s.value(settingId);
+            if (v !== undefined && v !== null && v !== '') return v;
+        }
+    } catch {}
+    return null;
+}
+
+function getFromLocalStorage(settingId) {
+    try {
+        // 1) Known key in recent builds
+        const knownKeys = [
+            'Comfy.Settings',
+            'comfy.settings',
+            'settings',
+        ];
+        for (const k of knownKeys) {
+            const raw = localStorage.getItem(k);
+            if (!raw) continue;
+            try {
+                const obj = JSON.parse(raw);
+                const v = obj?.[settingId];
+                if (v !== undefined && v !== null && v !== '') return v;
+            } catch {}
+        }
+        // 2) Brute-force scan
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i) || '';
+            if (!/setting/i.test(key)) continue;
+            try {
+                const obj = JSON.parse(localStorage.getItem(key));
+                const v = obj?.[settingId];
+                if (v !== undefined && v !== null && v !== '') return v;
+            } catch {}
+        }
+    } catch {}
+    return null;
+}
+
+function findInputFor(settingId, expectedLabel) {
+    // 1) Try direct id/name match
+    const idKey = settingId.split(".").pop();
+    const direct = document.querySelector(
+        `#${idKey}, [id*="${idKey}"] , [name="${idKey}"], [name*="${idKey}"]`
+    );
+    if (direct) return direct;
+
+    // 1.1) Try ComfyUI Settings container with data-id
+    const container = document.querySelector(
+        `[data-id="${settingId}"] , [data-id*="${settingId}"] , [data-id*="${idKey}"]`
+    );
+    if (container) {
+        const inputInContainer = container.querySelector('input, select, textarea, [role="spinbutton"]');
+        if (inputInContainer) return inputInContainer;
+    }
+
+    // 2) Search by label text proximity
+    const rows = Array.from(document.querySelectorAll('tr, .p-field, .setting-row, div[class*="field"]'));
+    for (const row of rows) {
+        const text = (row.textContent || '').trim();
+        if (text.includes(expectedLabel) || text.toLowerCase().includes(expectedLabel.toLowerCase())) {
+            const input = row.querySelector('input, select, textarea, [role="spinbutton"]') ||
+                          row.nextElementSibling?.querySelector('input, select, textarea, [role="spinbutton"]') ||
+                          row.parentElement?.querySelector('input, select, textarea, [role="spinbutton"]');
+            if (input) return input;
+        }
+    }
+
+    // 3) Last resort: any input/select with data-id or dataset matching
+    const any = Array.from(document.querySelectorAll('input, select, textarea'))
+        .find(el => (el.id || '').includes(idKey) || (el.name || '').includes(idKey));
+    return any || null;
+}
+
+// Read setting value using ComfyUI API + DOM fallback
+async function getSettingValue(settingId) {
 	try {
 		// Map setting IDs to human-readable labels
 		const labelMap = {
-			'arena.autocache_enable': 'AutoCacheEnable',
-			'arena.cache_mode': 'Cache Mode',
-			'arena.cache_root': 'Cache Root',
-			'arena.min_size_mb': 'Min Size',
-			'arena.max_cache_gb': 'Max Cache',
-			'arena.verbose_logging': 'Verbose Logging',
-			'arena.discovery_mode': 'Discovery Mode',
-			'arena.prefetch_strategy': 'Prefetch Strategy',
-			'arena.max_concurrency': 'Max Concurrency',
-			'arena.session_byte_budget': 'Session Budget',
-			'arena.cooldown_ms': 'Cooldown'
+			'Arena.🔴 Enable Auto Cache': 'Enable Auto Cache',
+			'Arena.🔴 Verbose Logging': 'Verbose Logging',
+			'Arena.🟡 Cache Mode': 'Cache Mode',
+			'Arena.🟡 Cache Directory': 'Cache Directory',
+			'Arena.🟡 Min File Size (MB)': 'Min File Size (MB)',
+            'Arena.🟡 Max Cache Size (GB)': 'Max Cache Size (GB)'
 		};
-		
-		const expectedLabel = labelMap[settingId];
-		if (!expectedLabel) {
-			warn(`No label mapping for ${settingId}`);
-			return null;
-		}
-		
-		// Find the row containing this label
-		const rows = Array.from(document.querySelectorAll('tr, .p-field, .setting-row, div[class*="field"]'));
-		
-		for (const row of rows) {
-			const text = (row.textContent || '').trim();
-			// More flexible matching
-			if (text.includes(expectedLabel) || text.toLowerCase().includes(expectedLabel.toLowerCase())) {
-				// Find input/select in this row, siblings, or children
-				const input = row.querySelector('input, select, textarea') || 
-				              row.nextElementSibling?.querySelector('input, select, textarea') ||
-				              row.parentElement?.querySelector('input, select, textarea');
-				
-				if (input) {
-					if (input.type === 'checkbox' || input.getAttribute('role') === 'switch') {
-						const checked = input.checked || input.getAttribute('aria-checked') === 'true';
-						log(`  → ${settingId} (checkbox): ${checked}`);
-						return checked;
-					} else if (input.type === 'number') {
-						const val = parseFloat(input.value) || 0;
-						log(`  → ${settingId} (number): ${val}`);
-						return val;
-					} else if (input.type === 'text' || input.tagName === 'TEXTAREA') {
-						const val = (input.value || '').trim();
-						log(`  → ${settingId} (${input.type}): "${val}"`);
-						return val;
-					} else {
-						log(`  → ${settingId} (${input.type}): ${input.value}`);
-						return input.value;
-					}
-				}
-			}
-		}
+        const expectedLabel = labelMap[settingId];
+        if (!expectedLabel) {
+            warn(`No label mapping for ${settingId}`);
+            return null;
+        }
+
+        // 1) Try ComfyUI's official settings API (most reliable for PrimeVue InputNumber)
+        try {
+            if (app?.extensionManager?.setting?.get) {
+                const apiValue = await app.extensionManager.setting.get(settingId);
+                if (apiValue !== undefined && apiValue !== null) {
+                    log(`  → ${settingId} (API): ${apiValue}`);
+                    return apiValue;
+                }
+            }
+        } catch (e) {
+            warn(`Failed to read from settings API for ${settingId}:`, e);
+        }
+
+        // 2) Force commit DOM values before reading (for PrimeVue InputNumber timing issues)
+        if (settingId.includes('max_cache_gb') || settingId.includes('min_size_mb') || 
+            settingId.includes('max_concurrency') || settingId.includes('session_byte_budget') || 
+            settingId.includes('cooldown_ms')) {
+            document.activeElement?.blur(); // Force commit in-flight value
+            await new Promise(resolve => setTimeout(resolve, 50)); // Small delay for DOM update
+        }
+
+        // 3) Try official store/localStorage
+        if (settingId === 'arena.max_cache_gb') {
+            const storeVal = getFromSettingsStore(settingId) ?? getFromLocalStorage(settingId);
+            const storeNum = sanitizeNumber(storeVal);
+            if (storeNum !== null) {
+                log(`  → ${settingId} (store): ${storeNum}`);
+                return storeNum;
+            }
+        }
+
+        // 4) Fallback to DOM parsing (after commit)
+        let input = findInputFor(settingId, expectedLabel);
+        // Hard fallback for max_cache_gb which misbehaves in some builds
+        if (!input && settingId === 'arena.max_cache_gb') {
+            input = document.querySelector('[data-id="arena.max_cache_gb"] input, [data-id*="max_cache_gb"] input');
+        }
+        if (input) {
+            if (input.type === 'checkbox' || input.getAttribute('role') === 'switch') {
+                const checked = input.checked || input.getAttribute('aria-checked') === 'true';
+                log(`  → ${settingId} (checkbox): ${checked}`);
+                return checked;
+            }
+            // Try multiple sources for value: value, aria-valuenow, aria-valuetext, textContent (for combos)
+            let raw = (input.value ?? '').toString();
+            if (!raw) raw = input.getAttribute?.('aria-valuenow') || '';
+            if (!raw) raw = input.getAttribute?.('aria-valuetext') || '';
+            if (!raw) {
+                // Some combo buttons store current text inside a button
+                const container = input.closest('[data-id], tr, .p-field, .setting-row, div');
+                const btn = container?.querySelector('button[aria-haspopup="listbox"], .p-dropdown, .p-select, [role="combobox"]');
+                const btnText = btn?.textContent?.trim();
+                if (btnText) raw = btnText;
+                // PrimeVue InputNumber fallback by class
+                if (!raw) {
+                    const numInput = container?.querySelector('input.p-inputnumber-input, input[inputmode="numeric"], input[type="text"][aria-valuenow]');
+                    const nv = numInput?.value || numInput?.getAttribute?.('aria-valuenow') || '';
+                    if (nv) raw = nv;
+                }
+                // Last resort: extract first number-like token from container text
+                if (!raw && container?.textContent) {
+                    const m = container.textContent.replace(/\s+/g, ' ').match(/(-?\d+[\s,\.]?\d*)/);
+                    if (m && m[1]) raw = m[1];
+                }
+            }
+            if (input.type === 'number') {
+                const num = sanitizeNumber(raw);
+                log(`  → ${settingId} (number): ${num}`);
+                return num; // may be null → handled by defaults later
+            }
+            if (settingId.endsWith('max_cache_gb') || settingId.endsWith('min_size_mb') ||
+                settingId.endsWith('max_concurrency') || settingId.endsWith('session_byte_budget') ||
+                settingId.endsWith('cooldown_ms')) {
+                const num = sanitizeNumber(raw);
+                log(`  → ${settingId} (text->number): ${num}`);
+                return num; // may be null → handled by defaults later
+            }
+            const val = raw.trim();
+            if (val === "") return null;
+            log(`  → ${settingId}: "${val}"`);
+            return val;
+        }
 	} catch (e) {
 		err(`Failed to get ${settingId}:`, e);
 	}
@@ -97,31 +237,86 @@ async function postJson(url, payload) {
 
 log("Loading...");
 app.registerExtension({
-	name: "Arena.SettingsSaveButton",
+	name: "Arena AutoCache Settings",
 	async setup() {
 		try {
 			log("Waiting for app.ui.settings...");
 			await waitFor(() => app?.ui?.settings?.addSetting);
 			log("app.ui.settings ready, registering settings...");
 
-			// Register Save button FIRST (at the top)
+			// Register ALL settings (without category - let ComfyUI auto-group by id prefix)
+			app.ui.settings.addSetting({ 
+				id: "Arena.🔴 Enable Auto Cache", 
+				name: "Enable Auto Cache", 
+				type: "boolean", 
+				defaultValue: false, 
+				tooltip: "Enable automatic caching" 
+			});
+			app.ui.settings.addSetting({ 
+				id: "Arena.🔴 Verbose Logging", 
+				name: "Verbose Logging", 
+				type: "boolean", 
+				defaultValue: false, 
+				tooltip: "Enable detailed cache logging" 
+			});
+			app.ui.settings.addSetting({ 
+				id: "Arena.🟡 Cache Mode", 
+				name: "Cache Mode", 
+				type: "combo", 
+				defaultValue: "ondemand", 
+				options: ["ondemand", "disabled"],
+				tooltip: "Caching mode (on-demand / always / off)" 
+			});
+			app.ui.settings.addSetting({ 
+				id: "Arena.🟡 Cache Directory", 
+				name: "Cache Directory", 
+				type: "text", 
+				defaultValue: "", 
+				tooltip: "Directory for cache storage" 
+			});
+			app.ui.settings.addSetting({ 
+				id: "Arena.🟡 Min File Size (MB)", 
+				name: "Min File Size (MB)", 
+				type: "number", 
+				defaultValue: 10, 
+				tooltip: "Minimum file size for caching" 
+			});
+			app.ui.settings.addSetting({ 
+				id: "Arena.🟡 Max Cache Size (GB)", 
+				name: "Max Cache Size (GB)", 
+				type: "number", 
+				defaultValue: 0, 
+				tooltip: "Maximum cache size in gigabytes" 
+			});
+
+			// Register Save button (at the bottom)
 			app.ui.settings.addSetting({
-				id: "arena.aaa_save_button",
-				name: "💾 Save Arena Settings",
+				id: "Arena.🟢 Save Settings",
+				name: "Save Settings",
 				defaultValue: null,
 				type: (name, setter, value) => {
 					const tr = document.createElement("tr");
+					
+					// Create empty label cell (hidden)
 					const tdLabel = document.createElement("td");
+					tdLabel.style.display = "none";
+					
+					// Create control cell with centered button
 					const tdCtrl = document.createElement("td");
+					tdCtrl.style.textAlign = "center";
+					tdCtrl.style.padding = "20px 0";
+					tdCtrl.style.width = "100%";
 					
 					const btnSave = document.createElement("button");
-					btnSave.textContent = "💾 Save to .env";
+					btnSave.textContent = "Save";
 					btnSave.title = "Save all Arena settings to .env file";
-					btnSave.style.cssText = "padding: 8px 16px; border-radius: 6px; border: 1px solid #666; background: #3a3a3a; color: #fff; cursor: pointer; font-weight: 500; width: 100%;";
-					btnSave.onmouseenter = () => { btnSave.style.background = "#4a4a4a"; };
-					btnSave.onmouseleave = () => { btnSave.style.background = "#3a3a3a"; };
+					btnSave.style.cssText = "padding: 12px 48px; border-radius: 6px; border: 1px solid #666; background: #346599; color: #fff; cursor: pointer; font-weight: 500; font-size: 14px; min-width: 200px;";
+					btnSave.onmouseenter = () => { btnSave.style.background = "#3b77b8"; };
+					btnSave.onmouseleave = () => { btnSave.style.background = "#346599"; };
+					btnSave.onmousedown = () => { btnSave.style.background = "#1d5086"; };
+					btnSave.onmouseup = () => { btnSave.style.background = "#3b77b8"; };
 					
-					btnSave.addEventListener("click", async () => {
+                    btnSave.addEventListener("click", async () => {
 						try {
 							log("=== SAVE BUTTON CLICKED ===");
 							
@@ -140,7 +335,7 @@ app.registerExtension({
 							log(`Found ${allInputs.length} text inputs in Settings`);
 							
 							// Try to find Cache Root by scanning all text inputs for the value
-							let cacheRoot = getSettingValue("arena.cache_root") || "";
+							let cacheRoot = await getSettingValue("Arena.🟡 Cache Directory") || "";
 							if (!cacheRoot) {
 								// Fallback: find the first non-empty text input that looks like a path
 								for (const input of allInputs) {
@@ -153,21 +348,46 @@ app.registerExtension({
 								}
 							}
 							
-							// ALL values converted to strings for backend
-							const env = {
-								ARENA_AUTO_CACHE_ENABLED: "0", // Always disabled by default
-								ARENA_AUTOCACHE_AUTOPATCH: "0", // Always disabled by default
-								ARENA_CACHE_MODE: String(getSettingValue("arena.cache_mode") || "ondemand"),
-								ARENA_CACHE_ROOT: String(cacheRoot),
-								ARENA_CACHE_MIN_SIZE_MB: String(getSettingValue("arena.min_size_mb") ?? 10),
-								ARENA_CACHE_MAX_GB: String(getSettingValue("arena.max_cache_gb") ?? 0),
-								ARENA_CACHE_VERBOSE: String(getSettingValue("arena.verbose_logging") ? 1 : 0),
-								ARENA_CACHE_DISCOVERY: String(getSettingValue("arena.discovery_mode") || "workflow_only"),
-								ARENA_CACHE_PREFETCH_STRATEGY: String(getSettingValue("arena.prefetch_strategy") || "lazy"),
-								ARENA_CACHE_MAX_CONCURRENCY: String(getSettingValue("arena.max_concurrency") ?? 2),
-								ARENA_CACHE_SESSION_BYTE_BUDGET: String(getSettingValue("arena.session_byte_budget") ?? 1073741824),
-								ARENA_CACHE_COOLDOWN_MS: String(getSettingValue("arena.cooldown_ms") ?? 1000)
-							};
+                            // Load existing .env to avoid overwriting with empty values
+                            let existingEnv = {};
+                            try {
+                                const cur = await fetch('/arena/env');
+                                if (cur.ok) {
+                                    const data = await cur.json();
+                                    existingEnv = data?.env || {};
+                                }
+                            } catch {}
+
+                            const setOrKeep = (key, value, fallback) => {
+                                if (value === null || value === undefined || value === "") {
+                                    return existingEnv[key] ?? String(fallback);
+                                }
+                                return String(value);
+                            };
+
+                            // Resolve values from UI using ComfyUI API + DOM fallback
+                            const ui_cache_mode = await getSettingValue("Arena.🟡 Cache Mode");
+                            const ui_min_size = sanitizeNumber(await getSettingValue("Arena.🟡 Min File Size (MB)"));
+                            let ui_max_gb = sanitizeNumber(await getSettingValue("Arena.🟡 Max Cache Size (GB)"));
+                            if (ui_max_gb === null) {
+                                try {
+                                    const manual = prompt("Enter Max Cache (GB)", "");
+                                    const mnum = sanitizeNumber(manual);
+                                    if (mnum !== null) ui_max_gb = mnum;
+                                } catch {}
+                            }
+                            const ui_verbose = await getSettingValue("Arena.🔴 Verbose Logging");
+
+                            // Build env with merge semantics (keep previous if UI not readable)
+                            const env = {
+                                ARENA_AUTO_CACHE_ENABLED: "0", // Always disabled by default
+                                ARENA_AUTOCACHE_AUTOPATCH: "0", // Always disabled by default
+                                ARENA_CACHE_MODE: setOrKeep("ARENA_CACHE_MODE", ui_cache_mode, "ondemand"),
+                                ARENA_CACHE_ROOT: setOrKeep("ARENA_CACHE_ROOT", cacheRoot, existingEnv["ARENA_CACHE_ROOT"] || ""),
+                                ARENA_CACHE_MIN_SIZE_MB: setOrKeep("ARENA_CACHE_MIN_SIZE_MB", ui_min_size, 10),
+                                ARENA_CACHE_MAX_GB: setOrKeep("ARENA_CACHE_MAX_GB", ui_max_gb, 0),
+                                ARENA_CACHE_VERBOSE: setOrKeep("ARENA_CACHE_VERBOSE", ui_verbose ? 1 : 0, 0)
+                            };
 							
 							log("Saving to /arena/env", env);
 							const res = await postJson("/arena/env", { env });
@@ -195,89 +415,7 @@ app.registerExtension({
 				}
 			});
 
-			// Register ALL settings (without category - let ComfyUI auto-group by id prefix)
-			app.ui.settings.addSetting({ 
-				id: "arena.autocache_enable", 
-				name: "AutoCacheEnable", 
-				type: "boolean", 
-				defaultValue: false, 
-				tooltip: "Enable Arena AutoCache" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.cache_mode", 
-				name: "Cache Mode", 
-				type: "combo", 
-				defaultValue: "ondemand", 
-				options: ["ondemand", "disabled"],
-				tooltip: "Caching mode" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.cache_root", 
-				name: "Cache Root", 
-				type: "text", 
-				defaultValue: "", 
-				tooltip: "Path to cache directory (SSD)" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.min_size_mb", 
-				name: "Min Size (MB)", 
-				type: "number", 
-				defaultValue: 10, 
-				tooltip: "Minimum file size to cache" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.max_cache_gb", 
-				name: "Max Cache (GB)", 
-				type: "number", 
-				defaultValue: 0, 
-				tooltip: "Maximum cache size (0 = unlimited)" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.verbose_logging", 
-				name: "Verbose Logging", 
-				type: "boolean", 
-				defaultValue: false, 
-				tooltip: "Enable verbose logging" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.discovery_mode", 
-				name: "Discovery Mode", 
-				type: "combo", 
-				defaultValue: "workflow_only", 
-				options: ["workflow_only", "all_models"],
-				tooltip: "Model discovery mode" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.prefetch_strategy", 
-				name: "Prefetch Strategy", 
-				type: "combo", 
-				defaultValue: "lazy", 
-				options: ["lazy", "eager"],
-				tooltip: "Prefetch strategy" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.max_concurrency", 
-				name: "Max Concurrency", 
-				type: "number", 
-				defaultValue: 2, 
-				tooltip: "Max concurrent copy operations" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.session_byte_budget", 
-				name: "Session Budget (bytes)", 
-				type: "number", 
-				defaultValue: 1073741824, 
-				tooltip: "Session byte budget (default 1GB)" 
-			});
-			app.ui.settings.addSetting({ 
-				id: "arena.cooldown_ms", 
-				name: "Cooldown (ms)", 
-				type: "number", 
-				defaultValue: 1000, 
-				tooltip: "Cooldown between operations" 
-			});
-
-			log("All Arena settings registered (save button at top + 11 settings)");
+			log("All Arena settings registered (save button at bottom + 6 settings)");
 		} catch (e) {
 			err("Init failed", e);
 		}

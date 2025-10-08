@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.0] - Wed Oct 08 2025 11:38:15 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Arena AutoCache Settings UI**: Improved user experience with intuitive setting names and logical grouping
+- **Visual Settings Organization**: Added color-coded circles (🔴🟡🟢) to group related settings and bypass alphabetical sorting
+
+### Changed
+- **Settings Display Names**: Replaced technical IDs with user-friendly names (e.g., "Enable Auto Cache" instead of "autocache_enable")
+- **Settings Order**: Reorganized settings to group related controls together - toggles (Enable Auto Cache + Verbose Logging) now appear side by side
+- **Save Button**: Fixed capitalization from "save" to "Save Settings" for better user experience
+
+### Fixed
+- **Alphabetical Sorting Issue**: Resolved ComfyUI's automatic alphabetical sorting that was placing "Verbose Logging" at the bottom by using emoji prefixes
+- **Settings Grouping**: Ensured logical flow from main toggles → cache configuration → save action
+- **User Interface Consistency**: Standardized setting names to be more descriptive and professional
+
+---
+
+## [4.17.2] - Wed Oct 08 2025 09:32:12 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **API Integration**: Переход на официальный ComfyUI Settings API для более надёжного чтения значений настроек, особенно для числовых полей с PrimeVue InputNumber
+- **Fallback Strategy**: Улучшена стратегия fallback с приоритетом: API → Store → localStorage → DOM (с принудительным commit)
+
+### Fixed
+- **Settings UI**: Исправлена критическая проблема с чтением значения Max Cache GB из ComfyUI Settings UI. Теперь используется официальный ComfyUI API (app.extensionManager.setting.get) вместо парсинга DOM, что полностью решает проблему с PrimeVue InputNumber компонентом
+- **DOM Timing**: Добавлен принудительный blur() для числовых полей перед чтением DOM как fallback, устраняя проблемы с timing когда значение не коммитится до потери фокуса
+
+---
+
+## [4.17.1] - Tue Oct 07 2025 17:12:53 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- Старт в безопасном режиме: полный отказ от авто‑кеширования на запуске (manual‑only). Никаких копий до явного включения красного режима
+- Красный режим: запускает отложенный on‑demand автопатч сразу после записи `ARENA_AUTO_CACHE_ENABLED=1` и `ARENA_AUTOCACHE_AUTOPATCH=1` (через UI). Перехват путей `folder_paths.get_full_path` работает только при реальных загрузках моделей
+- Зелёный режим: только использование кеша (новые копии не создаются), при miss — работа с оригинальным путём
+- Кнопка в UI: пишет флаги в `.env` и при красном триггерит автопатч; при зелёном — не запускает копии
+- При выходе ComfyUI `.env` автоматически сбрасывается в `0/0` (через `atexit`) — защита от «шторма» копирования при следующем старте
+- API `/arena/autopatch`: разрешён запуск без `required_models` для true on‑demand сценария (копирование инициируется по факту загрузки)
+- UI (красный): перед автопатчем отправляются найденные модели в `/arena/analyze_workflow` для корректного расширения категорий и прогрева состояния
+
+### Fixed
+- Спорадические массовые копии при старте из‑за ранних системных сканов путей (extra_model_paths); добавлены проверки стека вызовов и отложенный патч, чтобы реагировать только на реальные загрузки
+
+### Removed
+- Автостарт кеширования при наличии `1/1` на старте — убран как опасный по дисковому I/O и сети
+
+---
+
 ## [5.0.0] - Tue Oct 07 2025 12:42:58 GMT+0300 (Москва, стандартное время)
 
 ### Added

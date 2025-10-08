@@ -54,7 +54,7 @@ app.registerExtension({
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px;">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                     </svg>
-                    <span>ARENA</span>
+                    <span>ACACHE</span>
                 `;
                 mainButton.title = 'Arena AutoCache (Click to toggle)';
                 mainButton.style.cssText = `
@@ -945,8 +945,7 @@ app.registerExtension({
                                 env: {
                                     ARENA_AUTO_CACHE_ENABLED: enabled ? '1' : '0',
                                     ARENA_AUTOCACHE_AUTOPATCH: autopatch ? '1' : '0'
-                                },
-                                update_only: true
+                                }
                             })
                         });
                         
@@ -966,14 +965,82 @@ app.registerExtension({
                         }
                         
                         // RU: Start autopatch if needed
+                        if (mode === CACHE_MODESRED_unused_fix) {}
                         if (mode === CACHE_MODES.RED) {
                             try {
-                                await fetch('/arena/autopatch', {
+                                // Collect required models from current workflow
+                                const requiredModels = [];
+                                try {
+                                    const prompt = app.graphToPrompt?.();
+                                    const workflow = prompt?.workflow;
+                                    const fieldToCategory = {
+                                        ckpt_name: 'checkpoints',
+                                        model_name: 'checkpoints',
+                                        checkpoint_name: 'checkpoints',
+                                        vae_name: 'vae',
+                                        lora_name: 'loras',
+                                        clip_name: 'clip',
+                                        control_net_name: 'controlnet',
+                                        upscale_model_name: 'upscale_models',
+                                        embeddings: 'embeddings',
+                                        hypernetwork_name: 'hypernetworks'
+                                    };
+                                    if (Array.isArray(workflow?.nodes)) {
+                                        for (const node of workflow.nodes) {
+                                            const inputs = node?.inputs || {};
+                                            for (const [field, value] of Object.entries(inputs)) {
+                                                const category = fieldToCategory[field];
+                                                if (!category) continue;
+                                                if (typeof value === 'string' && value.trim()) {
+                                                    requiredModels.push({ category, filename: value.trim() });
+                                                }
+                                            }
+                                        }
+                                    } else if (workflow && typeof workflow === 'object') {
+                                        for (const [nodeId, node] of Object.entries(workflow)) {
+                                            const inputs = node && typeof node === 'object' ? (node.inputs || {}) : {};
+                                            for (const [field, value] of Object.entries(inputs)) {
+                                                const category = fieldToCategory[field];
+                                                if (!category) continue;
+                                                if (typeof value === 'string' && value.trim()) {
+                                                    requiredModels.push({ category, filename: value.trim() });
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (collectErr) {
+                                    console.warn('[Arena Simple Header] Failed to collect workflow models:', collectErr);
+                                }
+
+                                // Send models to workflow analyzer to auto-extend categories and warm state
+                                try {
+                                    if (requiredModels.length > 0) {
+                                        await fetch('/arena/analyze_workflow', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ models: requiredModels })
+                                        });
+                                    }
+                                } catch (anErr) {
+                                    console.warn('[Arena Simple Header] analyze_workflow failed:', anErr);
+                                }
+
+                                // Start autopatch with required models if any (backend requires non-empty set)
+                                const body = requiredModels.length > 0
+                                    ? { action: 'start', required_models: requiredModels }
+                                    : { action: 'start' };
+
+                                const resp = await fetch('/arena/autopatch', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: "start" })
+                                    body: JSON.stringify(body)
                                 });
-                                console.log("[Arena Simple Header] Autopatch started");
+                                if (resp.ok) {
+                                    const data = await resp.json().catch(() => ({}));
+                                    console.log('[Arena Simple Header] Autopatch response:', data);
+                                } else {
+                                    console.warn('[Arena Simple Header] Autopatch HTTP error:', resp.status);
+                                }
                             } catch (autopatchError) {
                                 console.warn("[Arena Simple Header] Autopatch failed:", autopatchError);
                             }
@@ -1034,6 +1101,26 @@ app.registerExtension({
                     }
                 }, 1000);
                 
+                // RU: Ensure safe reset on window close (sets 0/0 with keepalive)
+                const resetEnv = () => {
+                    try {
+                        fetch('/arena/env', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                env: {
+                                    ARENA_AUTO_CACHE_ENABLED: '0',
+                                    ARENA_AUTOCACHE_AUTOPATCH: '0'
+                                }
+                            }),
+                            keepalive: true
+                        });
+                    } catch {}
+                };
+
+                window.addEventListener('beforeunload', resetEnv);
+                window.addEventListener('pagehide', resetEnv);
+
             }, 2000); // Wait 2 seconds for DOM
         }
 });

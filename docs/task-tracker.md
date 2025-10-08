@@ -38,6 +38,23 @@
   * [x] Проверить работу всех инструментов
 * **Зависимости**: Завершение настройки Cursor rules
 
+## Задача: Исправить чтение Max Cache GB из Settings UI ✅ ЗАВЕРШЕНО
+
+* **Статус**: Завершена
+* **Описание**: Проблема с чтением значения Max Cache GB из ComfyUI Settings UI - всегда возвращалось 0 вместо реального значения (512)
+* **Шаги выполнения**:
+  * [x] Создать GitHub Issue #XXX
+  * [x] Улучшить DOM селекторы в arena_settings_save_button.js
+  * [x] Добавить sanitizeNumber функцию
+  * [x] Добавить merge стратегию для .env
+  * [x] Добавить чтение из app.ui.settings и localStorage
+  * [x] Перейти на официальный ComfyUI API (app.extensionManager.setting.get)
+  * [x] Добавить принудительный blur() для PrimeVue InputNumber
+  * [x] Протестировать исправление
+  * [x] Обновить документацию
+* **Зависимости**: ComfyUI Settings UI, PrimeVue InputNumber
+* **Решение**: Использование официального ComfyUI Settings API вместо парсинга DOM решает проблему с timing PrimeVue InputNumber
+
 ## Задача: Миграция существующего кода
 
 * **Статус**: Не начата

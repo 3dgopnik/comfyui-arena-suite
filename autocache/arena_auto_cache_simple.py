@@ -454,27 +454,31 @@ def _apply_folder_paths_patch():
                 print(f"[ArenaAutoCache] Category {folder_name} is in effective_categories")
                 if _settings and _settings.verbose:
                     print(f"[ArenaAutoCache] Effective categories: {_settings.effective_categories}")
-                # RU: Сначала проверяем кэш
-                cache_path = _settings.root / folder_name / filename
-                if cache_path.exists():
+                # RU: Сначала проверяем кэш (с учётом семейства, если есть)
+                cache_path_obj = _get_cache_path(folder_name, filename)
+                if cache_path_obj and cache_path_obj.exists():
                     if _settings.verbose:
                         print(f"[ArenaAutoCache] Cache hit: {filename}")
-                    return str(cache_path)
+                        print(f"[ArenaAutoCache] Returning cache path: {cache_path_obj}")
+                    return str(cache_path_obj)
 
                 # RU: Если не в кэше, получаем оригинальный путь
                 try:
                     original_path = folder_paths.get_full_path_origin(folder_name, filename)
                     if os.path.exists(original_path):
-                        # RU: Планируем копирование в фоне ТОЛЬКО если включено авто-кеширование
+                        # RU: Планируем копирование в фоне ТОЛЬКО если включены оба флага (красный режим)
                         auto_cache_enabled = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "false").lower() in ("true", "1", "yes")
-                        print(f"[ArenaAutoCache] auto_cache_enabled: {auto_cache_enabled}")
+                        autopatch_enabled = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "false").lower() in ("true", "1", "yes")
+                        print(f"[ArenaAutoCache] auto_cache_enabled: {auto_cache_enabled}, autopatch_enabled: {autopatch_enabled}")
                         
                         # RU: Проверяем системное сканирование
                         is_system_scan = _is_system_scanning()
                         print(f"[ArenaAutoCache] is_system_scanning: {is_system_scan}")
                         
-                        if auto_cache_enabled and not is_system_scan:
-                            _schedule_copy_task(folder_name, filename, original_path, str(cache_path))
+                        if auto_cache_enabled and autopatch_enabled and not is_system_scan:
+                            # RU: Планируем копию в путь кеша (с типом модели)
+                            target_cache_path = str(cache_path_obj) if cache_path_obj else str(_settings.root / folder_name / filename)
+                            _schedule_copy_task(folder_name, filename, original_path, target_cache_path)
                             if _settings.verbose:
                                 print(f"[ArenaAutoCache] Scheduled cache copy: {filename}")
                         else:
@@ -1540,6 +1544,22 @@ def _setup_workflow_analysis_api():
                     # RU: Обновляем os.environ
                     for key, value in filtered_env.items():
                         os.environ[key] = value
+
+                    # RU: После обновления переменных гарантируем загрузку настроек (_settings)
+                    try:
+                        _ensure_env_loaded()
+                    except Exception as e:
+                        print(f"[ArenaAutoCache] Warning: failed to load settings after env update: {e}")
+
+                    # RU: Если включен красный режим (ENABLED=1 и AUTOPATCH=1) — немедленно запускаем deferred autopatch
+                    try:
+                        enabled_flag = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "0") in ("1", "true")
+                        autopatch_flag = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "0") in ("1", "true")
+                        if enabled_flag and autopatch_flag:
+                            print("[ArenaAutoCache] Env updated to RED mode (1/1) → starting deferred autopatch now")
+                            _start_deferred_autopatch()
+                    except Exception as e:
+                        print(f"[ArenaAutoCache] Failed to start deferred autopatch after env update: {e}")
                     
                     # RU: Сохраняем в .env файл только если НЕ update_only
                     if not update_only:
@@ -1588,14 +1608,11 @@ def _setup_workflow_analysis_api():
                         with _required_models_lock:
                             _required_models.update((m["category"], m["filename"]) for m in required_models)
                         print(f"[ArenaAutoCache] Added {len(required_models)} required models")
-                    elif not _required_models:
-                        return web.json_response({
-                            "status": "error",
-                            "code": "EMPTY_REQUIRED_SET",
-                            "message": "No required models specified"
-                        })
+                    # RU: Разрешаем запуск без required_models для on-demand режима
+                    else:
+                        print("[ArenaAutoCache] Autopatch requested without explicit required_models (on-demand mode)")
                     
-                    print("[ArenaAutoCache] Starting autopatch via API...")
+                    print("[ArenaAutoCache] Starting autopatch via API (deferred on-demand)...")
                     _start_deferred_autopatch()
                     return web.json_response({"status": "success", "message": "Autopatch started"})
                 else:
@@ -1962,26 +1979,18 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 print("[ArenaAutoCache] Loaded v5.0.0 with Settings Panel primary interface, auto-activation, and demand-driven caching")
 
-# RU: Автоматическая активация при наличии .env файла
-print("[ArenaAutoCache] Checking for auto-activation...")
+# RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
+print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")
 comfy_root = _find_comfy_root()
 if comfy_root:
     env_file_path = comfy_root / "user" / "arena_autocache.env"
     if env_file_path.exists():
-        print("[ArenaAutoCache] Found .env file, loading configuration...")
         _ensure_env_loaded()
-        
-        # RU: Проверяем флаг автоактивации
-        if os.environ.get("ARENA_AUTO_CACHE_ENABLED", "0") in ("1", "true"):
-            print("[ArenaAutoCache] Auto-activation enabled, starting deferred autopatch...")
-            os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "1"
-            _start_deferred_autopatch()
-        else:
-            print("[ArenaAutoCache] Auto-activation disabled in .env")
+        print("[ArenaAutoCache] .env loaded on startup (no auto-caching)")
     else:
-        print("[ArenaAutoCache] No .env file found, waiting for Settings Panel or node activation")
+        print("[ArenaAutoCache] No .env file found, waiting for Settings Panel or UI")
 else:
-    print("[ArenaAutoCache] ComfyUI root not found, waiting for Settings Panel or node activation")
+    print("[ArenaAutoCache] ComfyUI root not found, waiting for Settings Panel or UI")
 
 # RU: Регистрируем API endpoints глобально для работы через интерфейс
 print("[ArenaAutoCache] Registering global API endpoints for UI integration...")
@@ -2002,3 +2011,36 @@ except Exception as e:
 #     print(f"[ArenaAutoCache] Deferred autopatch disabled (ARENA_AUTOCACHE_AUTOPATCH = {autopatch_env})")
 
 print("[ArenaAutoCache] Module loaded - NO automatic caching, only through node interface")
+
+# RU: Сброс флагов при выходе (защита от шторма на следующем старте)
+try:
+    import atexit, signal
+
+    def _reset_env_on_exit():
+        try:
+            os.environ["ARENA_AUTO_CACHE_ENABLED"] = "0"
+            os.environ["ARENA_AUTOCACHE_AUTOPATCH"] = "0"
+            _save_env_file({
+                "ARENA_AUTO_CACHE_ENABLED": "0",
+                "ARENA_AUTOCACHE_AUTOPATCH": "0",
+            })
+            print("[ArenaAutoCache] Reset ENABLED/AUTOPATCH to 0 on exit")
+        except Exception as e:
+            print(f"[ArenaAutoCache] Failed to reset env on exit: {e}")
+
+    def _signal_handler(signum, frame):
+        print(f"[ArenaAutoCache] Caught signal {signum}, resetting env to 0/0")
+        _reset_env_on_exit()
+
+    atexit.register(_reset_env_on_exit)
+    # RU: Регистрируем обработчики сигналов для Electron/Windows (SIGINT/SIGTERM)
+    try:
+        signal.signal(signal.SIGINT, _signal_handler)
+    except Exception:
+        pass
+    try:
+        signal.signal(signal.SIGTERM, _signal_handler)
+    except Exception:
+        pass
+except Exception as e:
+    print(f"[ArenaAutoCache] atexit/signal registration failed: {e}")
