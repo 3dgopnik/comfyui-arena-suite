@@ -1,0 +1,51 @@
+# extra_model_paths.yaml (Arena template)
+# This is a safe template used to restore ComfyUI Desktop's config when updates delete it.
+# You may replace this content with your production file. Arena will copy this file to
+# the Electron resources folder if the file is missing.
+
+# Example profile for a central NAS storage. Set base_path to your NAS root.
+nas_models:
+  is_default: "true"
+  base_path: '\\nas-3d\Visual\Lib\SDModels'
+  checkpoints: |
+    SDXL
+    SD3
+    SD1.5
+    Stable-Cascade
+  loras: |
+    Lora
+    Lora\Flux
+    SD1.5\SD15_LORA
+    SDXL\XL_LORA
+    IPAdapter\IPA-Lora
+  vae: |
+    vae
+    vae_approx
+  embeddings: embeds
+  clip: clip
+  clip_vision: clip_vision
+  controlnet: |
+    CN
+    CN\Xlabs
+    IPAdapter\IPA-sdxl_models
+    IPAdapter\IPA-15-models
+  diffusion_models: |
+    unet
+    unet\flux
+    unet\kolors
+    style_models
+  upscale_models: |
+    Upscale
+    apisr
+    stablesr
+    SUPIR
+    SDXL\SUPIR
+    CCSR
+  insightface: |
+    antelopev2
+    facerestore_models
+  ultralytics: |
+    ultralytics\bbox
+    ultralytics\segm
+
+

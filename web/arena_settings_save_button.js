@@ -244,6 +244,20 @@ app.registerExtension({
 			await waitFor(() => app?.ui?.settings?.addSetting);
 			log("app.ui.settings ready, registering settings...");
 
+            // Ensure a little right padding so inputs don't stick to the scrollbar
+            try {
+                const STYLE_ID = "arena-settings-right-padding";
+                if (!document.getElementById(STYLE_ID)) {
+                    const style = document.createElement("style");
+                    style.id = STYLE_ID;
+                    style.textContent = `
+                        .comfy-settings-dialog tr > td:last-child { padding-right: 80px !important; }
+                        .comfy-settings-dialog .setting-row > td:last-child { padding-right: 80px !important; }
+                    `;
+                    document.head.appendChild(style);
+                }
+            } catch {}
+
 			// Register ALL settings (without category - let ComfyUI auto-group by id prefix)
 			app.ui.settings.addSetting({ 
 				id: "Arena.🔴 Enable Auto Cache", 
@@ -274,6 +288,21 @@ app.registerExtension({
 				defaultValue: "", 
 				tooltip: "Directory for cache storage" 
 			});
+			// NEW: NAS path management (hybrid auto-scan + YAML fallback)
+			app.ui.settings.addSetting({
+				id: "Arena.🟡 NAS Root Path",
+				name: "NAS Root Path",
+				type: "text",
+				defaultValue: "",
+				tooltip: "Root path to NAS models (e.g. \\nas-3d\\Visual\\Lib\\SDModels). Leave empty to use extra_model_paths.yaml"
+			});
+			app.ui.settings.addSetting({
+				id: "Arena.🟡 Auto-scan NAS",
+				name: "Auto-scan NAS Structure",
+				type: "boolean",
+				defaultValue: true,
+				tooltip: "Automatically scan NAS and register model paths on startup"
+			});
 			app.ui.settings.addSetting({ 
 				id: "Arena.🟡 Min File Size (MB)", 
 				name: "Min File Size (MB)", 
@@ -287,6 +316,54 @@ app.registerExtension({
 				type: "number", 
 				defaultValue: 0, 
 				tooltip: "Maximum cache size in gigabytes" 
+			});
+
+			// Button: Restore extra_model_paths.yaml from template
+			app.ui.settings.addSetting({
+				id: "Arena.🟢 Restore YAML",
+				name: "Restore YAML File",
+				defaultValue: null,
+				type: (name, setter, value) => {
+					const tr = document.createElement("tr");
+					
+					// Create empty label cell (hidden)
+					const tdLabel = document.createElement("td");
+					tdLabel.style.display = "none";
+					
+					// Create control cell with centered button
+					const tdCtrl = document.createElement("td");
+					tdCtrl.style.textAlign = "center";
+					tdCtrl.style.padding = "20px 0";
+					tdCtrl.style.width = "100%";
+					
+					const btnRestore = document.createElement("button");
+					btnRestore.textContent = "Restore";
+					btnRestore.title = "Restore Electron extra_model_paths.yaml from Arena template";
+					btnRestore.style.cssText = "padding: 12px 48px; border-radius: 6px; border: 1px solid #666; background: #346599; color: #fff; cursor: pointer; font-weight: 500; font-size: 14px; min-width: 200px;";
+					btnRestore.onmouseenter = () => { btnRestore.style.background = "#3b77b8"; };
+					btnRestore.onmouseleave = () => { btnRestore.style.background = "#346599"; };
+					btnRestore.onmousedown = () => { btnRestore.style.background = "#1d5086"; };
+					btnRestore.onmouseup = () => { btnRestore.style.background = "#3b77b8"; };
+					
+					btnRestore.addEventListener("click", async () => {
+						try {
+							const res = await fetch('/arena/restore_yaml', { method: 'POST' });
+							const data = await res.json().catch(() => ({}));
+							if (res.ok && data?.status === 'success') {
+								alert(`✅ ${data.message || 'YAML restored successfully'}`);
+							} else {
+								alert(`❌ Restore failed: ${data?.message || res.status}`);
+							}
+						} catch (e) {
+							alert('❌ Restore failed: ' + e.message);
+						}
+					});
+					
+					tdCtrl.appendChild(btnRestore);
+					tr.appendChild(tdLabel);
+					tr.appendChild(tdCtrl);
+					return tr;
+				}
 			});
 
 			// Register Save button (at the bottom)
@@ -327,26 +404,30 @@ app.registerExtension({
 								return;
 							}
 							
-							// Default to disabled (user must explicitly enable via Arena button)
+						// Default to disabled (user must explicitly enable via Arena button)
 							const enabled = false;
 							
-							// Collect ALL text inputs from Settings dialog (fallback method)
+						// Collect ALL text inputs from Settings dialog (fallback method)
 							const allInputs = Array.from(document.querySelectorAll('.comfy-settings-dialog input[type="text"], input[type="text"]'));
 							log(`Found ${allInputs.length} text inputs in Settings`);
 							
 							// Try to find Cache Root by scanning all text inputs for the value
-							let cacheRoot = await getSettingValue("Arena.🟡 Cache Directory") || "";
-							if (!cacheRoot) {
-								// Fallback: find the first non-empty text input that looks like a path
-								for (const input of allInputs) {
-									const val = (input.value || '').trim();
-									if (val && (val.includes('\\') || val.includes('/') || val.includes(':'))) {
-										log(`Found potential cache_root: "${val}"`);
-										cacheRoot = val;
-										break;
-									}
+						let cacheRoot = await getSettingValue("Arena.🟡 Cache Directory") || "";
+						if (!cacheRoot) {
+							// Fallback: find the first non-empty text input that looks like a path
+							for (const input of allInputs) {
+								const val = (input.value || '').trim();
+								if (val && (val.includes('\\') || val.includes('/') || val.includes(':'))) {
+									log(`Found potential cache_root: "${val}"`);
+									cacheRoot = val;
+									break;
 								}
 							}
+						}
+
+						// Read NAS settings
+						const nasRoot = (await getSettingValue("Arena.🟡 NAS Root Path")) || "";
+						const autoScan = !!(await getSettingValue("Arena.🟡 Auto-scan NAS"));
 							
                             // Load existing .env to avoid overwriting with empty values
                             let existingEnv = {};
@@ -379,14 +460,16 @@ app.registerExtension({
                             const ui_verbose = await getSettingValue("Arena.🔴 Verbose Logging");
 
                             // Build env with merge semantics (keep previous if UI not readable)
-                            const env = {
+							const env = {
                                 ARENA_AUTO_CACHE_ENABLED: "0", // Always disabled by default
                                 ARENA_AUTOCACHE_AUTOPATCH: "0", // Always disabled by default
                                 ARENA_CACHE_MODE: setOrKeep("ARENA_CACHE_MODE", ui_cache_mode, "ondemand"),
                                 ARENA_CACHE_ROOT: setOrKeep("ARENA_CACHE_ROOT", cacheRoot, existingEnv["ARENA_CACHE_ROOT"] || ""),
                                 ARENA_CACHE_MIN_SIZE_MB: setOrKeep("ARENA_CACHE_MIN_SIZE_MB", ui_min_size, 10),
                                 ARENA_CACHE_MAX_GB: setOrKeep("ARENA_CACHE_MAX_GB", ui_max_gb, 0),
-                                ARENA_CACHE_VERBOSE: setOrKeep("ARENA_CACHE_VERBOSE", ui_verbose ? 1 : 0, 0)
+								ARENA_CACHE_VERBOSE: setOrKeep("ARENA_CACHE_VERBOSE", ui_verbose ? 1 : 0, 0),
+								ARENA_NAS_ROOT: setOrKeep("ARENA_NAS_ROOT", nasRoot, existingEnv["ARENA_NAS_ROOT"] || ""),
+								ARENA_NAS_AUTO_SCAN: setOrKeep("ARENA_NAS_AUTO_SCAN", autoScan ? 1 : 0, existingEnv["ARENA_NAS_AUTO_SCAN"] ?? 1)
                             };
 							
 							log("Saving to /arena/env", env);

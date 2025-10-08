@@ -34,7 +34,10 @@ class CacheSettings:
 
 # RU: Глобальные настройки и состояние
 _settings = None
+_auto_cache_enabled = False  # RU: Глобальный флаг авто-кеширования
+_autopatch_enabled = False   # RU: Глобальный флаг автопатча
 _folder_paths_patched = False
+_workflow_prefetch_started = False  # RU: Флаг запуска предзагрузки workflow
 _copy_queue = Queue()
 _copy_thread_started = False
 _deferred_autopatch_started = False
@@ -373,16 +376,29 @@ def _init_settings(
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
     
-    # RU: Используем базовые категории - JS автоматически определяет нужные модели
-    base_categories = [
-        "checkpoints", "loras", "clip", "vae", "controlnet", "upscale_models", 
-        "embeddings", "hypernetworks", "gguf_models", "unet_models", "diffusion_models",
-        "text_encoders"  # RU: Добавляем text_encoders для DualCLIPLoader
-    ]
+    # RU: ДИНАМИЧЕСКОЕ обнаружение категорий через ComfyUI
+    # RU: Вместо хардкода используем ВСЕ категории которые ComfyUI знает
+    try:
+        import folder_paths
+        # RU: folder_paths.folder_names_and_paths содержит ВСЕ категории моделей
+        all_comfy_categories = list(folder_paths.folder_names_and_paths.keys())
+        if verbose:
+            print(f"[ArenaAutoCache] Discovered {len(all_comfy_categories)} categories from ComfyUI: {all_comfy_categories}")
+        base_categories = all_comfy_categories
+    except Exception as e:
+        # RU: Fallback на базовые категории если не получилось
+        if verbose:
+            print(f"[ArenaAutoCache] Failed to discover categories from ComfyUI, using fallback: {e}")
+        base_categories = [
+            "checkpoints", "loras", "clip", "vae", "controlnet", "upscale_models", 
+            "embeddings", "hypernetworks", "gguf_models", "unet_models", "diffusion_models",
+            "text_encoders"
+        ]
     
-    # RU: Создаем подпапки для базовых категорий
-    for category in base_categories:
-        (root / category).mkdir(exist_ok=True)
+    # RU: Создаем подпапки для всех категорий (папки создаются по требованию в _get_cache_path)
+    # RU: Не создаем все подпапки сразу - это медленно и не нужно
+    # for category in base_categories:
+    #     (root / category).mkdir(exist_ok=True)
     
     # RU: Читаем новые параметры для demand-driven caching
     discovery_mode = os.environ.get("ARENA_CACHE_DISCOVERY", "workflow_only")
@@ -409,6 +425,18 @@ def _init_settings(
         print(
             f"[ArenaAutoCache] Cache root: {root} / Min file size: {min_size_mb}MB / Max cache size: {max_cache_gb}GB / Verbose: {verbose}"
         )
+    
+    # RU: Обновляем глобальные флаги авто-кеширования из .env
+    global _auto_cache_enabled, _autopatch_enabled
+    enabled_raw = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "0")
+    autopatch_raw = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "0")
+    if verbose:
+        print(f"[ArenaAutoCache] DEBUG: ARENA_AUTO_CACHE_ENABLED from os.environ = '{enabled_raw}'")
+        print(f"[ArenaAutoCache] DEBUG: ARENA_AUTOCACHE_AUTOPATCH from os.environ = '{autopatch_raw}'")
+    _auto_cache_enabled = enabled_raw.lower() in ("true", "1", "yes")
+    _autopatch_enabled = autopatch_raw.lower() in ("true", "1", "yes")
+    if verbose:
+        print(f"[ArenaAutoCache] Global flags updated: auto_cache_enabled={_auto_cache_enabled}, autopatch_enabled={_autopatch_enabled}")
     
     return _settings
 
@@ -449,11 +477,12 @@ def _apply_folder_paths_patch():
                 import traceback
                 traceback.print_stack()
             
-            # RU: Кэширование только для эффективных категорий
-            if folder_name in _settings.effective_categories:
-                print(f"[ArenaAutoCache] Category {folder_name} is in effective_categories")
-                if _settings and _settings.verbose:
-                    print(f"[ArenaAutoCache] Effective categories: {_settings.effective_categories}")
+            # RU: УНИВЕРСАЛЬНОЕ кеширование для ЛЮБЫХ категорий моделей
+            # RU: ComfyUI сам определяет категории через folder_paths, мы их все кешируем
+            if _settings:
+                if _settings.verbose:
+                    print(f"[ArenaAutoCache] Category {folder_name} detected, checking cache...")
+                
                 # RU: Сначала проверяем кэш (с учётом семейства, если есть)
                 cache_path_obj = _get_cache_path(folder_name, filename)
                 if cache_path_obj and cache_path_obj.exists():
@@ -466,17 +495,17 @@ def _apply_folder_paths_patch():
                 try:
                     original_path = folder_paths.get_full_path_origin(folder_name, filename)
                     if os.path.exists(original_path):
-                        # RU: Планируем копирование в фоне ТОЛЬКО если включены оба флага (красный режим)
-                        auto_cache_enabled = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "false").lower() in ("true", "1", "yes")
-                        autopatch_enabled = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "false").lower() in ("true", "1", "yes")
-                        print(f"[ArenaAutoCache] auto_cache_enabled: {auto_cache_enabled}, autopatch_enabled: {autopatch_enabled}")
+                        # RU: Используем глобальные флаги (обновляются в _init_settings)
+                        global _auto_cache_enabled, _autopatch_enabled
+                        print(f"[ArenaAutoCache] auto_cache_enabled: {_auto_cache_enabled}, autopatch_enabled: {_autopatch_enabled}")
                         
                         # RU: Проверяем системное сканирование
                         is_system_scan = _is_system_scanning()
                         print(f"[ArenaAutoCache] is_system_scanning: {is_system_scan}")
                         
-                        if auto_cache_enabled and autopatch_enabled and not is_system_scan:
+                        if _auto_cache_enabled and _autopatch_enabled and not is_system_scan:
                             # RU: Планируем копию в путь кеша (с типом модели)
+                            # RU: Кеширование по требованию - эффективнее чем сканировать все модели
                             target_cache_path = str(cache_path_obj) if cache_path_obj else str(_settings.root / folder_name / filename)
                             _schedule_copy_task(folder_name, filename, original_path, target_cache_path)
                             if _settings.verbose:
@@ -698,6 +727,25 @@ def _reload_settings_if_needed():
             print(f"[ArenaAutoCache] Settings reloaded from .env: {cache_root}")
 
 
+def _prefetch_all_workflow_models():
+    """RU: НЕ используется - кеширование происходит по требованию через _schedule_copy_task.
+    
+    Изначально планировалось кешировать все модели из workflow, но это неэффективно:
+    - Нельзя определить какие модели реально используются в workflow без его парсинга
+    - folder_paths.get_filename_list() возвращает ВСЕ модели (100+), а не только используемые
+    - Лучше кешировать по требованию: модель запрашивается → сразу кешируется
+    
+    Текущая логика (эффективная):
+    1. Модель запрашивается через patched_get_full_path
+    2. Если не в кеше → планируется копирование через _schedule_copy_task
+    3. Copy worker копирует в фоне параллельно
+    4. Следующая модель берется из кеша (уже скопирована)
+    
+    Это быстрее и эффективнее чем сканировать все 95+ моделей!
+    """
+    pass  # RU: Функция отключена, кеширование по требованию работает лучше
+
+
 def _schedule_copy_task(category: str, filename: str, source_path: str, cache_path: str):
     """RU: Планирует задачу копирования с дедупликацией и фильтрацией."""
     global _last_copy_time
@@ -736,9 +784,9 @@ def _schedule_copy_task(category: str, filename: str, source_path: str, cache_pa
     if not _settings:
         return  # RU: Молча блокируем без логов
     
-    # RU: Проверяем, включено ли кеширование
-    auto_cache_enabled = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "false").lower() in ("true", "1", "yes")
-    if not auto_cache_enabled:
+    # RU: Проверяем, включено ли кеширование (используем глобальный флаг)
+    global _auto_cache_enabled
+    if not _auto_cache_enabled:
         return  # RU: Молча блокируем без логов
     
     # RU: Проверяем наличие активных нод Arena
@@ -796,9 +844,12 @@ def _copy_worker():
                 os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
                 # RU: Копируем файл
-                temp_path = cache_path + ".part"
-                shutil.copy2(source_path, temp_path)
-                os.rename(temp_path, cache_path)
+                # RU: cache_path может быть строкой или Path, конвертируем в Path для работы с .with_suffix
+                from pathlib import Path
+                cache_path_obj = Path(cache_path) if isinstance(cache_path, str) else cache_path
+                temp_path = cache_path_obj.with_suffix(cache_path_obj.suffix + ".part")
+                shutil.copy2(source_path, str(temp_path))
+                os.rename(str(temp_path), str(cache_path))
 
                 _copy_status["completed_jobs"] += 1
                 if _settings.verbose:
@@ -961,14 +1012,16 @@ def _start_deferred_autopatch():
                     else:
                         print("[ArenaAutoCache] folder_paths already patched")
 
-                    # RU: Запускаем воркер копирования
+                    # RU: Запускаем НЕСКОЛЬКО воркеров для параллельного копирования
                     if not _copy_thread_started:
-                        print("[ArenaAutoCache] Starting copy worker thread...")
-                        copy_thread = threading.Thread(target=_copy_worker, daemon=True)
-                        copy_thread.start()
+                        num_workers = _settings.max_concurrency if _settings.max_concurrency > 0 else 2
+                        print(f"[ArenaAutoCache] Starting {num_workers} copy worker threads...")
+                        for i in range(num_workers):
+                            copy_thread = threading.Thread(target=_copy_worker, daemon=True, name=f"ArenaCopyWorker-{i}")
+                            copy_thread.start()
                         _copy_thread_started = True
                     else:
-                        print("[ArenaAutoCache] Copy worker already started")
+                        print("[ArenaAutoCache] Copy workers already started")
 
                     elapsed = time.time() - start_time
                     print(f"[ArenaAutoCache] ✅ Deferred autopatch applied successfully after {elapsed:.1f}s")
@@ -997,10 +1050,13 @@ def _ensure_patch_applied():
         _settings = _init_settings()
         _apply_folder_paths_patch()
 
-        # RU: Запускаем воркер копирования
+        # RU: Запускаем НЕСКОЛЬКО воркеров для параллельного копирования
         if not _copy_thread_started:
-            copy_thread = threading.Thread(target=_copy_worker, daemon=True)
-            copy_thread.start()
+            num_workers = _settings.max_concurrency if _settings.max_concurrency > 0 else 2
+            print(f"[ArenaAutoCache] Starting {num_workers} copy worker threads...")
+            for i in range(num_workers):
+                copy_thread = threading.Thread(target=_copy_worker, daemon=True, name=f"ArenaCopyWorker-{i}")
+                copy_thread.start()
             _copy_thread_started = True
 
         print("[ArenaAutoCache] Patched on first node use")
@@ -1303,6 +1359,22 @@ def _detect_model_type(category: str, filename: str) -> str:
         return 'Wan'
     
     # RU: Для некоторых категорий используем специальную логику
+    if category == 'upscale_models':
+        # RU: SUPIR модели - специальная обработка
+        if 'supir' in filename_lower:
+            return 'SUPIR'
+        # RU: Real-ESRGAN модели
+        if any(keyword in filename_lower for keyword in ['real-esrgan', 'realesrgan', 'esrgan']):
+            return 'RealESRGAN'
+        # RU: SwinIR модели
+        if 'swinir' in filename_lower:
+            return 'SwinIR'
+        # RU: HAT модели
+        if 'hat' in filename_lower:
+            return 'HAT'
+        # RU: По умолчанию для upscale_models используем имя файла как тип
+        return filename.split('.')[0] if '.' in filename else 'Other'
+    
     if category == 'loras':
         # RU: LoRA модели часто содержат информацию о базовой модели
         # RU: Flux LoRA - расширенная проверка
@@ -1332,8 +1404,11 @@ def _get_cache_path(category: str, filename: str) -> Path:
     if not _settings:
         return None
     
+    # RU: Извлекаем только имя файла без подпути для определения типа
+    filename_only = os.path.basename(filename)
+    
     # RU: Определяем тип модели для создания подпапки
-    model_type = _detect_model_type(category, filename)
+    model_type = _detect_model_type(category, filename_only)
     
     # RU: Создаем путь с подпапкой типа модели
     cache_path = _settings.root / category / model_type / filename
@@ -1480,6 +1555,49 @@ def _setup_workflow_analysis_api():
                     print("[ArenaAutoCache] Workflow analysis activation requested")
                     return web.json_response({"status": "success", "message": "Workflow analysis activated"})
                 
+                elif action == "prefetch":
+                    # RU: Предзагрузка моделей из workflow (при переключении на RED режим)
+                    models = data.get('models', [])
+                    
+                    if models and _auto_cache_enabled and _autopatch_enabled:
+                        print(f"[ArenaAutoCache] Prefetch request: {len(models)} models from workflow")
+                        
+                        # RU: Планируем копирование ВСЕХ моделей сразу
+                        prefetched = 0
+                        for model_info in models:
+                            try:
+                                category = model_info.get('category', 'checkpoints')
+                                filename = model_info.get('filename', '')
+                                
+                                if not filename:
+                                    continue
+                                
+                                # RU: Проверяем кеш
+                                cache_path_obj = _get_cache_path(category, filename)
+                                if cache_path_obj and cache_path_obj.exists():
+                                    print(f"[ArenaAutoCache] Already cached: {filename}")
+                                    continue
+                                
+                                # RU: Получаем оригинальный путь
+                                try:
+                                    import folder_paths
+                                    original_path = folder_paths.get_full_path_origin(category, filename)
+                                    if original_path and os.path.exists(original_path):
+                                        target_cache_path = str(cache_path_obj) if cache_path_obj else str(_settings.root / category / filename)
+                                        _copy_queue.put((category, filename, original_path, target_cache_path))
+                                        prefetched += 1
+                                        print(f"[ArenaAutoCache] Prefetch scheduled: {category}/{filename}")
+                                except Exception as e:
+                                    print(f"[ArenaAutoCache] Prefetch error for {filename}: {e}")
+                                    
+                            except Exception as e:
+                                print(f"[ArenaAutoCache] Error processing model info: {e}")
+                        
+                        print(f"[ArenaAutoCache] Prefetch: scheduled {prefetched}/{len(models)} models for caching")
+                        return web.json_response({"status": "success", "prefetched": prefetched, "total": len(models)})
+                    else:
+                        return web.json_response({"status": "error", "message": "Prefetch disabled or no models"})
+                
                 elif action == "analyze" or 'models' in data:
                     # RU: Анализ workflow и получение моделей
                     models = data.get('models', [])
@@ -1543,15 +1661,19 @@ def _setup_workflow_analysis_api():
                 if filtered_env:
                     # RU: Обновляем os.environ
                     for key, value in filtered_env.items():
-                        os.environ[key] = value
+                        os.environ[key] = str(value)  # RU: Конвертируем в строку явно
 
+                    # RU: СНАЧАЛА сохраняем в .env файл (если нужно)
+                    if not update_only:
+                        _save_env_file(filtered_env)
+                    
                     # RU: После обновления переменных гарантируем загрузку настроек (_settings)
                     try:
                         _ensure_env_loaded()
                     except Exception as e:
                         print(f"[ArenaAutoCache] Warning: failed to load settings after env update: {e}")
 
-                    # RU: Если включен красный режим (ENABLED=1 и AUTOPATCH=1) — немедленно запускаем deferred autopatch
+                    # RU: ПОТОМ запускаем deferred autopatch (чтобы _load_env_file() читал правильный .env)
                     try:
                         enabled_flag = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "0") in ("1", "true")
                         autopatch_flag = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "0") in ("1", "true")
@@ -1561,9 +1683,8 @@ def _setup_workflow_analysis_api():
                     except Exception as e:
                         print(f"[ArenaAutoCache] Failed to start deferred autopatch after env update: {e}")
                     
-                    # RU: Сохраняем в .env файл только если НЕ update_only
+                    # RU: Возвращаем результат
                     if not update_only:
-                        _save_env_file(filtered_env)
                         return web.json_response({"status": "success", "message": f"Updated {len(filtered_env)} environment variables and saved to .env file"})
                     else:
                         return web.json_response({"status": "success", "message": f"Updated {len(filtered_env)} environment variables (no .env file created)"})
@@ -1576,6 +1697,55 @@ def _setup_workflow_analysis_api():
         
         print("[ArenaAutoCache] Environment sync API endpoints registered")
         
+        # RU: Добавляем API для восстановления YAML файла из шаблона
+        @PromptServer.instance.routes.post("/arena/restore_yaml")
+        async def post_restore_yaml_endpoint(request):
+            """Восстанавливает extra_model_paths.yaml из шаблона (тихо перезаписывает)."""
+            try:
+                from aiohttp import web
+                from pathlib import Path
+                try:
+                    from autocache.arena_path_manager import ensure_yaml_exists
+                except Exception:
+                    return web.json_response({"status": "error", "message": "Path manager not available"})
+
+                template_yaml = Path(__file__).parent.parent / "config" / "extra_model_paths.yaml"
+                electron_yaml = Path(
+                    "C:/Users/acherednikov/AppData/Local/Programs/@comfyorgcomfyui-electron/resources/ComfyUI/extra_model_paths.yaml"
+                )
+                # ComfyUI Desktop actually passes --extra-model-paths-config to a file in APPDATA
+                # so we also restore that location for reliability
+                roaming_yaml = Path(os.environ.get("APPDATA", "")) / "ComfyUI" / "extra_models_config.yaml"
+
+                if not template_yaml.exists():
+                    return web.json_response({
+                        "status": "error",
+                        "message": "Template YAML not found. Configure template first."
+                    })
+
+                ok1 = ensure_yaml_exists(electron_yaml, template_yaml, force=True)
+                # Best-effort copy to roaming config path
+                try:
+                    roaming_yaml.parent.mkdir(parents=True, exist_ok=True)
+                    import shutil
+                    shutil.copy2(str(template_yaml), str(roaming_yaml))
+                    ok2 = True
+                except Exception:
+                    ok2 = False
+
+                if ok1 or ok2:
+                    return web.json_response({
+                        "status": "success",
+                        "message": f"YAML restored to: {electron_yaml} | Roaming config: {roaming_yaml if ok2 else 'skip'}"
+                    })
+                else:
+                    return web.json_response({"status": "error", "message": "Restore failed"})
+            except Exception as e:
+                from aiohttp import web
+                return web.json_response({"status": "error", "message": str(e)})
+
+        print("[ArenaAutoCache] Restore YAML API endpoint registered")
+
         # RU: Добавляем API для autopatch
         @PromptServer.instance.routes.post("/arena/autopatch")
         async def post_autopatch_endpoint(request):
@@ -1602,19 +1772,123 @@ def _setup_workflow_analysis_api():
                     
                     _last_autopatch_time = current_time
                     
-                    # RU: Обработка required_models
+                    # RU: Обработка required_models с детальным логированием
                     required_models = data.get("required_models", [])
+                    cache_hits = 0
+                    cache_misses = 0
+                    not_found = []
+                    
                     if required_models:
+                        print(f"[ArenaAutoCache] 📥 Received {len(required_models)} models from frontend:")
+                        
+                        # RU: Проверяем каждую модель
+                        for model in required_models:
+                            category = model.get("category", "unknown")
+                            filename = model.get("filename", "")
+                            print(f"  - {category}/{filename}")
+                            
+                            # RU: Проверяем существование модели через folder_paths
+                            try:
+                                import folder_paths
+                                
+                                # RU: Нормализуем путь (replace backslash with forward slash)
+                                filename_normalized = filename.replace('\\', '/')
+                                
+                                # RU: ВАЖНО: folder_paths ожидает только имя файла БЕЗ подпапок
+                                # Frontend может отправить "SUPIR\SUPIR-v0Q_fp16.safetensors"
+                                # Нужно извлечь только "SUPIR-v0Q_fp16.safetensors"
+                                filename_for_lookup = os.path.basename(filename_normalized)
+                                
+                                if hasattr(folder_paths, 'get_full_path_origin'):
+                                    original_path = folder_paths.get_full_path_origin(category, filename_for_lookup)
+                                else:
+                                    original_path = folder_paths.get_full_path(category, filename_for_lookup)
+                                
+                                if original_path and os.path.exists(original_path):
+                                    # RU: Вычисляем cache path (используем только имя файла для определения типа)
+                                    filename_only = os.path.basename(filename_normalized)
+                                    model_type = _detect_model_type(category, filename_only)
+                                    cache_path = _settings.root / category / model_type / filename_normalized
+                                    
+                                    if cache_path.exists():
+                                        cache_hits += 1
+                                        print(f"    ✅ Cache HIT: {cache_path}")
+                                    else:
+                                        cache_misses += 1
+                                        print(f"    ⏳ Cache MISS: will be copied from {original_path}")
+                                else:
+                                    not_found.append(f"{category}/{filename_normalized}")
+                                    print(f"    ⚠️ Model NOT FOUND in folder_paths")
+                            except Exception as e:
+                                print(f"    ❌ Error checking model: {e}")
+                        
+                        # RU: Добавляем в required_models
                         with _required_models_lock:
                             _required_models.update((m["category"], m["filename"]) for m in required_models)
-                        print(f"[ArenaAutoCache] Added {len(required_models)} required models")
+                        
+                        # RU: НЕМЕДЛЕННО добавляем модели в очередь копирования для prefetch
+                        print(f"[ArenaAutoCache] 🚀 Adding {cache_misses} models to copy queue for prefetch...")
+                        for model in required_models:
+                            category = model.get("category", "unknown")
+                            filename = model.get("filename", "")
+                            filename_normalized = filename.replace('\\', '/')
+                            
+                            try:
+                                import folder_paths
+                                
+                                # RU: ВАЖНО: folder_paths ожидает только имя файла БЕЗ подпапок
+                                filename_for_lookup = os.path.basename(filename_normalized)
+                                
+                                if hasattr(folder_paths, 'get_full_path_origin'):
+                                    original_path = folder_paths.get_full_path_origin(category, filename_for_lookup)
+                                else:
+                                    original_path = folder_paths.get_full_path(category, filename_for_lookup)
+                                
+                                if original_path and os.path.exists(original_path):
+                                    filename_only = os.path.basename(filename_normalized)
+                                    model_type = _detect_model_type(category, filename_only)
+                                    # RU: Используем filename_only для пути кеша чтобы избежать двойных подпапок
+                                    cache_path = _settings.root / category / model_type / filename_only
+                                    
+                                    # RU: Проверяем что модель еще не в кеше
+                                    if not cache_path.exists():
+                                        # RU: Добавляем в очередь копирования
+                                        # RU: Конвертируем Path в строку для совместимости с _copy_worker
+                                        with _scheduled_lock:
+                                            if (category, filename_normalized) not in _scheduled_tasks:
+                                                _scheduled_tasks.add((category, filename_normalized))
+                                                _copy_queue.put((category, filename_normalized, original_path, str(cache_path)))
+                                                print(f"    📋 Queued for copy: {category}/{filename_normalized}")
+                                            else:
+                                                print(f"    ⏭️ Already queued: {category}/{filename_normalized}")
+                            except Exception as e:
+                                print(f"    ❌ Failed to queue {category}/{filename_normalized}: {e}")
+                        
+                        print(f"[ArenaAutoCache] 📊 Statistics:")
+                        print(f"  Cache hits: {cache_hits}")
+                        print(f"  Cache misses: {cache_misses} (will be copied)")
+                        if not_found:
+                            print(f"  Not found: {len(not_found)}")
+                            for nf in not_found:
+                                print(f"    - {nf}")
                     # RU: Разрешаем запуск без required_models для on-demand режима
                     else:
                         print("[ArenaAutoCache] Autopatch requested without explicit required_models (on-demand mode)")
                     
                     print("[ArenaAutoCache] Starting autopatch via API (deferred on-demand)...")
                     _start_deferred_autopatch()
-                    return web.json_response({"status": "success", "message": "Autopatch started"})
+                    
+                    # RU: Возвращаем детальную статистику для frontend
+                    response_data = {
+                        "status": "success",
+                        "message": "Autopatch started",
+                        "cache_hits": cache_hits,
+                        "cache_misses": cache_misses,
+                        "planned": cache_misses,
+                        "total_models": len(required_models) if required_models else 0,
+                        "not_found": not_found if not_found else []
+                    }
+                    return web.json_response(response_data)
                 else:
                     return web.json_response({"status": "error", "code": "INVALID_ACTION", "message": "Invalid action"})
                     
@@ -1877,13 +2151,15 @@ class ArenaAutoCacheSimple:
             if not _folder_paths_patched:
                 _apply_folder_paths_patch()
 
-            # RU: Запускаем фоновый поток копирования
+            # RU: Запускаем НЕСКОЛЬКО воркеров для параллельного копирования
             if not _copy_thread_started:
-                copy_thread = threading.Thread(target=_copy_worker, daemon=True)
-                copy_thread.start()
-                _copy_thread_started = True
+                num_workers = max_concurrency if max_concurrency > 0 else 2
                 if verbose:
-                    print("[ArenaAutoCache] Started background copy thread")
+                    print(f"[ArenaAutoCache] Starting {num_workers} copy worker threads...")
+                for i in range(num_workers):
+                    copy_thread = threading.Thread(target=_copy_worker, daemon=True, name=f"ArenaCopyWorker-{i}")
+                    copy_thread.start()
+                _copy_thread_started = True
             
             # RU: Только ondemand режим - кэширование только при использовании моделей
             if cache_mode == "ondemand":
@@ -2012,7 +2288,8 @@ except Exception as e:
 
 print("[ArenaAutoCache] Module loaded - NO automatic caching, only through node interface")
 
-# RU: Сброс флагов при выходе (защита от шторма на следующем старте)
+# RU: Автосброс флагов при выходе для безопасности
+# RU: По умолчанию кеширование ВЫКЛЮЧЕНО (0/0), пользователь включает через Arena кнопку
 try:
     import atexit, signal
 

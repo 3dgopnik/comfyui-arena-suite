@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.0] - Wed Oct 08 2025 16:56:28 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Universal Workflow Analysis**: Implemented automatic model detection across all node types without manual configuration
+- **Enhanced Error Handling**: Added robust Path/str conversion logic in _copy_worker for cross-platform compatibility
+- **Comprehensive Testing**: Validated caching functionality across SUPIR, Wan, and Flux workflow scenarios
+
+### Changed
+- **Universal Model Parser**: Replaced hardcoded node type detection with universal parser that scans widgets_values for model file extensions
+- **Cache Path Construction**: Improved cache path handling to prevent Path/str type inconsistencies in worker threads
+- **Model Type Detection**: Enhanced _detect_model_type to correctly identify SUPIR models in upscale_models category
+
+### Fixed
+- **Model Caching Pipeline**: Resolved critical issue where models were detected but not actually cached due to missing queue processing
+- **Path Handling**: Fixed WindowsPath + str concatenation error in _copy_worker that prevented file copying operations
+- **SUPIR Model Detection**: Corrected model type detection for SUPIR models, ensuring proper cache folder structure
+- **Double Path Creation**: Eliminated duplicate subfolders (Flux\flux\, Wan\Wan\) by using os.path.basename for type detection
+- **Python Indentation**: Fixed critical indentation errors in post_autopatch_endpoint that prevented autopatch execution
+- **Filename Resolution**: Resolved folder_paths.get_full_path() failures by using basename for model lookups
+
+---
+
+## [4.19.0] - Wed Oct 08 2025 16:56:10 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **System Health Checks**: Added comprehensive process analysis for Cursor IDE and ComfyUI applications
+- **GPU Utilization Tracking**: Implemented monitoring of Desktop Window Manager and 3D rendering processes
+
+### Changed
+- **System Monitoring**: Enhanced diagnostic capabilities to track GPU utilization by process type
+- **Performance Analysis**: Improved identification of performance bottlenecks in development environment
+
+### Fixed
+- **System Performance Diagnostics**: Resolved mouse lag and system slowdown issues by identifying GPU bottleneck (87% utilization)
+- **Desktop Window Manager Optimization**: Identified DWM consuming 45.8% GPU resources due to excessive Cursor IDE processes
+- **Process Management**: Cleaned up 16 redundant Cursor processes consuming 3.8GB RAM and significant GPU resources
+
+---
+
 ## [4.18.0] - Wed Oct 08 2025 11:38:15 GMT+0300 (Москва, стандартное время)
 
 ### Added

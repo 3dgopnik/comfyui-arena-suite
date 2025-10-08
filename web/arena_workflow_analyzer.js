@@ -83,7 +83,7 @@ app.registerExtension({
             };
             
             // Trigger workflow analysis
-            nodeType.prototype.triggerWorkflowAnalysis = function() {
+            nodeType.prototype.triggerWorkflowAnalysis = async function() {
                 if (!this.workflowAnalysis.enabled) {
                     return;
                 }
@@ -91,7 +91,7 @@ app.registerExtension({
                 console.log("[Arena Workflow Analyzer] Triggering workflow analysis");
                 
                 try {
-                    const workflow = this.getCurrentWorkflow();
+                    const workflow = await this.getCurrentWorkflow();
                     if (workflow) {
                         this.analyzeWorkflow(workflow);
                     }
@@ -100,19 +100,19 @@ app.registerExtension({
                 }
             };
             
-            // Get current workflow from ComfyUI
-            nodeType.prototype.getCurrentWorkflow = function() {
-                try {
-                    // Use ComfyUI's graphToPrompt method to get current workflow
-                    const prompt = app.graphToPrompt();
-                    if (prompt && prompt.workflow) {
-                        return prompt.workflow;
-                    }
-                } catch (error) {
-                    console.error("[Arena Workflow Analyzer] Failed to get workflow:", error);
-                }
-                return null;
-            };
+    // Get current workflow from ComfyUI
+    nodeType.prototype.getCurrentWorkflow = async function() {
+        try {
+            // Use ComfyUI's graphToPrompt method to get current workflow (async)
+            const prompt = await app.graphToPrompt();
+            if (prompt && prompt.workflow) {
+                return prompt.workflow;
+            }
+        } catch (error) {
+            console.error("[Arena Workflow Analyzer] Failed to get workflow:", error);
+        }
+        return null;
+    };
             
             // Analyze workflow for models
             nodeType.prototype.analyzeWorkflow = function(workflow) {
@@ -500,9 +500,9 @@ app.registerExtension({
 // Global workflow analysis functions
 window.ArenaWorkflowAnalyzer = {
     // Analyze current workflow
-    analyzeCurrentWorkflow: function() {
+    analyzeCurrentWorkflow: async function() {
         try {
-            const prompt = app.graphToPrompt();
+            const prompt = await app.graphToPrompt();
             if (prompt && prompt.workflow) {
                 console.log("[Arena Workflow Analyzer] Current workflow:", prompt.workflow);
                 return prompt.workflow;
@@ -514,23 +514,41 @@ window.ArenaWorkflowAnalyzer = {
     },
     
     // Get all models in current workflow
-    getCurrentWorkflowModels: function() {
+    getCurrentWorkflowModels: async function() {
         try {
-            const workflow = this.analyzeCurrentWorkflow();
+            const workflow = await this.analyzeCurrentWorkflow();
             if (!workflow) {
+                console.log("[Arena Workflow Analyzer] No workflow found");
                 return [];
             }
             
+            console.log("[Arena Workflow Analyzer] Workflow structure:", workflow);
+            
             const models = [];
-            const nodes = workflow.nodes || [];
             
-            nodes.forEach(node => {
-                if (node && node.inputs) {
-                    const nodeModels = this.extractModelsFromNode(node);
-                    models.push(...nodeModels);
-                }
-            });
+            // RU: ComfyUI может возвращать workflow.nodes (массив) или workflow[nodeId] (объект)
+            if (Array.isArray(workflow.nodes)) {
+                console.log("[Arena Workflow Analyzer] Processing workflow.nodes array:", workflow.nodes.length, "nodes");
+                workflow.nodes.forEach(node => {
+                    if (node && node.inputs) {
+                        const nodeModels = this.extractModelsFromNode(node);
+                        models.push(...nodeModels);
+                    }
+                });
+            } else if (typeof workflow === 'object') {
+                console.log("[Arena Workflow Analyzer] Processing workflow object with", Object.keys(workflow).length, "node IDs");
+                // RU: Обрабатываем как объект nodeId -> node
+                Object.entries(workflow).forEach(([nodeId, node]) => {
+                    if (node && typeof node === 'object' && node.inputs) {
+                        const nodeModels = this.extractModelsFromNode({...node, id: nodeId});
+                        models.push(...nodeModels);
+                    }
+                });
+            } else {
+                console.warn("[Arena Workflow Analyzer] Unknown workflow format:", typeof workflow);
+            }
             
+            console.log(`[Arena Workflow Analyzer] Found ${models.length} models total`);
             return models;
         } catch (error) {
             console.error("[Arena Workflow Analyzer] Failed to get models:", error);
@@ -538,37 +556,87 @@ window.ArenaWorkflowAnalyzer = {
         }
     },
     
-    // Extract models from node
+    // Extract models from node - UNIVERSAL approach
     extractModelsFromNode: function(node) {
         const models = [];
         
-        if (!node || !node.inputs) {
+        if (!node) {
             return models;
         }
         
-        const inputs = node.inputs;
-        const modelFields = [
-            'ckpt_name', 'vae_name', 'lora_name', 'clip_name',
-            'model_name', 'control_net_name', 'upscale_model_name',
-            'embeddings', 'hypernetwork_name'
-        ];
+        const nodeType = node.type || node.class_type;
         
-        modelFields.forEach(field => {
-            if (inputs[field]) {
-                const modelName = inputs[field];
-                if (typeof modelName === 'string' && modelName.trim()) {
+        // RU: Универсальный подход - ищем файлы с расширениями моделей во всех widgets_values
+        if (!node.widgets_values || !Array.isArray(node.widgets_values)) {
+            return models;
+        }
+        
+        // RU: Поддерживаемые расширения моделей
+        const modelExtensions = ['.safetensors', '.ckpt', '.pth', '.bin', '.gguf', '.sft', '.pt'];
+        
+        // RU: Категории по типу ноды (эвристика)
+        const categoryByNodeType = {
+            'CheckpointLoaderSimple': 'checkpoints',
+            'CheckpointLoader': 'checkpoints',
+            'VAELoader': 'vae',
+            'LoraLoader': 'loras',
+            'LoraLoaderModelOnly': 'loras',
+            'ControlNetLoader': 'controlnet',
+            'UpscaleModelLoader': 'upscale_models',
+            'UNETLoader': 'diffusion_models',
+            'CLIPLoader': 'clip',
+            'DualCLIPLoader': 'clip',
+            'TripleCLIPLoader': 'clip',
+            'SUPIR_model_loader_v2': 'upscale_models',
+            'UnetLoaderGGUF': 'gguf_models'
+        };
+        
+        // RU: Проверяем каждое значение в widgets_values
+        node.widgets_values.forEach((value, index) => {
+            if (typeof value === 'string' && value.trim()) {
+                // RU: Проверяем расширение файла
+                const hasModelExtension = modelExtensions.some(ext => value.toLowerCase().endsWith(ext));
+                
+                if (hasModelExtension) {
+                    // RU: Определяем категорию по типу ноды или по имени файла
+                    let category = categoryByNodeType[nodeType] || this.detectCategoryFromFilename(value);
+                    
                     models.push({
-                        name: modelName,
-                        type: this.getModelType(field),
-                        field: field,
+                        name: value,
+                        type: category,
+                        field: `widget_${index}`,
                         nodeId: node.id,
-                        classType: node.class_type
+                        classType: nodeType
                     });
                 }
             }
         });
         
+        // RU: Логируем для диагностики
+        if (models.length > 0) {
+            console.log(`[Arena Workflow Analyzer] Extracted ${models.length} model(s) from node ${node.id} (${nodeType}):`, models);
+        }
+        
         return models;
+    },
+    
+    // Detect category from filename (fallback)
+    detectCategoryFromFilename: function(filename) {
+        const lower = filename.toLowerCase();
+        
+        // RU: Определяем категорию по ключевым словам в имени файла
+        if (lower.includes('lora') || lower.includes('lycoris')) return 'loras';
+        if (lower.includes('vae') || lower.includes('ae.sft')) return 'vae';
+        if (lower.includes('controlnet') || lower.includes('control_net')) return 'controlnet';
+        if (lower.includes('upscale') || lower.includes('esrgan') || lower.includes('supir')) return 'upscale_models';
+        if (lower.includes('unet') || lower.includes('diffusion')) return 'diffusion_models';
+        if (lower.includes('clip') && !lower.includes('clipvision')) return 'clip';
+        if (lower.includes('clipvision') || lower.includes('clip_vision')) return 'clip_vision';
+        if (lower.includes('embedding') || lower.includes('embed')) return 'embeddings';
+        if (lower.includes('t5') || lower.includes('text_encoder')) return 'text_encoders';
+        
+        // RU: По умолчанию считаем checkpoint
+        return 'checkpoints';
     },
     
     // Get model type from field

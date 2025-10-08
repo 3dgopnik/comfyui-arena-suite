@@ -955,6 +955,65 @@ app.registerExtension({
                             console.warn(`[Arena Simple Header] Failed to update cache mode: ${updateResponse.status}`);
                         }
                         
+                        // RU: Если переключились на RED режим - сразу анализируем workflow и запускаем кеширование
+                        if (mode === CACHE_MODES.RED) {
+                            try {
+                                console.log("[Arena Simple Header] RED mode activated - analyzing workflow and prefetching models...");
+                                
+                                // RU: Парсим текущий workflow
+                                const prompt = app.graphToPrompt();
+                                if (prompt && prompt.output) {
+                                    // RU: Извлекаем все модели из prompt
+                                    const models = [];
+                                    Object.entries(prompt.output).forEach(([nodeId, node]) => {
+                                        if (node.inputs) {
+                                            // RU: Ищем все поля которые могут содержать имена моделей
+                                            Object.entries(node.inputs).forEach(([key, value]) => {
+                                                if (typeof value === 'string' && (
+                                                    key.includes('ckpt') || key.includes('checkpoint') || 
+                                                    key.includes('model') || key.includes('lora') || 
+                                                    key.includes('vae') || key.includes('clip') ||
+                                                    key.includes('controlnet') || key.includes('upscale')
+                                                )) {
+                                                    // RU: Определяем категорию по имени поля
+                                                    let category = 'checkpoints';
+                                                    if (key.includes('lora')) category = 'loras';
+                                                    else if (key.includes('vae')) category = 'vae';
+                                                    else if (key.includes('clip')) category = 'clip';
+                                                    else if (key.includes('controlnet')) category = 'controlnet';
+                                                    else if (key.includes('upscale')) category = 'upscale_models';
+                                                    
+                                                    models.push({ category, filename: value });
+                                                }
+                                            });
+                                        }
+                                    });
+                                    
+                                    if (models.length > 0) {
+                                        console.log(`[Arena Simple Header] Found ${models.length} models in workflow:`, models);
+                                        
+                                        // RU: Отправляем на backend для предзагрузки
+                                        const prefetchResponse = await fetch('/arena/analyze_workflow', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ 
+                                                models: models,
+                                                action: 'prefetch'
+                                            })
+                                        });
+                                        
+                                        if (prefetchResponse.ok) {
+                                            console.log(`[Arena Simple Header] Prefetch started for ${models.length} models`);
+                                        }
+                                    } else {
+                                        console.log("[Arena Simple Header] No models found in workflow");
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn("[Arena Simple Header] Failed to prefetch workflow models:", error);
+                            }
+                        }
+                        
                         // RU: Update button appearance
                         updateButtonAppearance();
                         
@@ -965,81 +1024,76 @@ app.registerExtension({
                         }
                         
                         // RU: Start autopatch if needed
-                        if (mode === CACHE_MODESRED_unused_fix) {}
                         if (mode === CACHE_MODES.RED) {
                             try {
-                                // Collect required models from current workflow
-                                const requiredModels = [];
-                                try {
-                                    const prompt = app.graphToPrompt?.();
-                                    const workflow = prompt?.workflow;
-                                    const fieldToCategory = {
-                                        ckpt_name: 'checkpoints',
-                                        model_name: 'checkpoints',
-                                        checkpoint_name: 'checkpoints',
-                                        vae_name: 'vae',
-                                        lora_name: 'loras',
-                                        clip_name: 'clip',
-                                        control_net_name: 'controlnet',
-                                        upscale_model_name: 'upscale_models',
-                                        embeddings: 'embeddings',
-                                        hypernetwork_name: 'hypernetworks'
-                                    };
-                                    if (Array.isArray(workflow?.nodes)) {
-                                        for (const node of workflow.nodes) {
-                                            const inputs = node?.inputs || {};
-                                            for (const [field, value] of Object.entries(inputs)) {
-                                                const category = fieldToCategory[field];
-                                                if (!category) continue;
-                                                if (typeof value === 'string' && value.trim()) {
-                                                    requiredModels.push({ category, filename: value.trim() });
-                                                }
-                                            }
+                                // RU: Use ONLY ArenaWorkflowAnalyzer to collect models
+                                let requiredModels = [];
+                                
+                                if (window.ArenaWorkflowAnalyzer?.getCurrentWorkflowModels) {
+                                    try {
+                                        console.log('[Arena Simple Header] Using ArenaWorkflowAnalyzer to detect models...');
+                                        const models = await window.ArenaWorkflowAnalyzer.getCurrentWorkflowModels();
+                                        
+                                        if (models && models.length > 0) {
+                                            requiredModels = models.map(m => ({ 
+                                                category: m.type, 
+                                                filename: m.name 
+                                            }));
+                                            
+                                            console.log(`[Arena Simple Header] ✅ Found ${requiredModels.length} models via ArenaWorkflowAnalyzer:`);
+                                            requiredModels.forEach(m => {
+                                                console.log(`  - ${m.category}/${m.filename}`);
+                                            });
+                                        } else {
+                                            console.warn('[Arena Simple Header] ArenaWorkflowAnalyzer returned no models');
                                         }
-                                    } else if (workflow && typeof workflow === 'object') {
-                                        for (const [nodeId, node] of Object.entries(workflow)) {
-                                            const inputs = node && typeof node === 'object' ? (node.inputs || {}) : {};
-                                            for (const [field, value] of Object.entries(inputs)) {
-                                                const category = fieldToCategory[field];
-                                                if (!category) continue;
-                                                if (typeof value === 'string' && value.trim()) {
-                                                    requiredModels.push({ category, filename: value.trim() });
-                                                }
-                                            }
-                                        }
+                                    } catch (error) {
+                                        console.warn('[Arena Simple Header] ArenaWorkflowAnalyzer failed:', error);
                                     }
-                                } catch (collectErr) {
-                                    console.warn('[Arena Simple Header] Failed to collect workflow models:', collectErr);
+                                } else {
+                                    console.warn('[Arena Simple Header] ⚠️ ArenaWorkflowAnalyzer not available - prefetch disabled, ondemand caching will work on Run');
                                 }
+                                
+                                // RU: NO FALLBACK - if Analyzer doesn't work, no prefetch
+                                // Ondemand caching will still work when user clicks Run
 
-                                // Send models to workflow analyzer to auto-extend categories and warm state
-                                try {
-                                    if (requiredModels.length > 0) {
-                                        await fetch('/arena/analyze_workflow', {
+                                // RU: Send models to workflow analyzer to auto-extend categories
+                                if (requiredModels.length > 0) {
+                                    try {
+                                        console.log(`[Arena Simple Header] Sending ${requiredModels.length} models to workflow analyzer...`);
+                                        const analyzeResp = await fetch('/arena/analyze_workflow', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ models: requiredModels })
                                         });
+                                        if (analyzeResp.ok) {
+                                            console.log('[Arena Simple Header] ✅ Workflow analyzer processed models');
+                                        }
+                                    } catch (anErr) {
+                                        console.warn('[Arena Simple Header] analyze_workflow failed:', anErr);
                                     }
-                                } catch (anErr) {
-                                    console.warn('[Arena Simple Header] analyze_workflow failed:', anErr);
                                 }
 
-                                // Start autopatch with required models if any (backend requires non-empty set)
+                                // RU: Start autopatch with required models for prefetch
                                 const body = requiredModels.length > 0
                                     ? { action: 'start', required_models: requiredModels }
                                     : { action: 'start' };
 
+                                console.log(`[Arena Simple Header] Starting autopatch with ${requiredModels.length} models...`);
                                 const resp = await fetch('/arena/autopatch', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify(body)
                                 });
+                                
                                 if (resp.ok) {
                                     const data = await resp.json().catch(() => ({}));
-                                    console.log('[Arena Simple Header] Autopatch response:', data);
+                                    console.log('[Arena Simple Header] ✅ Autopatch response:', data);
+                                    if (data.cache_hits !== undefined && data.cache_misses !== undefined) {
+                                        console.log(`  Cache hits: ${data.cache_hits}, Cache misses: ${data.cache_misses}, Planned: ${data.planned || 0}`);
+                                    }
                                 } else {
-                                    console.warn('[Arena Simple Header] Autopatch HTTP error:', resp.status);
+                                    console.warn('[Arena Simple Header] ❌ Autopatch HTTP error:', resp.status);
                                 }
                             } catch (autopatchError) {
                                 console.warn("[Arena Simple Header] Autopatch failed:", autopatchError);
