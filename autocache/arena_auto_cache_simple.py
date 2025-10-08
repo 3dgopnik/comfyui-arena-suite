@@ -2009,7 +2009,7 @@ class ArenaAutoCacheSimple:
         
         # RU: API уже зарегистрированы глобально при загрузке модуля
         
-        self.description = "🅰️ Arena AutoCache v5.0.0 - НОВАЯ АРХИТЕКТУРА: Settings Panel как основной интерфейс, автоматическая активация по .env файлу, demand-driven caching с защитой от массового копирования. ЛОКАЛЬНЫЕ OVERRIDES: временные настройки для конкретного workflow с приоритетом над Settings Panel. АНТИМАСС-КЭШ: workflow_only + lazy режим по умолчанию, лимиты concurrency/cooldown/byte-budget, белый список категорий. АВТОАКТИВАЦИЯ: кеширование работает без ноды на канвасе при наличии .env с ARENA_AUTO_CACHE_ENABLED=1. API: расширенные endpoints /arena/status, /arena/autopatch, /arena/resolve с поддержкой required_models и dry-run. БЕЗОПАСНОСТЬ: строгая валидация, защита от path traversal, unified error codes. READ-ONLY РЕЖИМ: нода по умолчанию только для просмотра статуса, overrides через явный чекбокс."
+        self.description = "🅰️ Arena AutoCache v6.0.0 - ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -2246,14 +2246,14 @@ class ArenaAutoCacheSimple:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "🅰️ Arena AutoCache v5.0.0": ArenaAutoCacheSimple,
+    "🅰️ Arena AutoCache v6.0.0": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "🅰️ Arena AutoCache v5.0.0": "🅰️ Arena AutoCache v5.0.0",
+    "🅰️ Arena AutoCache v6.0.0": "🅰️ Arena AutoCache v6.0.0",
 }
 
-print("[ArenaAutoCache] Loaded v5.0.0 with Settings Panel primary interface, auto-activation, and demand-driven caching")
+print("[ArenaAutoCache] Loaded v6.0.0 with critical bug fixes, universal model parser, and three Arena button modes")
 
 # RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
 print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")

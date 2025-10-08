@@ -1,13 +1,14 @@
-# ComfyUI Arena Suite v5.1.0
+# ComfyUI Arena Suite v6.0.0
 
 🚀 **Modern ComfyUI Custom Node Suite** - Automatic model caching and workflow optimization for ComfyUI.
 
 ## ✨ Features
 
-- **🅰️ Arena AutoCache v5.1.0** - Three Arena button modes (Gray/Red/Green), Settings UI with "💾 Save to .env", OnDemand caching, safer defaults
-- **Web Extensions** - Seamless ComfyUI integration
-- **Modern Architecture** - Clean, maintainable codebase
-- **CI/CD Ready** - GitHub Actions workflow included
+- **🅰️ Arena AutoCache v6.0.0** - Fixed critical caching bugs, universal model parser, three Arena button modes (Gray/Red/Green)
+- **🔧 Settings UI** - Complete ComfyUI Settings integration with "💾 Save to .env" button
+- **🎯 Universal Model Detection** - Automatic detection of all model types without hardcoded node support
+- **⚡ Parallel Caching** - Multi-threaded model caching with background workers
+- **🛡️ Safe Defaults** - Always disabled by default, user must explicitly enable
 
 ## 🚀 Quick Start
 
@@ -26,169 +27,148 @@
 
 3. **Copy to ComfyUI custom_nodes:**
    ```bash
-   cp -r custom_nodes/ComfyUI_Arena /path/to/ComfyUI/custom_nodes/
-   cp -r web /path/to/ComfyUI/
+   cp -r . /path/to/ComfyUI/custom_nodes/ComfyUI-Arena/
    ```
 
-4. **Sync JavaScript files** (if using ComfyUI Desktop):
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/sync_js_files.ps1
-   ```
+4. **Restart ComfyUI** and navigate to Settings → Arena
 
-5. **Restart ComfyUI** and find "🅰️ Arena AutoCache v5.0.0" in the node menu.
+## 🎯 Arena AutoCache
 
-### Usage
+### Three Modes
 
-#### Quick Start (Global Toggle)
+**🔘 Gray Mode (Default)** - System disabled
+- `ARENA_AUTO_CACHE_ENABLED=0`, `ARENA_AUTOCACHE_AUTOPATCH=0`
+- Uses original model paths
 
-1. **Look for 🅰️ indicator** in ComfyUI header
-2. **Click to enable** - one-click caching activation
-3. **Configure settings** - Right-click → Settings → Arena section
-4. **Run workflows** - automatic model caching without canvas nodes
+**🔴 Red Mode** - Active caching
+- `ARENA_AUTO_CACHE_ENABLED=1`, `ARENA_AUTOCACHE_AUTOPATCH=1`
+- Caches new models + uses cache
+- Parallel prefetching of all workflow models
 
-#### Advanced (Canvas Node)
+**🟢 Green Mode** - Cache usage only
+- `ARENA_AUTO_CACHE_ENABLED=1`, `ARENA_AUTOCACHE_AUTOPATCH=0`
+- Uses cache, doesn't cache new models
+- Shows uncached model count in tooltip
 
-1. Add **🅰️ Arena AutoCache v5.0.0** node to your workflow
-2. Configure cache settings (optional)
-3. Run your workflow - models will be automatically cached
-4. Subsequent runs will use cached models for faster execution
+### Setup
+
+1. **Open ComfyUI Settings** → Arena section
+2. **Fill Cache Root** path (e.g., `f:\ComfyUIModelCache\`)
+3. **Click "💾 Save to .env"** (creates `user/arena_autocache.env`)
+4. **Use Arena button** in header to switch modes
+
+### Supported Model Categories
+
+- `checkpoints`, `loras`, `clip`, `vae`, `controlnet`
+- `upscale_models`, `embeddings`, `hypernetworks`
+- `gguf_models`, `unet_models`, `diffusion_models`
+- **SUPIR**, **Flux**, **Wan**, and all custom model types
+
+## 🛠️ Technical Details
+
+### Architecture
+
+- **Settings Panel** - Primary interface for configuration
+- **Arena Button** - Intuitive mode switching
+- **Optional Node** - Advanced users can override settings
+- **Deferred Autopatch** - Always active, patching `folder_paths.get_full_path()`
+
+### Universal Model Parser
+
+Instead of hardcoded node support, the system:
+1. Scans `widgets_values` for model file extensions
+2. Detects category using `categoryByNodeType` mapping
+3. Falls back to filename-based category detection
+4. Works with any node type automatically
+
+### Environment Variables
+
+```bash
+ARENA_AUTO_CACHE_ENABLED=1          # Enable/disable caching
+ARENA_AUTOCACHE_AUTOPATCH=1         # Enable/disable autopatch
+ARENA_CACHE_ROOT=f:\ComfyUIModelCache\  # Cache directory
+ARENA_CACHE_MIN_SIZE_MB=10          # Minimum file size
+ARENA_CACHE_MAX_GB=0                # Max cache size (0=unlimited)
+ARENA_CACHE_MODE=ondemand           # Caching mode
+ARENA_CACHE_VERBOSE=1               # Detailed logging
+```
 
 ## 📁 Project Structure
 
 ```
-comfyui-arena-suite/
-├── custom_nodes/ComfyUI_Arena/    # Main custom node
-│   ├── autocache/                 # Autocache functionality
-│   └── __init__.py               # Node registration
-├── web/                          # ComfyUI web extensions
-│   ├── arena/                    # Core JS functionality
-│   └── extensions/               # ComfyUI integration
-├── scripts/                      # Installation scripts
-├── docs/                         # Documentation
-├── .github/workflows/            # CI/CD
-├── requirements.txt              # Production dependencies
-└── requirements-dev.txt          # Development dependencies
+ComfyUI-Arena/
+├── autocache/                      # Core caching logic
+│   ├── arena_auto_cache_simple.py  # Main caching engine
+│   ├── arena_path_manager.py       # Path management
+│   └── arena_smart_cache.py        # Smart caching strategies
+├── web/                            # Frontend extensions
+│   ├── arena_simple_header.js      # Arena button with 3 modes
+│   ├── arena_settings_save_button.js # Settings UI
+│   └── arena_workflow_analyzer.js  # Universal model parser
+├── docs/                           # Documentation
+│   ├── ru/                         # Russian documentation
+│   └── en/                         # English documentation
+└── config/                         # Configuration files
+    └── extra_model_paths.yaml      # Model path definitions
 ```
 
-## 🛠️ Development
+## 🔧 Development
 
-### Setup Development Environment
+### Testing
 
 ```bash
-# Clone repository
-git clone https://github.com/3dgopnik/comfyui-arena-suite.git
-cd comfyui-arena-suite
-
-# Install development dependencies (optional)
-pip install -r requirements-dev.txt
-
-# Run linting (optional)
-ruff check .
-mypy custom_nodes/
+# Test caching with different workflows
+python -m pytest tests/
 ```
 
-### Contributing
+### Debugging
 
-We welcome contributions! Please follow these guidelines:
+Enable verbose logging:
+```bash
+ARENA_CACHE_VERBOSE=1
+```
 
-1. **Fork the repository**
-2. **Create a feature branch:** `git checkout -b feature/your-feature`
-3. **Make your changes**
-4. **Run linting:** `ruff check .` (optional)
-5. **Commit changes:** `git commit -m "Add your feature"`
-6. **Push to branch:** `git push origin feature/your-feature`
-7. **Create a Pull Request`
+Check logs in ComfyUI console for detailed caching information.
 
-### Code Style
+## 📝 Changelog
 
-- **Python:** Follow PEP 8, use type hints
-- **JavaScript:** Use modern ES6+ syntax
-- **Documentation:** Write clear, concise docstrings
+### v6.0.0 (2025-01-27)
 
-### Pull Request Guidelines
+**Fixed:**
+- Critical model caching pipeline issues
+- WindowsPath + str concatenation errors
+- Double path creation (Flux\flux\, Wan\Wan\)
+- SUPIR model detection and categorization
+- Python indentation errors preventing autopatch
+- folder_paths.get_full_path() filename resolution
 
-Before submitting a PR, ensure:
+**Changed:**
+- Universal model parser replaces hardcoded node detection
+- Enhanced cache path construction with Path/str consistency
+- Improved model type detection for all categories
 
-- ✅ Code is linted (`ruff check .`) - optional
-- ✅ Type checking passes (`mypy`) - optional
-- ✅ Documentation is updated
-- ✅ CHANGELOG.md is updated
-- ✅ Commit messages are clear and descriptive
+**Added:**
+- Automatic model detection across all node types
+- Enhanced error handling and cross-platform compatibility
+- Comprehensive testing across SUPIR, Wan, and Flux workflows
 
-### Issue Reporting
+## 🤝 Contributing
 
-When reporting issues, please include:
-
-- **ComfyUI version**
-- **Python version**
-- **Error logs** (if any)
-- **Steps to reproduce**
-- **Expected vs actual behavior**
-
-## 📚 Documentation
-
-- **[Arena AutoCache v5.0.0 (RU)](docs/ru/arena_autocache.md)** — актуальное руководство
-- **[Arena AutoCache v5.0.0 (EN)](docs/en/arena_autocache.md)** — quick guide
-- **[Quick Start Guide](docs/ru/quickstart.md)** - Get up and running quickly
-- **[Node Reference](docs/ru/nodes.md)** - Detailed node documentation
-- **[Configuration](docs/ru/config.md)** - Configuration options
-- **[Troubleshooting](docs/ru/troubleshooting.md)** - Common issues and solutions
-
-> Docs are managed via MCP Docs Service (`mcp-docs-service`).
-
-## 📦 Scripts
-
-- **`scripts/arena_bootstrap_cache_v2.bat`** - Windows batch installer
-- **`scripts/arena_bootstrap_cache_v2.ps1`** - PowerShell installer
-- **`scripts/arena_set_cache.bat`** - Cache configuration script
-
-## 🔧 Configuration
-
-### Environment Variables
-
-- `ARENA_CACHE_DIR` - Custom cache directory path
-- `ARENA_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
-
-### Node Settings
-
-- **Cache Directory** - Where to store cached models
-- **Cache Size Limit** - Maximum cache size in GB
-- **Auto Cleanup** - Automatically clean old cache files
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Node not appearing in ComfyUI:**
-   - Ensure files are in correct `custom_nodes/` directory
-   - Restart ComfyUI completely
-   - Check console for error messages
-
-2. **Cache not working:**
-   - Verify cache directory permissions
-   - Check available disk space
-   - Review log files for errors
-
-3. **Performance issues:**
-   - Monitor cache directory size
-   - Check disk I/O performance
-   - Consider SSD storage for cache
-
-### Getting Help
-
-- **GitHub Issues:** [Report bugs and request features](https://github.com/3dgopnik/comfyui-arena-suite/issues)
-- **Discussions:** [Community discussions](https://github.com/3dgopnik/comfyui-arena-suite/discussions)
-- **Documentation:** Check the [docs/](docs/) folder for detailed guides
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🔗 Links
 
-- **ComfyUI** - The amazing workflow system
-- **Community** - All contributors and users
-- **Open Source** - Built on the shoulders of giants
+- **GitHub Repository:** https://github.com/3dgopnik/comfyui-arena-suite
+- **Issues:** https://github.com/3dgopnik/comfyui-arena-suite/issues
+- **Documentation:** [docs/](docs/)
 
 ---
 

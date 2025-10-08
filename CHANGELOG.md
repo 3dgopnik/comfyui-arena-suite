@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - Wed Oct 08 2025 17:06:23 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Major Version Bump**: Updated from v5.1.0 to v6.0.0 to reflect major improvements and critical bug fixes
+- **Node Registration**: Updated NODE_CLASS_MAPPINGS to "🅰️ Arena AutoCache v6.0.0"
+- **Package Versioning**: Synchronized version in pyproject.toml to v6.0.0
+- **Documentation**: Updated README.md and Russian documentation to reflect v6.0.0
+
+---
+
+## [5.1.0] - Wed Oct 08 2025 17:04:05 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Version Bump**: Updated version from v4.20.0 to v5.1.0 across all components
+- **Node Registration**: Updated NODE_CLASS_MAPPINGS and display names to reflect v5.1.0
+- **Documentation**: Synchronized version numbers in README.md, pyproject.toml, and Russian documentation
+- **Node Description**: Updated Arena AutoCache node description with v5.1.0 features and bug fixes
+
+---
+
 ## [4.20.0] - Wed Oct 08 2025 16:56:28 GMT+0300 (Москва, стандартное время)
 
 ### Added
