@@ -183,9 +183,7 @@ def _find_comfy_root():
 def _load_env_file():
     """RU: Загружает настройки из user/arena_autocache.env если файл существует."""
     comfy_root = _find_comfy_root()
-    print(f"[ArenaAutoCache] DEBUG: Found ComfyUI root: {comfy_root}")
     if not comfy_root:
-        print("[ArenaAutoCache] DEBUG: ComfyUI root not found!")
         return False
 
     # RU: Основной путь для .env файла
@@ -195,10 +193,8 @@ def _load_env_file():
     if not env_file.exists():
         appdata_path = Path(os.environ.get("APPDATA", "")) / "ComfyUI" / "logs" / "arena_autocache.env"
         if appdata_path.exists():
-            print(f"[ArenaAutoCache] Found .env file in AppData: {appdata_path}")
             env_file = appdata_path
         else:
-            print(f"[ArenaAutoCache] No .env file found - caching disabled by default")
             return False
     
     if env_file.exists():
@@ -214,7 +210,6 @@ def _load_env_file():
                         
                         # RU: Валидация ключей
                         if not key or not value:
-                            print(f"[ArenaAutoCache] Warning: Empty key or value in {env_file}:{line_num}")
                             continue
                             
                         # RU: Валидация известных ключей
@@ -226,39 +221,30 @@ def _load_env_file():
                             "ARENA_CACHE_SESSION_BYTE_BUDGET", "ARENA_CACHE_COOLDOWN_MS"
                         }
                         
-                        if key not in known_keys:
-                            print(f"[ArenaAutoCache] Warning: Unknown key '{key}' in {env_file}:{line_num}")
                         
                         # RU: Валидация значений для числовых параметров
                         if key in ("ARENA_CACHE_MIN_SIZE_MB", "ARENA_CACHE_MAX_GB"):
                             try:
                                 float(value)
                             except ValueError:
-                                print(f"[ArenaAutoCache] Warning: Invalid numeric value '{value}' for {key} in {env_file}:{line_num}")
                                 continue
                         
                         # RU: Валидация булевых значений
                         if key in ("ARENA_CACHE_VERBOSE", "ARENA_AUTO_CACHE_ENABLED", "ARENA_AUTOCACHE_AUTOPATCH"):
                             if value.lower() not in ("true", "false", "1", "0", "yes", "no"):
-                                print(f"[ArenaAutoCache] Warning: Invalid boolean value '{value}' for {key} in {env_file}:{line_num}")
+                                continue
                         
                         # RU: Валидация режима кэширования
                         if key == "ARENA_CACHE_MODE":
                             if value.lower() not in ("ondemand", "disabled"):
-                                print(f"[ArenaAutoCache] Warning: Invalid cache mode '{value}' for {key} in {env_file}:{line_num} (valid: ondemand, disabled)")
+                                continue
                         
                         os.environ[key] = value
                         loaded_count += 1
             
-            if loaded_count > 0:
-                print(f"[ArenaAutoCache] Loaded {loaded_count} settings from {env_file}")
-                return True
-            else:
-                print(f"[ArenaAutoCache] No valid settings found in {env_file}")
-                return False
+            return loaded_count > 0
                 
         except Exception as e:
-            print(f"[ArenaAutoCache] Error loading env file: {e}")
             return False
     
     return False
@@ -302,9 +288,8 @@ def _save_env_file(kv: dict[str, str], remove_keys: list[str] = None):
             for key, value in existing_settings.items():
                 f.write(f"{key}={value}\n")
 
-        print(f"[ArenaAutoCache] Saved env to {env_file}")
     except Exception as e:
-        print(f"[ArenaAutoCache] Error saving env file: {e}")
+        pass
 
 
 def _init_settings(
@@ -337,7 +322,6 @@ def _init_settings(
             try:
                 min_size_mb = float(env_min_size)
             except ValueError:
-                print(f"[ArenaAutoCache] Invalid ARENA_CACHE_MIN_SIZE_MB: {env_min_size}, using default 10.0")
                 min_size_mb = 10.0
     
     # RU: Max cache size - приоритет: нода > .env > default (0.0)
@@ -347,7 +331,6 @@ def _init_settings(
             try:
                 max_cache_gb = float(env_max_cache)
             except ValueError:
-                print(f"[ArenaAutoCache] Invalid ARENA_CACHE_MAX_GB: {env_max_cache}, using default 0.0")
                 max_cache_gb = 0.0
     
     # RU: Verbose - приоритет: нода > .env > default (True)
@@ -360,8 +343,6 @@ def _init_settings(
     if cache_root and cache_root.strip():
         # RU: Если в ноде указан путь - используем его
         root = Path(cache_root)
-        if verbose:
-            print(f"[ArenaAutoCache] Using cache root from node: {root}")
     else:
         # RU: Определяем корень ComfyUI для относительных путей
         comfy_root = _find_comfy_root()
@@ -370,8 +351,6 @@ def _init_settings(
         else:
             default_root = Path.home() / "Documents" / "ComfyUI-Cache"
         root = Path(os.environ.get("ARENA_CACHE_ROOT", default_root))
-        if verbose:
-            print(f"[ArenaAutoCache] Using cache root from .env/default: {root}")
     
     # RU: Создаем папку кэша
     root.mkdir(parents=True, exist_ok=True)
@@ -382,13 +361,9 @@ def _init_settings(
         import folder_paths
         # RU: folder_paths.folder_names_and_paths содержит ВСЕ категории моделей
         all_comfy_categories = list(folder_paths.folder_names_and_paths.keys())
-        if verbose:
-            print(f"[ArenaAutoCache] Discovered {len(all_comfy_categories)} categories from ComfyUI: {all_comfy_categories}")
         base_categories = all_comfy_categories
     except Exception as e:
         # RU: Fallback на базовые категории если не получилось
-        if verbose:
-            print(f"[ArenaAutoCache] Failed to discover categories from ComfyUI, using fallback: {e}")
         base_categories = [
             "checkpoints", "loras", "clip", "vae", "controlnet", "upscale_models", 
             "embeddings", "hypernetworks", "gguf_models", "unet_models", "diffusion_models",
@@ -421,22 +396,13 @@ def _init_settings(
     )
     
     
-    if verbose:
-        print(
-            f"[ArenaAutoCache] Cache root: {root} / Min file size: {min_size_mb}MB / Max cache size: {max_cache_gb}GB / Verbose: {verbose}"
-        )
     
     # RU: Обновляем глобальные флаги авто-кеширования из .env
     global _auto_cache_enabled, _autopatch_enabled
     enabled_raw = os.environ.get("ARENA_AUTO_CACHE_ENABLED", "0")
     autopatch_raw = os.environ.get("ARENA_AUTOCACHE_AUTOPATCH", "0")
-    if verbose:
-        print(f"[ArenaAutoCache] DEBUG: ARENA_AUTO_CACHE_ENABLED from os.environ = '{enabled_raw}'")
-        print(f"[ArenaAutoCache] DEBUG: ARENA_AUTOCACHE_AUTOPATCH from os.environ = '{autopatch_raw}'")
     _auto_cache_enabled = enabled_raw.lower() in ("true", "1", "yes")
     _autopatch_enabled = autopatch_raw.lower() in ("true", "1", "yes")
-    if verbose:
-        print(f"[ArenaAutoCache] Global flags updated: auto_cache_enabled={_auto_cache_enabled}, autopatch_enabled={_autopatch_enabled}")
     
     return _settings
 
@@ -468,27 +434,14 @@ def _apply_folder_paths_patch():
 
         def patched_get_full_path(folder_name: str, filename: str) -> str:
             """RU: Патченная функция get_full_path с кэшированием."""
-            print(f"[ArenaAutoCache] patched_get_full_path called: {folder_name} -> {filename}")
-            
-            # RU: Диагностика для всех моделей в verbose режиме
-            if _settings and _settings.verbose:
-                print(f"[ArenaAutoCache] Model requested: {folder_name}/{filename}")
-                print(f"[ArenaAutoCache] Stack trace:")
-                import traceback
-                traceback.print_stack()
             
             # RU: УНИВЕРСАЛЬНОЕ кеширование для ЛЮБЫХ категорий моделей
             # RU: ComfyUI сам определяет категории через folder_paths, мы их все кешируем
             if _settings:
-                if _settings.verbose:
-                    print(f"[ArenaAutoCache] Category {folder_name} detected, checking cache...")
                 
                 # RU: Сначала проверяем кэш (с учётом семейства, если есть)
                 cache_path_obj = _get_cache_path(folder_name, filename)
                 if cache_path_obj and cache_path_obj.exists():
-                    if _settings.verbose:
-                        print(f"[ArenaAutoCache] Cache hit: {filename}")
-                        print(f"[ArenaAutoCache] Returning cache path: {cache_path_obj}")
                     return str(cache_path_obj)
 
                 # RU: Если не в кэше, получаем оригинальный путь

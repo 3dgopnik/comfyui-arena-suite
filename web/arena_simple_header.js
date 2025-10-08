@@ -2,7 +2,6 @@
 // Simple button in ComfyUI header for Arena AutoCache
 import { app } from "../../scripts/app.js";
 
-console.log("[Arena Simple Header] Loading...");
 
 // RU: Cache modes for Arena button
                 const CACHE_MODES = {
@@ -15,7 +14,6 @@ app.registerExtension({
     name: "ArenaSimple.Header",
     
     setup() {
-            console.log("[Arena Simple Header] Setting up simple header button...");
             
             // Wait for DOM to be ready
             setTimeout(() => {

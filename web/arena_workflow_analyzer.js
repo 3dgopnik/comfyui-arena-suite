@@ -2,7 +2,6 @@
 // Analyzes ComfyUI workflow to extract model information for smart caching
 // Location: web/extensions/arena_workflow_analyzer.js
 
-console.log("[Arena Workflow Analyzer] Loading...");
 
 // Wait for app to be available
 let extensionRegistered = false;

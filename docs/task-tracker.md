@@ -43,7 +43,7 @@
 * **Статус**: Завершена
 * **Описание**: Проблема с чтением значения Max Cache GB из ComfyUI Settings UI - всегда возвращалось 0 вместо реального значения (512)
 * **Шаги выполнения**:
-  * [x] Создать GitHub Issue #XXX
+  * [x] Создать GitHub Issue #137
   * [x] Улучшить DOM селекторы в arena_settings_save_button.js
   * [x] Добавить sanitizeNumber функцию
   * [x] Добавить merge стратегию для .env

@@ -2181,7 +2181,7 @@ try:
             method = args.preview_method
 
         if method != LatentPreviewMethod.NoPreviews or force:
-            # TODO previewer methods
+            # Previewer methods
             taesd_decoder_path = None
 
             if hasattr(latent_format, "taesd_decoder_path"):
