@@ -137,6 +137,11 @@ _copy_status = {
     "failed_jobs": 0,
     "current_file": "",
     "last_update": 0,
+    # RU: Прогресс копирования для UI индикатора
+    "is_copying": False,
+    "current_file_size": 0,
+    "current_file_copied": 0,
+    "current_file_progress": 0,  # 0-100%
 }
 
 
@@ -699,6 +704,30 @@ def _prefetch_all_workflow_models():
     pass  # RU: Функция отключена, кеширование по требованию работает лучше
 
 
+def _copy_file_with_progress(source_path: str, dest_path: str, total_size: int):
+    """RU: Копирует файл с отслеживанием прогресса для UI индикатора."""
+    global _copy_status
+    
+    # RU: Размер блока для чтения (1MB)
+    chunk_size = 1024 * 1024
+    
+    with open(source_path, 'rb') as src, open(dest_path, 'wb') as dst:
+        copied = 0
+        while True:
+            chunk = src.read(chunk_size)
+            if not chunk:
+                break
+                
+            dst.write(chunk)
+            copied += len(chunk)
+            
+            # RU: Обновляем прогресс
+            progress = int((copied / total_size) * 100)
+            _copy_status["current_file_copied"] = copied
+            _copy_status["current_file_progress"] = progress
+            _copy_status["last_update"] = time.time()
+
+
 def _schedule_copy_task(category: str, filename: str, source_path: str, cache_path: str):
     """RU: Планирует задачу копирования с дедупликацией и фильтрацией."""
     global _last_copy_time
@@ -796,13 +825,25 @@ def _copy_worker():
                 # RU: Создаем папку кэша
                 os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
-                # RU: Копируем файл
+                # RU: Копируем файл с отслеживанием прогресса
                 # RU: cache_path может быть строкой или Path, конвертируем в Path для работы с .with_suffix
                 from pathlib import Path
                 cache_path_obj = Path(cache_path) if isinstance(cache_path, str) else cache_path
                 temp_path = cache_path_obj.with_suffix(cache_path_obj.suffix + ".part")
-                shutil.copy2(source_path, str(temp_path))
+                
+                # RU: Устанавливаем флаг копирования и размер файла
+                _copy_status["is_copying"] = True
+                _copy_status["current_file_size"] = source_size
+                _copy_status["current_file_copied"] = 0
+                _copy_status["current_file_progress"] = 0
+                _copy_status["last_update"] = time.time()
+                
+                # RU: Копируем с отслеживанием прогресса
+                _copy_file_with_progress(source_path, str(temp_path), source_size)
                 os.rename(str(temp_path), str(cache_path))
+                
+                # RU: Сбрасываем флаг копирования
+                _copy_status["is_copying"] = False
 
                 _copy_status["completed_jobs"] += 1
                 if _settings.verbose:
@@ -1948,6 +1989,28 @@ def _setup_workflow_analysis_api():
         
         print("[ArenaAutoCache] Uncached models API endpoint registered")
         
+        # RU: Добавляем API для получения статуса копирования (для UI индикатора)
+        @PromptServer.instance.routes.get("/arena/copy_status")
+        async def get_copy_status_endpoint(request):
+            """RU: Возвращает текущий статус копирования для UI индикатора."""
+            try:
+                from aiohttp import web
+                global _copy_status
+                
+                # RU: Возвращаем копию статуса для thread-safety
+                status_copy = dict(_copy_status)
+                
+                return web.json_response({
+                    "status": "success", 
+                    "copy_status": status_copy
+                })
+            except Exception as e:
+                from aiohttp import web
+                print(f"[ArenaAutoCache] Copy status API error: {e}")
+                return web.json_response({"status": "error", "message": str(e)})
+        
+        print("[ArenaAutoCache] Copy status API endpoint registered")
+        
     except ImportError:
         print("[ArenaAutoCache] Server not available - workflow analysis API not registered")
     except Exception as e:
@@ -1963,7 +2026,7 @@ class ArenaAutoCacheSimple:
         
         # RU: API уже зарегистрированы глобально при загрузке модуля
         
-        self.description = "🅰️ Arena AutoCache v6.0.2 - HOTFIX: Рекурсивное сканирование NAS автоматически находит модели в любых подпапках (SDXL\\SUPIR, SD1.5\\ControlNet, etc.). Исправлена двойная подпапка в cache_path. ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
+        self.description = "🅰️ Arena AutoCache v6.1.0 - VISUAL PROGRESS: Добавлен визуальный индикатор копирования моделей в Arena кнопку. Прогресс-бар показывает процент копирования и размер файла в реальном времени. Стиль как у Crystools с ползунками и цифрами. HOTFIX: Рекурсивное сканирование NAS автоматически находит модели в любых подпапках (SDXL\\SUPIR, SD1.5\\ControlNet, etc.). Исправлена двойная подпапка в cache_path. ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -2200,14 +2263,14 @@ class ArenaAutoCacheSimple:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.0.2": ArenaAutoCacheSimple,
+    "🅰️ Arena AutoCache v6.1.0": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.0.2": "🅰️ Arena AutoCache v6.0.2",
+    "🅰️ Arena AutoCache v6.1.0": "🅰️ Arena AutoCache v6.1.0",
 }
 
-print("[ArenaAutoCache] Loaded v6.0.2 - HOTFIX: Recursive NAS scanning for nested model folders")
+print("[ArenaAutoCache] Loaded v6.1.0 - VISUAL PROGRESS: Visual copy progress indicator added to Arena button")
 
 # RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
 print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")

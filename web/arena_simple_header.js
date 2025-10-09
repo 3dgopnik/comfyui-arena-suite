@@ -45,14 +45,20 @@ app.registerExtension({
                     user-select: none;
                 `;
 
-                // Main button
+                // Main button with progress bar
                 const mainButton = document.createElement('button');
                 mainButton.className = 'arena-main-button';
                 mainButton.innerHTML = `
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px;">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                    </svg>
-                    <span>ACACHE</span>
+                    <div class="arena-button-content">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px; z-index: 2; position: relative;">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <span style="z-index: 2; position: relative;">ACACHE</span>
+                        <div class="arena-progress-bar" style="display: none;">
+                            <div class="arena-progress-fill"></div>
+                            <div class="arena-progress-text">0%</div>
+                        </div>
+                    </div>
                 `;
                 mainButton.title = 'Arena AutoCache (Click to toggle)';
                 mainButton.style.cssText = `
@@ -72,6 +78,8 @@ app.registerExtension({
                     min-width: 60px;
                     height: 30px;
                     border-right: 1px solid #555;
+                    position: relative;
+                    overflow: hidden;
                 `;
 
                 // Settings button (opens ComfyUI settings)
@@ -861,9 +869,144 @@ app.registerExtension({
                 console.log("[Arena Simple Header] Button group visible:", buttonGroup.offsetWidth > 0 && buttonGroup.offsetHeight > 0);
                 console.log("[Arena Simple Header] Button group parent:", buttonGroup.parentElement);
                 
+                // RU: Добавляем CSS стили для прогресс-бара (как у Crystools)
+                const progressStyles = document.createElement('style');
+                progressStyles.textContent = `
+                    .arena-button-content {
+                        position: relative;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 100%;
+                        height: 100%;
+                    }
+                    
+                    .arena-progress-bar {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.3);
+                        border-radius: 3px;
+                        overflow: hidden;
+                    }
+                    
+                    .arena-progress-fill {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        height: 100%;
+                        background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
+                        transition: width 0.3s ease;
+                        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+                    }
+                    
+                    .arena-progress-text {
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        color: white;
+                        font-size: 10px;
+                        font-weight: bold;
+                        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+                        z-index: 3;
+                    }
+                    
+                    /* RU: Анимация копирования - кнопка заливается цветом */
+                    .arena-main-button.copying {
+                        background: linear-gradient(90deg, #2E7D32 0%, #388E3C 100%);
+                        border-color: #4CAF50;
+                    }
+                    
+                    .arena-main-button.copying .arena-progress-bar {
+                        display: block;
+                    }
+                `;
+                document.head.appendChild(progressStyles);
+                console.log("[Arena Simple Header] Progress bar styles added");
+                
                 // RU: Initialize cache mode state
                 let currentCacheMode = CACHE_MODES.GRAY;
                 let uncachedModelsCount = 0;
+                let progressPollingInterval = null;
+                
+                // RU: Functions for progress bar management
+                function updateProgressBar(copyStatus) {
+                    const progressBar = mainButton.querySelector('.arena-progress-bar');
+                    const progressFill = mainButton.querySelector('.arena-progress-fill');
+                    const progressText = mainButton.querySelector('.arena-progress-text');
+                    
+                    if (!progressBar || !progressFill || !progressText) {
+                        return;
+                    }
+                    
+                    if (copyStatus.is_copying) {
+                        // RU: Показываем прогресс-бар
+                        progressBar.style.display = 'block';
+                        mainButton.classList.add('copying');
+                        
+                        // RU: Обновляем прогресс
+                        const progress = copyStatus.current_file_progress || 0;
+                        progressFill.style.width = `${progress}%`;
+                        progressText.textContent = `${progress}%`;
+                        
+                        // RU: Обновляем title с информацией о копировании
+                        const currentFile = copyStatus.current_file || 'Unknown';
+                        const copiedMB = Math.round((copyStatus.current_file_copied || 0) / 1024 / 1024);
+                        const totalMB = Math.round((copyStatus.current_file_size || 0) / 1024 / 1024);
+                        mainButton.title = `Copying: ${currentFile}\nProgress: ${copiedMB}/${totalMB} MB (${progress}%)`;
+                        
+                    } else {
+                        // RU: Скрываем прогресс-бар
+                        progressBar.style.display = 'none';
+                        mainButton.classList.remove('copying');
+                        
+                        // RU: Восстанавливаем обычный title
+                        updateButtonAppearance();
+                    }
+                }
+                
+                async function checkCopyStatus() {
+                    try {
+                        const response = await fetch('/arena/copy_status');
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.status === 'success' && data.copy_status) {
+                                updateProgressBar(data.copy_status);
+                                
+                                // RU: Если копирование активно - продолжаем polling
+                                if (data.copy_status.is_copying) {
+                                    if (!progressPollingInterval) {
+                                        progressPollingInterval = setInterval(checkCopyStatus, 500); // 500ms
+                                    }
+                                } else {
+                                    // RU: Если копирование завершено - останавливаем polling
+                                    if (progressPollingInterval) {
+                                        clearInterval(progressPollingInterval);
+                                        progressPollingInterval = null;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.warn("[Arena Simple Header] Failed to check copy status:", error);
+                    }
+                }
+                
+                function startProgressPolling() {
+                    if (!progressPollingInterval) {
+                        progressPollingInterval = setInterval(checkCopyStatus, 1000); // 1s
+                    }
+                }
+                
+                function stopProgressPolling() {
+                    if (progressPollingInterval) {
+                        clearInterval(progressPollingInterval);
+                        progressPollingInterval = null;
+                    }
+                }
                 
                 // RU: Functions for cache mode management
                 async function checkUncachedModels() {
@@ -1021,6 +1164,13 @@ app.registerExtension({
                             updateButtonAppearance();
                         }
                         
+                        // RU: Start progress polling for RED mode
+                        if (mode === CACHE_MODES.RED) {
+                            startProgressPolling();
+                        } else {
+                            stopProgressPolling();
+                        }
+                        
                         // RU: Start autopatch if needed
                         if (mode === CACHE_MODES.RED) {
                             try {
@@ -1145,6 +1295,11 @@ app.registerExtension({
                             updateButtonAppearance();
                         }
                         
+                        // RU: Start progress polling if in RED mode
+                        if (currentCacheMode === CACHE_MODES.RED) {
+                            startProgressPolling();
+                        }
+                        
                     } catch (error) {
                         console.error("[Arena Simple Header] Failed to get initial state:", error);
                         // RU: Default to gray state
@@ -1172,6 +1327,10 @@ app.registerExtension({
 
                 window.addEventListener('beforeunload', resetEnv);
                 window.addEventListener('pagehide', resetEnv);
+                
+                // RU: Очищаем polling при закрытии страницы
+                window.addEventListener('beforeunload', stopProgressPolling);
+                window.addEventListener('pagehide', stopProgressPolling);
 
             }, 2000); // Wait 2 seconds for DOM
         }
