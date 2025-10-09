@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.2] - Thu Oct 09 2025 15:22:45 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Smart Scanning**: Проверка размера файла (>= min_size) вместо хардкоженного списка расширений
+- **Configurable Parameters**: Min size и max depth читаются из .env (`ARENA_CACHE_MIN_SIZE_MB=1.0`, `ARENA_NAS_SCAN_MAX_DEPTH=3`)
+- **Performance Optimization**: `iterdir()` вместо `glob()` для 2-3x ускорения сканирования
+- **Early Exit**: Останавливает проверку папки при первой найденной модели
+
+### Fixed
+- **SUPIR Subfolder Models**: Исправлена двойная подпапка в cache_path (строка 1765) - использование `filename_only` вместо `filename_normalized`
+- **Recursive NAS Scanning**: Рекурсивное сканирование автоматически находит модели в любых вложенных папках (SDXL\SUPIR, SD1.5\ControlNet, etc.)
+- **Extension-Agnostic Detection**: Определение моделей по размеру файла вместо списка расширений - поддержка любых форматов
+- **Unified Config Paths**: Оба конфиг файла (`arena_autocache.env`, `arena_nas_cache.json`) теперь в `comfy_root/user/`
+
+---
+
 ## [6.0.2] - Thu Oct 09 2025 15:06:52 GMT+0300 (Москва, стандартное время)
 
 ### Changed
