@@ -309,23 +309,38 @@ app.registerExtension({
 			app.ui.settings.addSetting({
 				id: "Arena.🟡 NAS Scan Max Depth",
 				name: "NAS Scan Max Depth",
-				type: "number",
+				type: "slider",
+				attrs: {
+					min: 0,
+					max: 10,
+					step: 1
+				},
 				defaultValue: 3,
 				tooltip: "Maximum recursion depth for NAS scanning (0=base only, 3=3 levels deep)"
 			});
 			app.ui.settings.addSetting({ 
 				id: "Arena.🟡 Min File Size (MB)", 
 				name: "Min File Size (MB)", 
-				type: "number", 
+				type: "slider",
+				attrs: {
+					min: 1,
+					max: 100,
+					step: 1
+				},
 				defaultValue: 1, 
 				tooltip: "Minimum file size for caching and NAS scanning (1MB = embeddings, 10MB = models)" 
 			});
 			app.ui.settings.addSetting({ 
 				id: "Arena.🟡 Max Cache Size (GB)", 
 				name: "Max Cache Size (GB)", 
-				type: "number", 
+				type: "slider",
+				attrs: {
+					min: 0,
+					max: 1000,
+					step: 1
+				},
 				defaultValue: 0, 
-				tooltip: "Maximum cache size in gigabytes" 
+				tooltip: "Maximum cache size in gigabytes (0 = unlimited)" 
 			});
 
 			// Button: Restore extra_model_paths.yaml from template
