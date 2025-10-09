@@ -128,7 +128,10 @@ async function getSettingValue(settingId) {
 			'Arena.🟡 Cache Mode': 'Cache Mode',
 			'Arena.🟡 Cache Directory': 'Cache Directory',
 			'Arena.🟡 Min File Size (MB)': 'Min File Size (MB)',
-            'Arena.🟡 Max Cache Size (GB)': 'Max Cache Size (GB)'
+            'Arena.🟡 Max Cache Size (GB)': 'Max Cache Size (GB)',
+			'Arena.🟡 NAS Root Path': 'NAS Root Path',
+			'Arena.🟡 Auto-scan NAS': 'Auto-scan NAS Structure',
+			'Arena.🟡 NAS Scan Max Depth': 'NAS Scan Max Depth'
 		};
         const expectedLabel = labelMap[settingId];
         if (!expectedLabel) {
@@ -303,12 +306,19 @@ app.registerExtension({
 				defaultValue: true,
 				tooltip: "Automatically scan NAS and register model paths on startup"
 			});
+			app.ui.settings.addSetting({
+				id: "Arena.🟡 NAS Scan Max Depth",
+				name: "NAS Scan Max Depth",
+				type: "number",
+				defaultValue: 3,
+				tooltip: "Maximum recursion depth for NAS scanning (0=base only, 3=3 levels deep)"
+			});
 			app.ui.settings.addSetting({ 
 				id: "Arena.🟡 Min File Size (MB)", 
 				name: "Min File Size (MB)", 
 				type: "number", 
-				defaultValue: 10, 
-				tooltip: "Minimum file size for caching" 
+				defaultValue: 1, 
+				tooltip: "Minimum file size for caching and NAS scanning (1MB = embeddings, 10MB = models)" 
 			});
 			app.ui.settings.addSetting({ 
 				id: "Arena.🟡 Max Cache Size (GB)", 
@@ -458,6 +468,7 @@ app.registerExtension({
                                 } catch {}
                             }
                             const ui_verbose = await getSettingValue("Arena.🔴 Verbose Logging");
+							const nasScanMaxDepth = await getSettingValue("Arena.🟡 NAS Scan Max Depth");
 
                             // Build env with merge semantics (keep previous if UI not readable)
 							const env = {
@@ -465,11 +476,12 @@ app.registerExtension({
                                 ARENA_AUTOCACHE_AUTOPATCH: "0", // Always disabled by default
                                 ARENA_CACHE_MODE: setOrKeep("ARENA_CACHE_MODE", ui_cache_mode, "ondemand"),
                                 ARENA_CACHE_ROOT: setOrKeep("ARENA_CACHE_ROOT", cacheRoot, existingEnv["ARENA_CACHE_ROOT"] || ""),
-                                ARENA_CACHE_MIN_SIZE_MB: setOrKeep("ARENA_CACHE_MIN_SIZE_MB", ui_min_size, 10),
+                                ARENA_CACHE_MIN_SIZE_MB: setOrKeep("ARENA_CACHE_MIN_SIZE_MB", ui_min_size, 1),
                                 ARENA_CACHE_MAX_GB: setOrKeep("ARENA_CACHE_MAX_GB", ui_max_gb, 0),
 								ARENA_CACHE_VERBOSE: setOrKeep("ARENA_CACHE_VERBOSE", ui_verbose ? 1 : 0, 0),
 								ARENA_NAS_ROOT: setOrKeep("ARENA_NAS_ROOT", nasRoot, existingEnv["ARENA_NAS_ROOT"] || ""),
-								ARENA_NAS_AUTO_SCAN: setOrKeep("ARENA_NAS_AUTO_SCAN", autoScan ? 1 : 0, existingEnv["ARENA_NAS_AUTO_SCAN"] ?? 1)
+								ARENA_NAS_AUTO_SCAN: setOrKeep("ARENA_NAS_AUTO_SCAN", autoScan ? 1 : 0, existingEnv["ARENA_NAS_AUTO_SCAN"] ?? 1),
+								ARENA_NAS_SCAN_MAX_DEPTH: setOrKeep("ARENA_NAS_SCAN_MAX_DEPTH", nasScanMaxDepth, 3)
                             };
 							
 							log("Saving to /arena/env", env);
