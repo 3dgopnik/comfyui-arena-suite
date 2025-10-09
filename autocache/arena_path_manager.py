@@ -160,7 +160,7 @@ def is_cache_valid(nas_root: str, max_age_hours: int = 24) -> bool:
         return False
 
 
-def scan_nas_structure(nas_root: str, use_cache: bool = True) -> dict[str, list[str]]:
+def scan_nas_structure(nas_root: str, use_cache: bool = True, min_size_mb: float = None, max_depth: int = None) -> dict[str, list[str]]:
     """Build a mapping of ComfyUI categories to existing folders under NAS root.
 
     Uses cache if valid, otherwise scans and caches result.
@@ -183,10 +183,14 @@ def scan_nas_structure(nas_root: str, use_cache: bool = True) -> dict[str, list[
     if not _is_path_ok(root) or not root.exists():
         return {}
 
-    # Size threshold for model files (10MB = typical small model)
-    min_size_bytes = 10 * 1024 * 1024
-    # Ignore these extensions
-    ignore_extensions = {'.txt', '.md', '.json', '.yaml', '.yml', '.log', '.jpg', '.jpeg', '.png', '.gif', '.sha256', '.py', '.pyc'}
+    # Read settings from environment or use defaults
+    if min_size_mb is None:
+        min_size_mb = float(os.environ.get("ARENA_CACHE_MIN_SIZE_MB", "1.0"))
+    if max_depth is None:
+        max_depth = int(os.environ.get("ARENA_NAS_SCAN_MAX_DEPTH", "3"))
+    
+    min_size_bytes = int(min_size_mb * 1024 * 1024)
+    ignore_extensions = {'.txt', '.md', '.json', '.yaml', '.yml', '.log', '.jpg', '.jpeg', '.png', '.gif', '.sha256', '.py', '.pyc', '.ini', '.cfg'}
     
     path_map: dict[str, list[str]] = {}
     for category, subfolders in KNOWN_CATEGORY_FOLDERS.items():
@@ -196,21 +200,40 @@ def scan_nas_structure(nas_root: str, use_cache: bool = True) -> dict[str, list[
             if not base_path.exists():
                 continue
             
-            # Recursively find all folders with model files (max 3 levels)
+            # Recursive scan with optimized performance
             try:
-                for depth in range(4):  # 0=base, 1,2,3=subdirs
-                    pattern = "*/" * depth + "*.*" if depth > 0 else "*.*"
-                    for file_path in base_path.glob(pattern):
-                        if file_path.is_file():
-                            # Skip known non-model files
-                            if file_path.suffix.lower() in ignore_extensions:
+                def scan_dir(path: Path, depth: int):
+                    if depth > max_depth:
+                        return
+                    
+                    try:
+                        items = list(path.iterdir())
+                    except Exception:
+                        return
+                    
+                    # Check files in current directory
+                    for item in items:
+                        if item.is_file():
+                            ext = item.suffix.lower()
+                            if ext in ignore_extensions:
                                 continue
-                            # Consider files >= 10MB as potential models
                             try:
-                                if file_path.stat().st_size >= min_size_bytes:
-                                    found_paths.add(str(file_path.parent))
+                                if item.stat().st_size >= min_size_bytes:
+                                    found_paths.add(str(path))
+                                    break  # Found model, no need to check other files
                             except Exception:
                                 pass
+                    
+                    # Recurse into subdirectories
+                    for item in items:
+                        if item.is_dir():
+                            try:
+                                scan_dir(item, depth + 1)
+                            except Exception:
+                                pass
+                
+                if base_path.is_dir():
+                    scan_dir(base_path, 0)
             except Exception:
                 pass  # Best effort
         
