@@ -21,7 +21,22 @@ from typing import Dict, List
 
 _register_lock = threading.Lock()
 _cached_path_map: Dict[str, List[str]] | None = None
-_CACHE_FILE = Path(__file__).parent.parent / "user" / "arena_nas_cache.json"
+
+# RU: Определяем путь к кеш файлу в глобальном user directory ComfyUI
+def _get_cache_file_path() -> Path:
+    """Get path to NAS cache file in ComfyUI user directory."""
+    # Try to find ComfyUI root (same logic as in arena_auto_cache_simple.py)
+    try:
+        current = Path(__file__).resolve()
+        for parent in [current] + list(current.parents):
+            if (parent / "comfy").exists() or (parent / "server.py").exists():
+                return parent / "user" / "arena_nas_cache.json"
+    except Exception:
+        pass
+    # Fallback to local user directory
+    return Path(__file__).parent.parent / "user" / "arena_nas_cache.json"
+
+_CACHE_FILE = _get_cache_file_path()
 
 
 KNOWN_CATEGORY_FOLDERS: dict[str, list[str]] = {
@@ -45,7 +60,7 @@ KNOWN_CATEGORY_FOLDERS: dict[str, list[str]] = {
     ],
     "diffusion_models": ["unet", "unet\\flux", "unet\\kolors", "style_models"],
     "embeddings": ["embeds"],
-    "upscale_models": ["Upscale", "apisr", "stablesr", "SUPIR", "CCSR"],
+    "upscale_models": ["Upscale", "apisr", "stablesr", "SUPIR", "SDXL", "SD1.5", "CCSR"],
     "insightface": ["antelopev2", "facerestore_models"],
     "ultralytics": ["ultralytics\\bbox", "ultralytics\\segm"],
     # Optional families (extend as needed)
@@ -149,6 +164,7 @@ def scan_nas_structure(nas_root: str, use_cache: bool = True) -> dict[str, list[
     """Build a mapping of ComfyUI categories to existing folders under NAS root.
 
     Uses cache if valid, otherwise scans and caches result.
+    Recursively discovers ALL subdirectories containing model files (max 3 levels).
     """
     global _cached_path_map
 
@@ -167,15 +183,39 @@ def scan_nas_structure(nas_root: str, use_cache: bool = True) -> dict[str, list[
     if not _is_path_ok(root) or not root.exists():
         return {}
 
+    # Size threshold for model files (10MB = typical small model)
+    min_size_bytes = 10 * 1024 * 1024
+    # Ignore these extensions
+    ignore_extensions = {'.txt', '.md', '.json', '.yaml', '.yml', '.log', '.jpg', '.jpeg', '.png', '.gif', '.sha256', '.py', '.pyc'}
+    
     path_map: dict[str, list[str]] = {}
     for category, subfolders in KNOWN_CATEGORY_FOLDERS.items():
-        existing: list[str] = []
+        found_paths = set()
         for sub in subfolders:
-            p = root / sub
-            if p.exists() and p.is_dir():
-                existing.append(str(p))
-        if existing:
-            path_map[category] = existing
+            base_path = root / sub
+            if not base_path.exists():
+                continue
+            
+            # Recursively find all folders with model files (max 3 levels)
+            try:
+                for depth in range(4):  # 0=base, 1,2,3=subdirs
+                    pattern = "*/" * depth + "*.*" if depth > 0 else "*.*"
+                    for file_path in base_path.glob(pattern):
+                        if file_path.is_file():
+                            # Skip known non-model files
+                            if file_path.suffix.lower() in ignore_extensions:
+                                continue
+                            # Consider files >= 10MB as potential models
+                            try:
+                                if file_path.stat().st_size >= min_size_bytes:
+                                    found_paths.add(str(file_path.parent))
+                            except Exception:
+                                pass
+            except Exception:
+                pass  # Best effort
+        
+        if found_paths:
+            path_map[category] = sorted(list(found_paths))
 
     # Cache result
     if path_map:

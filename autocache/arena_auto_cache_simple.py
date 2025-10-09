@@ -1761,7 +1761,8 @@ def _setup_workflow_analysis_api():
                                     # RU: Вычисляем cache path (используем только имя файла для определения типа)
                                     filename_only = os.path.basename(filename_normalized)
                                     model_type = _detect_model_type(category, filename_only)
-                                    cache_path = _settings.root / category / model_type / filename_normalized
+                                    # RU: КРИТИЧНО: используем filename_only вместо filename_normalized чтобы избежать двойных подпапок
+                                    cache_path = _settings.root / category / model_type / filename_only
                                     
                                     if cache_path.exists():
                                         cache_hits += 1
@@ -1962,7 +1963,7 @@ class ArenaAutoCacheSimple:
         
         # RU: API уже зарегистрированы глобально при загрузке модуля
         
-        self.description = "🅰️ Arena AutoCache v6.0.0 - ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
+        self.description = "🅰️ Arena AutoCache v6.0.2 - HOTFIX: Рекурсивное сканирование NAS автоматически находит модели в любых подпапках (SDXL\\SUPIR, SD1.5\\ControlNet, etc.). Исправлена двойная подпапка в cache_path. ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -2199,14 +2200,14 @@ class ArenaAutoCacheSimple:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.0.0": ArenaAutoCacheSimple,
+    "🅰️ Arena AutoCache v6.0.2": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.0.0": "🅰️ Arena AutoCache v6.0.0",
+    "🅰️ Arena AutoCache v6.0.2": "🅰️ Arena AutoCache v6.0.2",
 }
 
-print("[ArenaAutoCache] Loaded v6.0.0 with critical bug fixes, universal model parser, and three Arena button modes")
+print("[ArenaAutoCache] Loaded v6.0.2 - HOTFIX: Recursive NAS scanning for nested model folders")
 
 # RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
 print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")

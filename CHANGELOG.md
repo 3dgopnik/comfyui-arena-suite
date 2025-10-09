@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.2] - Thu Oct 09 2025 15:06:52 GMT+0300 (Москва, стандартное время)
+
+### Changed
+- **Auto-discovery**: Система больше не требует ручного добавления путей в KNOWN_CATEGORY_FOLDERS
+- **Scan Depth**: Рекурсивное сканирование ограничено 2 уровнями для производительности
+
+### Fixed
+- **Recursive NAS Scanning**: Arena Path Manager теперь рекурсивно сканирует подпапки до 2 уровней глубины, автоматически находя модели в нестандартных путях (SDXL\SUPIR, SD1.5\ControlNet, etc.)
+- **SUPIR Subfolder Models**: Добавлен базовый путь SDXL в upscale_models для автоматического обнаружения SUPIR моделей
+- **Cache Path Construction**: Исправлена двойная подпапка в cache_path (v6.0.1)
+
+---
+
+## [6.0.1] - Thu Oct 09 2025 14:51:54 GMT+0300 (Москва, стандартное время)
+
+### Fixed
+- **SUPIR Subfolder Models Caching**: Исправлена критическая проблема с кешированием моделей из подпапок (SUPIR, etc.). Модели с путями типа `SUPIR\SUPIR-v0Q_fp16.safetensors` теперь корректно обнаруживаются через `folder_paths.get_full_path()` и кешируются без двойных подпапок в пути
+- **Cache Path Construction**: Заменен `filename_normalized` на `filename_only` в строке 1765 для формирования `cache_path`, что устраняет ошибку "Model NOT FOUND in folder_paths"
+
+---
+
 ## [6.0.0] - Wed Oct 08 2025 17:06:23 GMT+0300 (Москва, стандартное время)
 
 ### Changed
