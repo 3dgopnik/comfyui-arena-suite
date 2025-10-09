@@ -491,7 +491,11 @@ def _apply_folder_paths_patch():
 
 
 def _is_system_scanning() -> bool:
-    """RU: Детектирует системное сканирование по стеку вызовов."""
+    """RU: Детектирует что это НЕ реальная загрузка модели, а сканирование/листинг.
+    
+    Возвращает True если это системное сканирование (НЕ нужно копировать).
+    Возвращает False если это реальная загрузка модели (нужно копировать).
+    """
     try:
         # RU: Получаем текущий стек вызовов
         frame = inspect.currentframe()
@@ -504,65 +508,42 @@ def _is_system_scanning() -> bool:
             call_stack.append(frame.f_code.co_name)
             frame = frame.f_back
         
-        # RU: Ищем признаки системного сканирования (точные имена)
-        system_indicators = {
+        # RU: Признаки РЕАЛЬНОЙ загрузки модели (когда нужно копировать)
+        real_loading_indicators = {
             'load_checkpoint_guess_config',  # RU: ComfyUI загрузка конфигурации
             'load_checkpoint',              # RU: ComfyUI загрузка чекпоинта
             'load_lora',                    # RU: ComfyUI загрузка LoRA
             'load_vae',                     # RU: ComfyUI загрузка VAE
             'load_controlnet',              # RU: ComfyUI загрузка ControlNet
             'load_upscale_model',           # RU: ComfyUI загрузка модели апскейлинга
+        }
+        
+        # RU: Признаки системного СКАНИРОВАНИЯ (когда НЕ нужно копировать)
+        scanning_indicators = {
             'scan_directory',               # RU: Сканирование директории
             'get_folder_paths',             # RU: Получение путей папок
             'list_files',                   # RU: Список файлов
             'scan_models',                  # RU: Сканирование моделей
-            'folder_paths',                 # RU: Работа с путями папок
-            'model_management',             # RU: Управление моделями
-            'extra_model_paths',            # RU: Дополнительные пути моделей
+            'get_filename_list',            # RU: Получение списка файлов
+            'recursive_search',             # RU: Рекурсивный поиск
         }
         
-        # RU: Ищем признаки реального использования моделей
-        real_usage_indicators = {
-            'execute',                      # RU: Выполнение workflow
-            'run',                          # RU: Запуск ноды
-            'forward',                      # RU: Forward pass
-            'load_state_dict',             # RU: Загрузка весов модели
-            'from_pretrained',             # RU: Загрузка предобученной модели
-            'DualCLIPLoader',              # RU: DualCLIPLoader нода
-            'FluxClipModel',               # RU: FluxClipModel нода
-            'QuadrupleCLIPLoader',         # RU: QuadrupleCLIPLoader нода
-            'T5TextEncoder',               # RU: T5TextEncoder нода
-            'CLIPTextEncoder',             # RU: CLIPTextEncoder нода
-            'VAELoader',                   # RU: VAE нода
-            'VAELoaderModelOnly',          # RU: VAE нода только модель
-            'CheckpointLoader',            # RU: Checkpoint нода
-            'CheckpointLoaderSimple',      # RU: Checkpoint нода простая
-            'LoraLoader',                  # RU: LoRA нода
-            'ControlNetLoader',            # RU: ControlNet нода
-            'UpscaleLoader',               # RU: Upscale нода
-        }
-        
-        # RU: Проверяем наличие индикаторов реального использования (приоритет)
-        if any(call in real_usage_indicators for call in call_stack):
+        # RU: ПРИОРИТЕТ 1: Проверяем наличие индикаторов РЕАЛЬНОЙ загрузки (когда нужно копировать)
+        if any(call in real_loading_indicators for call in call_stack):
             if _settings and _settings.verbose:
-                print(f"[ArenaAutoCache] Real usage detected, allowing caching: {[call for call in call_stack if call in real_usage_indicators]}")
-            return False
+                print(f"[ArenaAutoCache] Real model loading detected: {[call for call in call_stack if call in real_loading_indicators]}")
+            return False  # НЕ сканирование, нужно копировать
         
-        # RU: Проверяем наличие системных индикаторов в стеке (точное совпадение)
-        if any(call in system_indicators for call in call_stack):
+        # RU: ПРИОРИТЕТ 2: Проверяем наличие индикаторов СКАНИРОВАНИЯ (когда НЕ нужно копировать)
+        if any(call in scanning_indicators for call in call_stack):
             if _settings and _settings.verbose:
-                print(f"[ArenaAutoCache] System scanning detected: {[call for call in call_stack if call in system_indicators]}")
-            return True
+                print(f"[ArenaAutoCache] System scanning detected: {[call for call in call_stack if call in scanning_indicators]}")
+            return True  # Сканирование, НЕ копировать
         
-        # RU: Дополнительная проверка - если стек содержит только системные вызовы
-        if len(call_stack) > 5:
-            system_calls = sum(1 for call in call_stack if call in system_indicators)
-            if system_calls > len(call_stack) * 0.7:  # RU: Если 70%+ вызовов системные
-                if _settings and _settings.verbose:
-                    print(f"[ArenaAutoCache] High system call ratio detected: {system_calls}/{len(call_stack)}")
-                return True
-                
-        return False
+        # RU: ПРИОРИТЕТ 3: Дефолт - считаем сканированием (безопаснее)
+        if _settings and _settings.verbose:
+            print(f"[ArenaAutoCache] No clear indicators, defaulting to scanning mode")
+        return True  # Сканирование по умолчанию
         
     except Exception as e:
         # RU: В случае ошибки считаем, что это системное сканирование (безопаснее)
@@ -2026,7 +2007,7 @@ class ArenaAutoCacheSimple:
         
         # RU: API уже зарегистрированы глобально при загрузке модуля
         
-        self.description = "🅰️ Arena AutoCache v6.1.0 - VISUAL PROGRESS: Добавлен визуальный индикатор копирования моделей в Arena кнопку. Прогресс-бар показывает процент копирования и размер файла в реальном времени. Стиль как у Crystools с ползунками и цифрами. HOTFIX: Рекурсивное сканирование NAS автоматически находит модели в любых подпапках (SDXL\\SUPIR, SD1.5\\ControlNet, etc.). Исправлена двойная подпапка в cache_path. ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ: pipeline кеширования, WindowsPath+str ошибки, двойные пути, SUPIR модели, индентация, folder_paths. УНИВЕРСАЛЬНЫЙ ПАРСЕР: автоматическое обнаружение всех типов моделей без хардкода нод. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый для интуитивного управления. SETTINGS UI: полная интеграция с ComfyUI Settings. ПАРАЛЛЕЛЬНОЕ КЕШИРОВАНИЕ: многопоточное копирование моделей. БЕЗОПАСНЫЕ НАСТРОЙКИ: всегда отключено по умолчанию."
+        self.description = "🅰️ Arena AutoCache v6.1.1 - BUG FIX: Исправлено глобальное копирование всех моделей - теперь копирует только при реальной загрузке через load_checkpoint/load_lora, а не при сканировании списков. VISUAL PROGRESS: Визуальный индикатор копирования в Arena кнопку с прогресс-баром. Рекурсивное сканирование NAS находит модели в любых подпапках. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый. SETTINGS UI: полная интеграция с ComfyUI Settings. Безопасно: отключено по умолчанию."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -2263,14 +2244,14 @@ class ArenaAutoCacheSimple:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.1.0": ArenaAutoCacheSimple,
+    "🅰️ Arena AutoCache v6.1.1": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.1.0": "🅰️ Arena AutoCache v6.1.0",
+    "🅰️ Arena AutoCache v6.1.1": "🅰️ Arena AutoCache v6.1.1",
 }
 
-print("[ArenaAutoCache] Loaded v6.1.0 - VISUAL PROGRESS: Visual copy progress indicator added to Arena button")
+print("[ArenaAutoCache] Loaded v6.1.1 - BUG FIX: Fixed global model copying - now copies only during real model loading")
 
 # RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
 print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")

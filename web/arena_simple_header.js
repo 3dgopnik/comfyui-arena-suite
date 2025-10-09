@@ -48,18 +48,15 @@ app.registerExtension({
                 // Main button with progress bar
                 const mainButton = document.createElement('button');
                 mainButton.className = 'arena-main-button';
-                mainButton.innerHTML = `
-                    <div class="arena-button-content">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px; z-index: 2; position: relative;">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                        </svg>
-                        <span style="z-index: 2; position: relative;">ACACHE</span>
-                        <div class="arena-progress-bar" style="display: none;">
-                            <div class="arena-progress-fill"></div>
-                            <div class="arena-progress-text">0%</div>
-                        </div>
-                    </div>
-                `;
+        mainButton.innerHTML = `
+            <div class="arena-button-content">
+                <div class="arena-progress-bar" style="display: none;">
+                    <div class="arena-progress-fill"></div>
+                </div>
+                <span class="arena-progress-text" style="z-index: 2; position: relative; display: none; margin-right: 6px; font-weight: bold;">0%</span>
+                <span style="z-index: 2; position: relative;">ACACHE</span>
+            </div>
+        `;
                 mainButton.title = 'Arena AutoCache (Click to toggle)';
                 mainButton.style.cssText = `
                     background: transparent;
@@ -881,38 +878,26 @@ app.registerExtension({
                         height: 100%;
                     }
                     
-                    .arena-progress-bar {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0, 0, 0, 0.3);
-                        border-radius: 3px;
-                        overflow: hidden;
-                    }
-                    
-                    .arena-progress-fill {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        height: 100%;
-                        background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
-                        transition: width 0.3s ease;
-                        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
-                    }
-                    
-                    .arena-progress-text {
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        color: white;
-                        font-size: 10px;
-                        font-weight: bold;
-                        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-                        z-index: 3;
-                    }
+            .arena-progress-bar {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 3px;
+                overflow: hidden;
+                pointer-events: none;
+            }
+            
+            .arena-progress-fill {
+                position: absolute;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: 0%;
+                background: linear-gradient(90deg, rgba(76, 175, 80, 0.3) 0%, rgba(69, 160, 73, 0.3) 100%);
+                transition: width 0.3s ease;
+            }
                     
                     /* RU: Анимация копирования - кнопка заливается цветом */
                     .arena-main-button.copying {
@@ -933,40 +918,40 @@ app.registerExtension({
                 let progressPollingInterval = null;
                 
                 // RU: Functions for progress bar management
-                function updateProgressBar(copyStatus) {
-                    const progressBar = mainButton.querySelector('.arena-progress-bar');
-                    const progressFill = mainButton.querySelector('.arena-progress-fill');
-                    const progressText = mainButton.querySelector('.arena-progress-text');
-                    
-                    if (!progressBar || !progressFill || !progressText) {
-                        return;
-                    }
-                    
-                    if (copyStatus.is_copying) {
-                        // RU: Показываем прогресс-бар
-                        progressBar.style.display = 'block';
-                        mainButton.classList.add('copying');
-                        
-                        // RU: Обновляем прогресс
-                        const progress = copyStatus.current_file_progress || 0;
-                        progressFill.style.width = `${progress}%`;
-                        progressText.textContent = `${progress}%`;
-                        
-                        // RU: Обновляем title с информацией о копировании
-                        const currentFile = copyStatus.current_file || 'Unknown';
-                        const copiedMB = Math.round((copyStatus.current_file_copied || 0) / 1024 / 1024);
-                        const totalMB = Math.round((copyStatus.current_file_size || 0) / 1024 / 1024);
-                        mainButton.title = `Copying: ${currentFile}\nProgress: ${copiedMB}/${totalMB} MB (${progress}%)`;
-                        
-                    } else {
-                        // RU: Скрываем прогресс-бар
-                        progressBar.style.display = 'none';
-                        mainButton.classList.remove('copying');
-                        
-                        // RU: Восстанавливаем обычный title
-                        updateButtonAppearance();
-                    }
-                }
+        function updateProgressBar(copyStatus) {
+            const progressBar = mainButton.querySelector('.arena-progress-bar');
+            const progressFill = mainButton.querySelector('.arena-progress-fill');
+            const progressText = mainButton.querySelector('.arena-progress-text');
+            
+            if (!progressBar || !progressFill || !progressText) {
+                return;
+            }
+            
+            if (copyStatus.is_copying) {
+                // RU: Показываем прогресс-бар и цифры
+                progressBar.style.display = 'block';
+                progressText.style.display = 'inline-block';
+                
+                // RU: Обновляем прогресс
+                const progress = copyStatus.current_file_progress || 0;
+                progressFill.style.width = `${progress}%`;
+                progressText.textContent = `${progress}%`;
+                
+                // RU: Обновляем title с информацией о копировании
+                const currentFile = copyStatus.current_file || 'Unknown';
+                const copiedMB = Math.round((copyStatus.current_file_copied || 0) / 1024 / 1024);
+                const totalMB = Math.round((copyStatus.current_file_size || 0) / 1024 / 1024);
+                mainButton.title = `Copying: ${currentFile}\nProgress: ${copiedMB}/${totalMB} MB (${progress}%)`;
+                
+            } else {
+                // RU: Скрываем прогресс-бар и цифры
+                progressBar.style.display = 'none';
+                progressText.style.display = 'none';
+                
+                // RU: Восстанавливаем обычный title
+                updateButtonAppearance();
+            }
+        }
                 
                 async function checkCopyStatus() {
                     try {
