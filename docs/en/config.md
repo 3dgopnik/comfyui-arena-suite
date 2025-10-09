@@ -287,6 +287,46 @@ All settings are validated for:
 - **Range validation** - Values within acceptable ranges
 - **Path safety** - Safe file system paths
 
+## 📁 Model Paths Configuration
+
+### extra_model_paths.yaml
+
+Arena AutoCache supports additional model paths via `extra_model_paths.yaml` file.
+
+**File location:**
+- ComfyUI Desktop: `C:\Users\<username>\AppData\Local\Programs\@comfyorgcomfyui-electron\resources\ComfyUI\extra_model_paths.yaml`
+- Local installation: `C:\ComfyUI\extra_model_paths.yaml`
+
+**Setup via Arena:**
+
+1. **Automatic setup (recommended):**
+   - Use Settings UI → Arena → fill "NAS Root Path" and "Cache Directory"
+   - Click "Save Settings" - Arena will create `.env` file with settings
+   - Enable "Auto-scan NAS" for automatic model discovery
+
+2. **Manual setup via YAML:**
+   - Copy your `extra_model_paths.yaml` to `<ComfyUI-Arena>/config/extra_model_paths.yaml`
+   - Arena will use this file as template
+   - "Restore YAML" button in Settings will restore file in ComfyUI from template
+
+**Example extra_model_paths.yaml:**
+
+```yaml
+# Path to models on NAS
+models:
+  checkpoints: Y:\SDModels\CheckPoints\
+  loras: Y:\SDModels\Lora\
+  vae: Y:\SDModels\VAE\
+  upscale_models: Y:\SDModels\SDXL\SUPIR\
+  clip: Y:\SDModels\CLIP\
+  controlnet: Y:\SDModels\ControlNet\
+```
+
+**Important:**
+- Arena automatically scans subfolders (up to 3 levels by default)
+- You can configure scan depth via "NAS Scan Max Depth" in Settings
+- Models are detected by size (default >= 1MB), independent of file extensions
+
 ## 📁 Configuration Structure
 
 ### .env File
