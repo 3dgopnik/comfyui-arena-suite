@@ -1780,13 +1780,19 @@ def _setup_workflow_analysis_api():
                                     # RU: Используем filename_only для пути кеша чтобы избежать двойных подпапок
                                     cache_path = _settings.root / category / model_type / filename_only
                                     
-                                    # RU: УДАЛЕНО: Массовое копирование через API отключено
-                                    # RU: Модели копируются только при реальной загрузке через patched_get_full_path
-                                    # RU: Но подсчитываем статистику для ответа API
+                                    # RU: Копируем ТОЛЬКО модели из workflow (через API), а не все подряд с NAS
                                     if not cache_path.exists():
-                                        print(f"    ℹ️ Model will be cached on first use: {category}/{filename_normalized}")
+                                        with _scheduled_lock:
+                                            if (category, filename_normalized) not in _scheduled_tasks:
+                                                _scheduled_tasks.add((category, filename_normalized))
+                                                _copy_queue.put((category, filename_normalized, original_path, str(cache_path)))
+                                                print(f"    📋 Queued for copy from workflow: {category}/{filename_normalized}")
+                                            else:
+                                                print(f"    ⏭️ Already queued: {category}/{filename_normalized}")
+                                    else:
+                                        print(f"    ✅ Already cached: {category}/{filename_normalized}")
                             except Exception as e:
-                                print(f"    ❌ Failed to check cache for {category}/{filename_normalized}: {e}")
+                                print(f"    ❌ Failed to queue {category}/{filename_normalized}: {e}")
                         
                         print(f"[ArenaAutoCache] 📊 Statistics:")
                         print(f"  Cache hits: {cache_hits}")
