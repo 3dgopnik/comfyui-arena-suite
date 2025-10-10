@@ -666,25 +666,6 @@ def _reload_settings_if_needed():
             print(f"[ArenaAutoCache] Settings reloaded from .env: {cache_root}")
 
 
-def _prefetch_all_workflow_models():
-    """RU: НЕ используется - кеширование происходит по требованию через _schedule_copy_task.
-    
-    Изначально планировалось кешировать все модели из workflow, но это неэффективно:
-    - Нельзя определить какие модели реально используются в workflow без его парсинга
-    - folder_paths.get_filename_list() возвращает ВСЕ модели (100+), а не только используемые
-    - Лучше кешировать по требованию: модель запрашивается → сразу кешируется
-    
-    Текущая логика (эффективная):
-    1. Модель запрашивается через patched_get_full_path
-    2. Если не в кеше → планируется копирование через _schedule_copy_task
-    3. Copy worker копирует в фоне параллельно
-    4. Следующая модель берется из кеша (уже скопирована)
-    
-    Это быстрее и эффективнее чем сканировать все 95+ моделей!
-    """
-    pass  # RU: Функция отключена, кеширование по требованию работает лучше
-
-
 def _copy_file_with_progress(source_path: str, dest_path: str, total_size: int):
     """RU: Копирует файл с отслеживанием прогресса для UI индикатора."""
     global _copy_status
@@ -1480,35 +1461,8 @@ def _auto_extend_categories_from_workflow():
         print(f"[ArenaAutoCache] Auto-extended categories: {', '.join(new_categories)}")
 
 
-def _precache_workflow_models():
-    """RU: Предварительно кеширует модели от JavaScript анализа workflow."""
-    global _settings, _workflow_models
-    
-    if not _settings:
-        return
-    
-    models = _get_workflow_models()
-    if not models:
-        return
-    
-    print(f"[ArenaAutoCache] Precaching {len(models)} workflow models...")
-    
-    # RU: Сначала автоматически расширяем категории
-    _auto_extend_categories_from_workflow()
-    
-    for category, filename in models:
-        if category in _settings.effective_categories:
-            source_path = _get_source_path(category, filename)
-            if source_path and source_path.exists():
-                cache_path = _get_cache_path(category, filename)
-                if not cache_path.exists():
-                    _schedule_copy_task(category, filename, str(source_path), str(cache_path))
-                else:
-                    print(f"[ArenaAutoCache] Model already cached: {filename}")
-            else:
-                print(f"[ArenaAutoCache] Model not found: {filename}")
-        else:
-            print(f"[ArenaAutoCache] Category not in effective categories: {category}")
+# RU: УДАЛЕНО: Массовое копирование всех моделей из workflow отключено.
+# RU: Теперь модели копируются только при реальной загрузке через load_checkpoint/load_lora.
 
 
 def _setup_workflow_analysis_api():
@@ -1581,8 +1535,8 @@ def _setup_workflow_analysis_api():
                         _add_workflow_models(models)
                         print(f"[ArenaAutoCache] Received {len(models)} models from JavaScript")
                         
-                        # RU: Предварительно кешируем модели
-                        _precache_workflow_models()
+                        # RU: УДАЛЕНО: Массовое копирование отключено, модели копируются по требованию
+                        # _precache_workflow_models()
                         
                         return web.json_response({"status": "success", "models_count": len(models)})
                     else:
@@ -2165,8 +2119,8 @@ class ArenaAutoCacheSimple:
                     print("[ArenaAutoCache] OnDemand mode - smart caching on first access")
                     print("[ArenaAutoCache] Models will be cached automatically when first used")
                 
-                # RU: Предварительно кешируем модели от JavaScript анализа workflow
-                _precache_workflow_models()
+                # RU: УДАЛЕНО: Массовое копирование отключено, модели копируются по требованию при load_checkpoint/load_lora
+                # _precache_workflow_models()
                 
                 # RU: Активируем анализ workflow для автоматического определения моделей
                 _activate_workflow_analysis()
