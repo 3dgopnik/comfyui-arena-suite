@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.21.0] - Fri Oct 10 2025 12:01:06 GMT+0300 (Москва, стандартное время)
+## [6.1.3] - Fri Oct 10 2025 12:01:06 GMT+0300 (Москва, стандартное время)
 
 ### Added
 - **Universal NAS Scanning**: Implemented intelligent scanning that automatically discovers ALL model folders on NAS, regardless of folder names or structure
