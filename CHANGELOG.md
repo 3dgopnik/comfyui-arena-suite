@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.0] - Fri Oct 10 2025 12:01:06 GMT+0300 (Москва, стандартное время)
+
+### Added
+- **Universal NAS Scanning**: Implemented intelligent scanning that automatically discovers ALL model folders on NAS, regardless of folder names or structure
+- **Smart Model Categorization**: Added automatic pattern-based categorization for discovered model folders
+- **Generic Models Category**: Created fallback "models" category for any folders that don't fit standard ComfyUI categories
+- **Enhanced Model Discovery**: System now finds models in custom folder structures like "Diffusion Model", "LLM", "text_encoders"
+
+### Changed
+- **Scanning Algorithm**: Replaced rigid folder-based scanning with flexible universal discovery mechanism
+- **Caching Strategy**: Improved cache efficiency by finding all model locations during initial scan
+- **Workflow-Only Copying**: Refined copying behavior to only cache models from active workflows, preventing unnecessary mass copying
+
+### Fixed
+- **Wan Model Detection**: Resolved issue where wan diffusion models in "Diffusion Model" folder were not being discovered during NAS scanning
+- **Limited Folder Scanning**: Fixed scanning to work beyond predefined folder lists, making it truly universal
+- **Model Cache Misses**: Eliminated cache misses for models in non-standard folder locations
+
+---
+
 ## [6.0.2] - Thu Oct 09 2025 15:22:45 GMT+0300 (Москва, стандартное время)
 
 ### Changed

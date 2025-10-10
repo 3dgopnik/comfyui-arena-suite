@@ -58,7 +58,7 @@ KNOWN_CATEGORY_FOLDERS: dict[str, list[str]] = {
         "IPAdapter\\IPA-sdxl_models",
         "IPAdapter\\IPA-15-models",
     ],
-    "diffusion_models": ["unet", "unet\\flux", "unet\\kolors", "style_models"],
+    "diffusion_models": ["unet", "unet\\flux", "unet\\kolors", "style_models", "Diffusion Model"],
     "embeddings": ["embeds"],
     "upscale_models": ["Upscale", "apisr", "stablesr", "SUPIR", "SDXL", "SD1.5", "CCSR"],
     "insightface": ["antelopev2", "facerestore_models"],
@@ -193,52 +193,89 @@ def scan_nas_structure(nas_root: str, use_cache: bool = True, min_size_mb: float
     ignore_extensions = {'.txt', '.md', '.json', '.yaml', '.yml', '.log', '.jpg', '.jpeg', '.png', '.gif', '.sha256', '.py', '.pyc', '.ini', '.cfg'}
     
     path_map: dict[str, list[str]] = {}
+    
+    # UNIVERSAL SCAN: Find ALL folders with model files, regardless of name
+    all_found_paths = set()
+    
+    def universal_scan_dir(path: Path, depth: int):
+        """Scan directory for model files and add to global set."""
+        if depth > max_depth:
+            return
+        
+        try:
+            items = list(path.iterdir())
+        except Exception:
+            return
+        
+        # Check files in current directory
+        has_models = False
+        for item in items:
+            if item.is_file():
+                ext = item.suffix.lower()
+                if ext in ignore_extensions:
+                    continue
+                try:
+                    if item.stat().st_size >= min_size_bytes:
+                        all_found_paths.add(str(path))
+                        has_models = True
+                        break  # Found model, no need to check other files
+                except Exception:
+                    pass
+        
+        # Recurse into subdirectories
+        for item in items:
+            if item.is_dir():
+                try:
+                    universal_scan_dir(item, depth + 1)
+                except Exception:
+                    pass
+    
+    # Start universal scan from NAS root
+    universal_scan_dir(root, 0)
+    
+    # Now categorize found paths based on KNOWN_CATEGORY_FOLDERS
     for category, subfolders in KNOWN_CATEGORY_FOLDERS.items():
         found_paths = set()
+        
+        # Check predefined paths first
         for sub in subfolders:
             base_path = root / sub
-            if not base_path.exists():
-                continue
+            if base_path.exists() and str(base_path) in all_found_paths:
+                found_paths.add(str(base_path))
+        
+        # Add any other paths that match category patterns
+        for path_str in all_found_paths:
+            path_name = Path(path_str).name.lower()
             
-            # Recursive scan with optimized performance
-            try:
-                def scan_dir(path: Path, depth: int):
-                    if depth > max_depth:
-                        return
-                    
-                    try:
-                        items = list(path.iterdir())
-                    except Exception:
-                        return
-                    
-                    # Check files in current directory
-                    for item in items:
-                        if item.is_file():
-                            ext = item.suffix.lower()
-                            if ext in ignore_extensions:
-                                continue
-                            try:
-                                if item.stat().st_size >= min_size_bytes:
-                                    found_paths.add(str(path))
-                                    break  # Found model, no need to check other files
-                            except Exception:
-                                pass
-                    
-                    # Recurse into subdirectories
-                    for item in items:
-                        if item.is_dir():
-                            try:
-                                scan_dir(item, depth + 1)
-                            except Exception:
-                                pass
-                
-                if base_path.is_dir():
-                    scan_dir(base_path, 0)
-            except Exception:
-                pass  # Best effort
+            # Category-specific pattern matching
+            if category == "checkpoints" and any(pattern in path_name for pattern in ["sd", "stable", "cascade"]):
+                found_paths.add(path_str)
+            elif category == "loras" and "lora" in path_name:
+                found_paths.add(path_str)
+            elif category == "vae" and "vae" in path_name:
+                found_paths.add(path_str)
+            elif category == "clip" and "clip" in path_name:
+                found_paths.add(path_str)
+            elif category == "controlnet" and any(pattern in path_name for pattern in ["controlnet", "cn", "ipadapter"]):
+                found_paths.add(path_str)
+            elif category == "diffusion_models" and any(pattern in path_name for pattern in ["diffusion", "unet", "style"]):
+                found_paths.add(path_str)
+            elif category == "upscale_models" and any(pattern in path_name for pattern in ["upscale", "supir", "apisr", "stablesr"]):
+                found_paths.add(path_str)
+            elif category == "embeddings" and "embed" in path_name:
+                found_paths.add(path_str)
         
         if found_paths:
             path_map[category] = sorted(list(found_paths))
+    
+    # Add any remaining paths to a general "models" category
+    categorized_paths = set()
+    for category_paths in path_map.values():
+        categorized_paths.update(category_paths)
+    
+    uncategorized_paths = all_found_paths - categorized_paths
+    if uncategorized_paths:
+        path_map["models"] = sorted(list(uncategorized_paths))
 
     # Cache result
     if path_map:
