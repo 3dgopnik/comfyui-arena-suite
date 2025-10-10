@@ -1776,12 +1776,19 @@ def _setup_workflow_analysis_api():
                                 else:
                                     original_path = folder_paths.get_full_path(category, filename_for_lookup)
                                 
-                                # RU: Если не найдено - пробуем ВСЕ категории (fallback)
+                                # RU: Если не найдено - пробуем ВСЕ категории (УНИВЕРСАЛЬНЫЙ ПОИСК)
                                 if not original_path or not os.path.exists(original_path):
                                     all_categories = ['checkpoints', 'loras', 'vae', 'clip', 'diffusion_models', 
-                                                     'gguf_models', 'controlnet', 'upscale_models', 'embeddings']
+                                                     'gguf_models', 'unet', 'controlnet', 'upscale_models', 'embeddings',
+                                                     'text_encoders', 'clip_vision', 'style_models', 'gligen']
                                     for fallback_cat in all_categories:
                                         try:
+                                            # RU: Проверяем что категория существует в folder_paths
+                                            if not hasattr(folder_paths, 'folder_names_and_paths'):
+                                                continue
+                                            if fallback_cat not in folder_paths.folder_names_and_paths:
+                                                continue
+                                            
                                             if hasattr(folder_paths, 'get_full_path_origin'):
                                                 test_path = folder_paths.get_full_path_origin(fallback_cat, filename_for_lookup)
                                             else:
@@ -1792,8 +1799,9 @@ def _setup_workflow_analysis_api():
                                                 category = fallback_cat  # Обновляем категорию
                                                 print(f"    🔍 Found in fallback category: {fallback_cat}/{filename_for_lookup}")
                                                 break
-                                        except:
-                                            pass
+                                        except Exception as ex:
+                                            if _settings.verbose:
+                                                print(f"    🔍 Fallback search failed for {fallback_cat}: {ex}")
                                 
                                 if original_path and os.path.exists(original_path):
                                     filename_only = os.path.basename(filename_normalized)
