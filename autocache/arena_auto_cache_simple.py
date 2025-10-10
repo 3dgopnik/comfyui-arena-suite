@@ -1769,10 +1769,31 @@ def _setup_workflow_analysis_api():
                                 # RU: ВАЖНО: folder_paths ожидает только имя файла БЕЗ подпапок
                                 filename_for_lookup = os.path.basename(filename_normalized)
                                 
+                                # RU: УНИВЕРСАЛЬНЫЙ ПОИСК: сначала пробуем в указанной категории, потом во всех
+                                original_path = None
                                 if hasattr(folder_paths, 'get_full_path_origin'):
                                     original_path = folder_paths.get_full_path_origin(category, filename_for_lookup)
                                 else:
                                     original_path = folder_paths.get_full_path(category, filename_for_lookup)
+                                
+                                # RU: Если не найдено - пробуем ВСЕ категории (fallback)
+                                if not original_path or not os.path.exists(original_path):
+                                    all_categories = ['checkpoints', 'loras', 'vae', 'clip', 'diffusion_models', 
+                                                     'gguf_models', 'controlnet', 'upscale_models', 'embeddings']
+                                    for fallback_cat in all_categories:
+                                        try:
+                                            if hasattr(folder_paths, 'get_full_path_origin'):
+                                                test_path = folder_paths.get_full_path_origin(fallback_cat, filename_for_lookup)
+                                            else:
+                                                test_path = folder_paths.get_full_path(fallback_cat, filename_for_lookup)
+                                            
+                                            if test_path and os.path.exists(test_path):
+                                                original_path = test_path
+                                                category = fallback_cat  # Обновляем категорию
+                                                print(f"    🔍 Found in fallback category: {fallback_cat}/{filename_for_lookup}")
+                                                break
+                                        except:
+                                            pass
                                 
                                 if original_path and os.path.exists(original_path):
                                     filename_only = os.path.basename(filename_normalized)
