@@ -1958,7 +1958,7 @@ class ArenaAutoCacheSimple:
         
         # RU: API уже зарегистрированы глобально при загрузке модуля
         
-        self.description = "🅰️ Arena AutoCache v6.1.1 - BUG FIX: Исправлено глобальное копирование всех моделей - теперь копирует только при реальной загрузке через load_checkpoint/load_lora, а не при сканировании списков. VISUAL PROGRESS: Визуальный индикатор копирования в Arena кнопку с прогресс-баром. Рекурсивное сканирование NAS находит модели в любых подпапках. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый. SETTINGS UI: полная интеграция с ComfyUI Settings. Безопасно: отключено по умолчанию."
+        self.description = "🅰️ Arena AutoCache v6.1.2 - BUG FIX: Отключено массовое копирование через API - модели копируются ТОЛЬКО при реальном вызове load_checkpoint/load_lora. VISUAL PROGRESS: Визуальный индикатор копирования в Arena кнопку. Рекурсивное сканирование NAS находит модели в любых подпапках. ТРИ РЕЖИМА ARENA КНОПКИ: серый/красный/зеленый. SETTINGS UI: полная интеграция с ComfyUI Settings. Безопасно: отключено по умолчанию."
     
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -2195,14 +2195,14 @@ class ArenaAutoCacheSimple:
 
 # RU: Регистрация ноды
 NODE_CLASS_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.1.1": ArenaAutoCacheSimple,
+    "🅰️ Arena AutoCache v6.1.2": ArenaAutoCacheSimple,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "🅰️ Arena AutoCache v6.1.1": "🅰️ Arena AutoCache v6.1.1",
+    "🅰️ Arena AutoCache v6.1.2": "🅰️ Arena AutoCache v6.1.2",
 }
 
-print("[ArenaAutoCache] Loaded v6.1.1 - BUG FIX: Fixed global model copying - now copies only during real model loading")
+print("[ArenaAutoCache] Loaded v6.1.2 - BUG FIX: Disabled API mass copying - models copy only during real load_checkpoint/load_lora calls")
 
 # RU: Автозапуск кеширования на старте ОТКЛЮЧЕН полностью (manual-only)
 print("[ArenaAutoCache] Startup auto-caching is disabled (manual-only mode)")
