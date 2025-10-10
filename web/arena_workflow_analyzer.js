@@ -583,11 +583,11 @@ window.ArenaWorkflowAnalyzer = {
             'ControlNetLoader': 'controlnet',
             'UpscaleModelLoader': 'upscale_models',
             'UNETLoader': 'diffusion_models',
+            'UnetLoaderGGUF': 'gguf_models',
             'CLIPLoader': 'clip',
             'DualCLIPLoader': 'clip',
             'TripleCLIPLoader': 'clip',
-            'SUPIR_model_loader_v2': 'upscale_models',
-            'UnetLoaderGGUF': 'gguf_models'
+            'SUPIR_model_loader_v2': 'upscale_models'
         };
         
         // RU: Проверяем каждое значение в widgets_values
