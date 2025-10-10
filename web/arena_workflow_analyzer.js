@@ -632,7 +632,10 @@ window.ArenaWorkflowAnalyzer = {
         if (lower.includes('clip') && !lower.includes('clipvision')) return 'clip';
         if (lower.includes('clipvision') || lower.includes('clip_vision')) return 'clip_vision';
         if (lower.includes('embedding') || lower.includes('embed')) return 'embeddings';
-        if (lower.includes('t5') || lower.includes('text_encoder')) return 'text_encoders';
+        if (lower.includes('t5') || lower.includes('text_encoder') || lower.includes('umt5')) return 'clip';
+        
+        // RU: GGUF файлы - проверяем по расширению
+        if (lower.endsWith('.gguf')) return 'gguf_models';
         
         // RU: По умолчанию считаем checkpoint
         return 'checkpoints';
