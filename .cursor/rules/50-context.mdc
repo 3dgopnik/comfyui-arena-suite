@@ -153,6 +153,8 @@ alwaysApply: true
 - Cache MISS GREEN: использует NAS без копирования
 - Cache MISS RED: копирует в фоне + использует NAS
 - Добавлено verbose логирование для всех сценариев
+- **Дополнительно**: copy workers запускаются ТОЛЬКО в RED режиме
+- **Дополнительно**: исправлена инициализация _settings в /arena/autopatch
 
 ### Открытые Issues:
 
