@@ -825,15 +825,15 @@ app.registerExtension({
                         let nextMode;
                         switch (currentCacheMode) {
                             case CACHE_MODES.GRAY:
-                                // White → Red (enable caching)
-                                nextMode = CACHE_MODES.RED;
-                                break;
-                            case CACHE_MODES.RED:
-                                // Red → Green (disable autopatch, keep enabled)
+                                // Gray → Green (use cache, don't cache new)
                                 nextMode = CACHE_MODES.GREEN;
                                 break;
                             case CACHE_MODES.GREEN:
-                                // Green → White (disable everything)
+                                // Green → Red (enable caching)
+                                nextMode = CACHE_MODES.RED;
+                                break;
+                            case CACHE_MODES.RED:
+                                // Red → Gray (disable everything)
                                 nextMode = CACHE_MODES.GRAY;
                                 break;
                             default:
