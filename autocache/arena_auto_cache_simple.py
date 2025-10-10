@@ -447,6 +447,8 @@ def _apply_folder_paths_patch():
                 # RU: Сначала проверяем кэш (с учётом семейства, если есть)
                 cache_path_obj = _get_cache_path(folder_name, filename)
                 if cache_path_obj and cache_path_obj.exists():
+                    if _settings.verbose:
+                        print(f"[ArenaAutoCache] ✅ Cache HIT: {folder_name}/{filename} from {cache_path_obj}")
                     return str(cache_path_obj)
 
                 # RU: Если не в кэше, получаем оригинальный путь
@@ -455,22 +457,24 @@ def _apply_folder_paths_patch():
                     if os.path.exists(original_path):
                         # RU: Используем глобальные флаги (обновляются в _init_settings)
                         global _auto_cache_enabled, _autopatch_enabled
-                        print(f"[ArenaAutoCache] auto_cache_enabled: {_auto_cache_enabled}, autopatch_enabled: {_autopatch_enabled}")
                         
                         # RU: Проверяем системное сканирование
                         is_system_scan = _is_system_scanning()
-                        print(f"[ArenaAutoCache] is_system_scanning: {is_system_scan}")
                         
-                        if _auto_cache_enabled and _autopatch_enabled and not is_system_scan:
-                            # RU: Планируем копию в путь кеша (с типом модели)
-                            # RU: Кеширование по требованию - эффективнее чем сканировать все модели
-                            target_cache_path = str(cache_path_obj) if cache_path_obj else str(_settings.root / folder_name / filename)
-                            _schedule_copy_task(folder_name, filename, original_path, target_cache_path)
-                            if _settings.verbose:
-                                print(f"[ArenaAutoCache] Scheduled cache copy: {filename}")
+                        if _auto_cache_enabled and not is_system_scan:
+                            if _autopatch_enabled:
+                                # RED режим (11) - копируем при cache miss
+                                target_cache_path = str(cache_path_obj) if cache_path_obj else str(_settings.root / folder_name / filename)
+                                _schedule_copy_task(folder_name, filename, original_path, target_cache_path)
+                                if _settings.verbose:
+                                    print(f"[ArenaAutoCache] ⏳ Cache MISS (RED mode): {folder_name}/{filename} - scheduled copy from NAS")
+                            else:
+                                # GREEN режим (10) - НЕ копируем при cache miss
+                                if _settings.verbose:
+                                    print(f"[ArenaAutoCache] ⏭️ Cache MISS (GREEN mode): {folder_name}/{filename} - using NAS (no copy)")
                         else:
                             if _settings.verbose:
-                                print(f"[ArenaAutoCache] Auto-caching disabled, using original: {filename}")
+                                print(f"[ArenaAutoCache] ⚪ Cache disabled or system scan: {folder_name}/{filename}")
                         return original_path
                 except Exception as e:
                     if _settings.verbose:

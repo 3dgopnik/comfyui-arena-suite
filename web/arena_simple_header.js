@@ -1159,8 +1159,8 @@ app.registerExtension({
                             stopProgressPolling();
                         }
                         
-                        // RU: Start autopatch if needed
-                        if (mode === CACHE_MODES.RED) {
+                        // RU: Start autopatch if needed (for both RED and GREEN modes)
+                        if (mode === CACHE_MODES.RED || mode === CACHE_MODES.GREEN) {
                             try {
                                 // RU: Use ONLY ArenaWorkflowAnalyzer to collect models
                                 let requiredModels = [];
