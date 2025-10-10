@@ -1782,12 +1782,9 @@ def _setup_workflow_analysis_api():
                                     
                                     # RU: УДАЛЕНО: Массовое копирование через API отключено
                                     # RU: Модели копируются только при реальной загрузке через patched_get_full_path
-                                    # if not cache_path.exists():
-                                    #     with _scheduled_lock:
-                                    #         if (category, filename_normalized) not in _scheduled_tasks:
-                                    #             _scheduled_tasks.add((category, filename_normalized))
-                                    #             _copy_queue.put((category, filename_normalized, original_path, str(cache_path)))
-                                    #             print(f"    📋 Queued for copy: {category}/{filename_normalized}")
+                                    # RU: Но подсчитываем статистику для ответа API
+                                    if not cache_path.exists():
+                                        print(f"    ℹ️ Model will be cached on first use: {category}/{filename_normalized}")
                             except Exception as e:
                                 print(f"    ❌ Failed to check cache for {category}/{filename_normalized}: {e}")
                         
