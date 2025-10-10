@@ -972,16 +972,19 @@ def _start_deferred_autopatch():
                     else:
                         print("[ArenaAutoCache] folder_paths already patched")
 
-                    # RU: Запускаем НЕСКОЛЬКО воркеров для параллельного копирования
-                    if not _copy_thread_started:
-                        num_workers = _settings.max_concurrency if _settings.max_concurrency > 0 else 2
-                        print(f"[ArenaAutoCache] Starting {num_workers} copy worker threads...")
-                        for i in range(num_workers):
-                            copy_thread = threading.Thread(target=_copy_worker, daemon=True, name=f"ArenaCopyWorker-{i}")
-                            copy_thread.start()
-                        _copy_thread_started = True
+                    # RU: Запускаем воркеры ТОЛЬКО для RED режима (когда AUTOPATCH=1)
+                    if _autopatch_enabled:
+                        if not _copy_thread_started:
+                            num_workers = _settings.max_concurrency if _settings.max_concurrency > 0 else 2
+                            print(f"[ArenaAutoCache] Starting {num_workers} copy worker threads...")
+                            for i in range(num_workers):
+                                copy_thread = threading.Thread(target=_copy_worker, daemon=True, name=f"ArenaCopyWorker-{i}")
+                                copy_thread.start()
+                            _copy_thread_started = True
+                        else:
+                            print("[ArenaAutoCache] Copy workers already started")
                     else:
-                        print("[ArenaAutoCache] Copy workers already started")
+                        print("[ArenaAutoCache] GREEN mode - copy workers NOT started (no copying)")
 
                     elapsed = time.time() - start_time
                     print(f"[ArenaAutoCache] ✅ Deferred autopatch applied successfully after {elapsed:.1f}s")
@@ -1689,6 +1692,11 @@ def _setup_workflow_analysis_api():
                 action = data.get("action", "")
                 
                 if action == "start":
+                    # RU: Инициализируем _settings если еще не инициализирован
+                    global _settings
+                    if _settings is None:
+                        _settings = _init_settings()
+                    
                     # RU: Проверяем cooldown
                     global _last_autopatch_time
                     current_time = time.time()
